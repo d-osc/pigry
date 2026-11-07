@@ -4,6 +4,7 @@ import { useRepository } from '../../hooks/useRepository';
 import { useCommitHistory } from '../../hooks/useCommitHistory';
 import { relativeTime } from '../../lib/relativeTime';
 import { CommitGraphColumn } from './CommitGraphColumn';
+import { CommitDetailPanel } from './CommitDetailPanel';
 import './CommitGraphScreen.css';
 
 export function CommitGraphScreen() {
@@ -11,6 +12,7 @@ export function CommitGraphScreen() {
   const [includeRemotes, setIncludeRemotes] = useState(false);
   const [query, setQuery] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
   const { history, error, loading } = useCommitHistory(includeRemotes, reloadKey);
 
   const handleFetch = async () => {
@@ -96,6 +98,7 @@ export function CommitGraphScreen() {
 
       {error && <div className="commit-history__notice">{error}</div>}
 
+      <div className="commit-history__content">
       <div className="commit-history__table">
         <div className="commit-history__head commit-row commit-row--head">
           <span>Graph</span>
@@ -115,7 +118,16 @@ export function CommitGraphScreen() {
           </div>
         ) : (
           rows.map((row) => (
-            <div key={row.oid} className="commit-row">
+            <div
+              key={row.oid}
+              className={"commit-row commit-row--clickable"}
+              onClick={() => setSelectedCommit(row.oid)}
+              role={"button"}
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') setSelectedCommit(row.oid);
+              }}
+            >
               <span className="commit-row__graph">
                 <CommitGraphColumn row={row} />
               </span>
@@ -142,6 +154,14 @@ export function CommitGraphScreen() {
             </div>
           ))
         )}
+      </div>
+      {selectedCommit && (
+        <CommitDetailPanel
+          key={selectedCommit}
+          oid={selectedCommit}
+          onClose={() => setSelectedCommit(null)}
+        />
+      )}
       </div>
     </div>
   );

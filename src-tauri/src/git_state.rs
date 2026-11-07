@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use git2::{
-    build::CheckoutBuilder, BranchType, DiffOptions, ObjectType, Repository, Status,
+    build::CheckoutBuilder, BranchType, Delta, DiffOptions, ObjectType, Repository, Status,
     StatusOptions,
 };
 use serde::Serialize;
@@ -1220,4 +1220,168 @@ pub fn read_file_at_commit(
         too_large: false,
         language,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Commit detail: metadata + changed files + per-file diff at a commit
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitFileEntry {
+    pub path: String,
+    pub name: String,
+    pub directory: String,
+    /// M | A | D | R
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitDetail {
+    pub oid: String,
+    pub short_oid: String,
+    pub summary: String,
+    /// Full message body (summary + paragraphs).
+    pub message: String,
+    pub author_name: String,
+    pub author_initials: String,
+    pub time_seconds: i64,
+    pub is_merge: bool,
+    pub files: Vec<CommitFileEntry>,
+}
+
+/// Per-file status + numstat for a commit, computed against its first parent.
+pub fn build_commit_detail(repo_path: &Path, oid: &str) -> Result<CommitDetail> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let commit_oid = resolve_commit_oid(&repo, oid)?;
+    let commit = repo.find_commit(commit_oid).map_err(err)?;
+
+    let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
+    let tree = commit.tree().map_err(err)?;
+
+    let mut opts = DiffOptions::new();
+    let mut diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
+        .map_err(err)?;
+    let _ = diff.find_similar(None);
+
+    let mut files = Vec::new();
+    for idx in 0..diff.deltas().len() {
+        let Some(delta) = diff.get_delta(idx) else { continue };
+        let status = match delta.status() {
+            Delta::Added => "A",
+            Delta::Deleted => "D",
+            Delta::Renamed => "R",
+            _ => "M",
+        };
+        let path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let (name, directory) = split_path(&path);
+
+        let mut additions = 0;
+        let mut deletions = 0;
+        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) {
+            for h in 0..patch.num_hunks() {
+                let Ok((_, hunk_len)) = patch.hunk(h) else { continue };
+                for l in 0..hunk_len {
+                    let Ok(line) = patch.line_in_hunk(h, l) else { continue };
+                    match line.origin() {
+                        '+' => additions += 1,
+                        '-' => deletions += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        files.push(CommitFileEntry {
+            path,
+            name,
+            directory,
+            status: status.to_string(),
+            additions,
+            deletions,
+        });
+    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+
+    let author = commit.author();
+    let summary = commit.summary().unwrap_or_default().to_string();
+    let message = commit.message().unwrap_or_default().trim_end().to_string();
+
+    Ok(CommitDetail {
+        oid: commit_oid.to_string(),
+        short_oid: commit_oid.to_string()[..7].to_string(),
+        summary,
+        message,
+        author_name: author.name().unwrap_or("Unknown").to_string(),
+        author_initials: initials_for(author.name().unwrap_or("")),
+        time_seconds: commit.time().seconds() as i64,
+        is_merge: commit.parent_count() > 1,
+        files,
+    })
+}
+
+/// Blob-level diff of `path` as of commit `oid`: parent blob vs commit blob.
+pub fn read_commit_file_diff(
+    repo_path: &Path,
+    oid: &str,
+    path: &str,
+) -> Result<FileDiffContent> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let commit_oid = resolve_commit_oid(&repo, oid)?;
+    let commit = repo.find_commit(commit_oid).map_err(err)?;
+    let tree = commit.tree().map_err(err)?;
+    let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
+
+    let blob_at = |tree: Option<&git2::Tree>| -> Option<Vec<u8>> {
+        let tree = tree?;
+        let entry = tree.get_path(Path::new(path)).ok()?;
+        repo.find_object(entry.id(), Some(ObjectType::Blob))
+            .ok()?
+            .peel_to_blob()
+            .ok()
+            .map(|blob| blob.content().to_vec())
+    };
+
+    let original = blob_at(parent_tree.as_ref());
+    let modified = blob_at(Some(&tree));
+    let language = language_for(path);
+
+    let too_large = original.as_ref().is_some_and(|b| b.len() > MAX_DIFF_BYTES)
+        || modified.as_ref().is_some_and(|b| b.len() > MAX_DIFF_BYTES);
+    if too_large {
+        return Ok(FileDiffContent { original: None, modified: None, binary: false, too_large: true, language });
+    }
+    let binary = original.as_ref().is_some_and(|b| is_binary(b))
+        || modified.as_ref().is_some_and(|b| is_binary(b));
+    if binary {
+        return Ok(FileDiffContent { original: None, modified: None, binary: true, too_large: false, language });
+    }
+    Ok(FileDiffContent {
+        original: Some(decode(original.as_deref())),
+        modified: Some(decode(modified.as_deref())),
+        binary: false,
+        too_large: false,
+        language,
+    })
+}
+
+/// Accepts a full/shorthand hex OID or the symbolic name HEAD.
+fn resolve_commit_oid(repo: &Repository, oid: &str) -> Result<git2::Oid> {
+    if oid.eq_ignore_ascii_case("HEAD") {
+        return repo
+            .head()
+            .map_err(err)?
+            .peel_to_commit()
+            .map(|commit| commit.id())
+            .map_err(err);
+    }
+    git2::Oid::from_str(oid).map_err(|e| format!("invalid commit id: {e}"))
 }

@@ -2,6 +2,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
   AppStatePayload,
+  CommitDetail,
   CommitHistory,
   CommitOutcome,
   FileCommitEntry,
@@ -105,4 +106,15 @@ export async function gitPull(): Promise<NetResult> {
 
 export async function gitPush(): Promise<NetResult> {
   return invoke('git_push');
+}
+
+export async function getCommitDetail(oid: string): Promise<CommitDetail> {
+  return invoke('get_commit_detail', { oid });
+}
+
+export async function getCommitFileDiff(
+  oid: string,
+  path: string,
+): Promise<FileDiffContent> {
+  return invoke('get_commit_file_diff', { oid, path });
 }

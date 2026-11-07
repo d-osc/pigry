@@ -314,3 +314,28 @@ pub async fn git_push(state: State<'_, Mutex<AppState>>) -> Result<crate::net::N
     };
     crate::net::push(&repo_path, &branch, has_upstream)
 }
+
+#[tauri::command]
+pub async fn get_commit_detail(
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+) -> Result<git_state::CommitDetail, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::build_commit_detail(&repo_path, &oid)
+}
+
+#[tauri::command]
+pub async fn get_commit_file_diff(
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+    path: String,
+) -> Result<git_state::FileDiffContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_commit_file_diff(&repo_path, &oid, &path)
+}

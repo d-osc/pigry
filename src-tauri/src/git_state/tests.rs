@@ -600,3 +600,61 @@ fn network_push_sets_upstream_on_first_push() {
 
     let _ = fs::remove_dir_all(&base);
 }
+
+#[test]
+fn commit_detail_lists_changed_files_with_numstat() {
+    let dir = scratch_repo("detail");
+    write(&dir, "a.txt", "one\n");
+    write(&dir, "keep.txt", "same\n");
+    commit_all(&dir, "base");
+    write(&dir, "a.txt", "one\ntwo\n");
+    write(&dir, "b/new.txt", "fresh\n");
+    commit_all(&dir, "change two files");
+
+    let detail = build_commit_detail(&dir, "HEAD").unwrap();
+    assert_eq!(detail.summary, "change two files");
+    assert!(!detail.is_merge);
+    assert_eq!(detail.files.len(), 2);
+
+    let a = detail.files.iter().find(|f| f.path == "a.txt").unwrap();
+    assert_eq!(a.status, "M");
+    assert_eq!(a.additions, 1);
+    let new_file = detail.files.iter().find(|f| f.path == "b/new.txt").unwrap();
+    assert_eq!(new_file.status, "A");
+    assert_eq!(new_file.additions, 1);
+    assert_eq!(new_file.directory, "b");
+
+    // Full message contains the summary line.
+    assert!(detail.message.starts_with("change two files"));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn commit_file_diff_returns_parent_vs_commit_content() {
+    let dir = scratch_repo("detail-diff");
+    write(&dir, "doc.txt", "old\n");
+    commit_all(&dir, "base");
+    write(&dir, "doc.txt", "old\nnew line\n");
+    commit_all(&dir, "extend");
+
+    let repo = Repository::open(&dir).unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+    drop(repo);
+
+    let diff = read_commit_file_diff(&dir, &head, "doc.txt").unwrap();
+    assert_eq!(diff.original.unwrap(), "old\n");
+    assert_eq!(diff.modified.unwrap(), "old\nnew line\n");
+    assert!(!diff.binary && !diff.too_large);
+
+    // A path added by the commit has an empty base.
+    write(&dir, "added.txt", "added\n");
+    commit_all(&dir, "add file");
+    let repo = Repository::open(&dir).unwrap();
+    let head2 = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+    drop(repo);
+    let diff2 = read_commit_file_diff(&dir, &head2, "added.txt").unwrap();
+    assert_eq!(diff2.original.unwrap(), "");
+
+    let _ = fs::remove_dir_all(&dir);
+}

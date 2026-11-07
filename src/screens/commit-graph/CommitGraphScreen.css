@@ -94,11 +94,24 @@
   font-size: var(--fs-xs);
 }
 
+.commit-history__content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
 .commit-history__table {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   border-top: 1px solid var(--border);
+  flex: 1;
+  min-width: 0;
+}
+
+.commit-row--clickable {
+  cursor: pointer;
 }
 
 .commit-history__empty {

@@ -131,3 +131,26 @@ export interface FileCommitEntry {
 export interface NetResult {
   summary: string;
 }
+
+export interface CommitFileEntry {
+  path: string;
+  name: string;
+  directory: string;
+  /** M | A | D | R */
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface CommitDetail {
+  oid: string;
+  shortOid: string;
+  summary: string;
+  /** Full message body. */
+  message: string;
+  authorName: string;
+  authorInitials: string;
+  timeSeconds: number;
+  isMerge: boolean;
+  files: CommitFileEntry[];
+}
