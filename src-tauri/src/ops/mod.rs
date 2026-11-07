@@ -70,3 +70,20 @@ pub fn merge_branch(repo_path: &Path, branch: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests;
+
+/// Clones a repository from a URL to a local directory.
+pub fn clone_repo(url: &str, target: &str) -> Result<String> {
+    run_git_timed(Path::new("."), &["clone", url, target])
+}
+
+/// Rebases the current branch onto another branch.
+pub fn rebase_onto(repo_path: &Path, base: &str) -> Result<String> {
+    run_git_timed(repo_path, &["rebase", base])
+}
+
+/// Checks if the repository has unresolved merge conflicts.
+pub fn has_conflicts(repo_path: &Path) -> Result<bool> {
+    let repo = git2::Repository::discover(repo_path).map_err(|e| e.to_string())?;
+    let index = repo.index().map_err(|e| e.to_string())?;
+    Ok(index.has_conflicts())
+}

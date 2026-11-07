@@ -593,3 +593,32 @@ pub async fn merge_branch(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+
+#[tauri::command]
+pub async fn clone_repo(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    url: String,
+    target: String,
+) -> Result<AppStatePayload, String> {
+    ops::clone_repo(&url, &target)?;
+    // Open the cloned repository.
+    let payload = open_repo_sync(&app, &state, &target)?;
+    Ok(payload)
+}
+
+#[tauri::command]
+pub async fn rebase_onto(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    base: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::rebase_onto(&repo_path, &base)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}

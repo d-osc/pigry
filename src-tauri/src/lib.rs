@@ -67,6 +67,8 @@ pub fn run() {
             commands::unstage_hunk,
             commands::discard_hunk,
             commands::get_file_blame,
+            commands::clone_repo,
+            commands::rebase_onto,
             commands::revert_commit,
             commands::cherry_pick,
             commands::merge_branch,
