@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { X } from 'lucide-react';
+import { Undo2, X } from 'lucide-react';
+import { useRepository } from '../../hooks/useRepository';
 import { getCommitDetail, getCommitFileDiff } from '../../lib/tauriClient';
 import { relativeTime } from '../../lib/relativeTime';
 import type { CommitDetail, CommitFileEntry, FileDiffContent } from '../../types/repository';
@@ -26,6 +27,7 @@ function statusClass(status: string): string {
 }
 
 export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
+  const { revertCommit, busy } = useRepository();
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selectedFile, setSelectedFile] = useState<CommitFileEntry | null>(null);
@@ -74,6 +76,16 @@ export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
           <span className="commit-detail__time">
             {detail ? relativeTime(detail.timeSeconds) : ''}
           </span>
+          <button
+            type="button"
+            className="commit-detail__revert"
+            title="Revert this commit"
+            onClick={() => void revertCommit(oid)}
+            disabled={busy}
+          >
+            <Undo2 size={12} />
+            Revert
+          </button>
           <button
             type="button"
             className="commit-detail__close"

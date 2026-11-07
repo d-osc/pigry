@@ -32,6 +32,9 @@ export interface RepositoryContextValue {
   stageHunk: (path: string, hunkIndex: number) => Promise<void>;
   unstageHunk: (path: string, hunkIndex: number) => Promise<void>;
   discardHunk: (path: string, hunkIndex: number) => Promise<void>;
+  revertCommit: (oid: string) => Promise<void>;
+  cherryPick: (oid: string) => Promise<void>;
+  mergeBranch: (branch: string) => Promise<void>;
   stashApply: (index: number) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
@@ -138,6 +141,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       stageHunk: (path, hunkIndex) => run(() => client.stageHunk(path, hunkIndex), (p) => p),
       unstageHunk: (path, hunkIndex) => run(() => client.unstageHunk(path, hunkIndex), (p) => p),
       discardHunk: (path, hunkIndex) => run(() => client.discardHunk(path, hunkIndex), (p) => p),
+      revertCommit: (oid) => run(() => client.revertCommit(oid), (p) => p),
+      cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p),
+      mergeBranch: (branch) => run(() => client.mergeBranch(branch), (p) => p),
       stashApply: (index) => run(() => client.stashApply(index), (p) => p),
       stashPop: (index) => run(() => client.stashPop(index), (p) => p),
       stashDrop: (index) => run(() => client.stashDrop(index), (p) => p),

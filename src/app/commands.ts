@@ -8,6 +8,7 @@ import {
   FolderTree,
   ListChecks,
   ListMinus,
+  GitBranchPlus,
   Network,
   RefreshCw,
   type LucideIcon,
@@ -178,6 +179,17 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     run: () => void repository.stashPop(stash.index),
   }));
 
+  const opCommands: Command[] = (repo?.branches ?? [])
+    .filter((branch) => !branch.isHead)
+    .map((branch) => ({
+      id: `branch:merge:${branch.name}`,
+      title: `Merge branch ${branch.name}`,
+      section: "Sync" as const,
+      icon: GitBranchPlus,
+      enabled: true,
+      run: () => void repository.mergeBranch(branch.name),
+    }));
+
   const syncCommands: Command[] = [
     {
       id: 'sync:fetch',
@@ -228,5 +240,5 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   ];
 
-  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...stashCommands, ...syncCommands];
+  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...stashCommands, ...opCommands, ...syncCommands];
 }

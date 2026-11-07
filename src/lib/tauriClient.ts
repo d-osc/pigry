@@ -186,3 +186,15 @@ export async function getFileBlame(path: string): Promise<BlameLine[]> {
 export async function getLineChanges(path: string): Promise<LineChange[]> {
   return invoke('get_line_changes', { path });
 }
+
+export async function revertCommit(oid: string): Promise<AppStatePayload> {
+  return invoke('revert_commit', { oid });
+}
+
+export async function cherryPick(oid: string): Promise<AppStatePayload> {
+  return invoke('cherry_pick', { oid });
+}
+
+export async function mergeBranch(branch: string): Promise<AppStatePayload> {
+  return invoke('merge_branch', { branch });
+}
