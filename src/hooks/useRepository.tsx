@@ -28,6 +28,9 @@ export interface RepositoryContextValue {
   discard: (path: string) => Promise<void>;
   commit: (title: string, body: string, amend: boolean) => Promise<void>;
   stash: (message?: string) => Promise<void>;
+  stashApply: (index: number) => Promise<void>;
+  stashPop: (index: number) => Promise<void>;
+  stashDrop: (index: number) => Promise<void>;
   createTag: (name: string) => Promise<void>;
   deleteTag: (name: string) => Promise<void>;
   createBranch: (name: string, checkout: boolean) => Promise<void>;
@@ -116,6 +119,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         await run(() => client.commitChanges(title, body, amend), (outcome) => outcome.state);
       },
       stash: (message) => run(() => client.stashChanges(message), (p) => p),
+      stashApply: (index) => run(() => client.stashApply(index), (p) => p),
+      stashPop: (index) => run(() => client.stashPop(index), (p) => p),
+      stashDrop: (index) => run(() => client.stashDrop(index), (p) => p),
       createTag: (name) => run(() => client.createTag(name), (p) => p),
       deleteTag: (name) => run(() => client.deleteTag(name), (p) => p),
       createBranch: (name, checkout) => run(() => client.createBranch(name, checkout), (p) => p),

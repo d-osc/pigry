@@ -46,7 +46,18 @@ function Section({
 }
 
 export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
-  const { repository, checkoutBranch, createBranch, deleteBranch, createTag, deleteTag, busy } = useRepository();
+  const {
+    repository,
+    checkoutBranch,
+    createBranch,
+    deleteBranch,
+    createTag,
+    deleteTag,
+    stashApply,
+    stashPop,
+    stashDrop,
+    busy,
+  } = useRepository();
   const [creating, setCreating] = useState(false);
   const [tagCreating, setTagCreating] = useState(false);
   const [newTagName, setNewTagName] = useState("");
@@ -237,10 +248,43 @@ export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
         {repository.stashes.length > 0 && (
           <Section title="Stashes" count={repository.stashes.length}>
             {repository.stashes.map((stash) => (
-              <button key={stash.index} type="button" className="nav-branch">
-                <Archive size={12} className="nav-branch__icon" />
-                <span className="nav-branch__name">{stash.message}</span>
-              </button>
+              <div key={stash.index} className="nav-stash">
+                <span className="nav-stash__icon">
+                  <Archive size={12} />
+                </span>
+                <span className="nav-branch__name" title={stash.message}>
+                  {stash.message}
+                </span>
+                <span className="nav-stash__actions">
+                  <button
+                    type="button"
+                    className="nav-stash__btn"
+                    title="Apply stash (keep entry)"
+                    disabled={busy}
+                    onClick={() => void stashApply(stash.index)}
+                  >
+                    A
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-stash__btn"
+                    title="Pop stash (apply and remove)"
+                    disabled={busy}
+                    onClick={() => void stashPop(stash.index)}
+                  >
+                    P
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-stash__btn nav-stash__btn--danger"
+                    title="Drop stash"
+                    disabled={busy}
+                    onClick={() => void stashDrop(stash.index)}
+                  >
+                    ✕
+                  </button>
+                </span>
+              </div>
             ))}
           </Section>
         )}

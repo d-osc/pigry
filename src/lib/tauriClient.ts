@@ -138,3 +138,15 @@ export async function createTag(name: string): Promise<AppStatePayload> {
 export async function deleteTag(name: string): Promise<AppStatePayload> {
   return invoke('delete_tag', { name });
 }
+
+export async function stashApply(index: number): Promise<AppStatePayload> {
+  return invoke("stash_apply", { index });
+}
+
+export async function stashPop(index: number): Promise<AppStatePayload> {
+  return invoke("stash_pop", { index });
+}
+
+export async function stashDrop(index: number): Promise<AppStatePayload> {
+  return invoke("stash_drop", { index });
+}

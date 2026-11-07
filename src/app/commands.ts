@@ -168,6 +168,16 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     })),
   ];
 
+  const stashCommands: Command[] = (repo?.stashes ?? []).map((stash) => ({
+    id: `stash:pop:${stash.index}`,
+    title: `Pop stash ${stash.message}`,
+    section: "Repository" as const,
+    icon: Archive,
+    hint: `#${stash.index}`,
+    enabled: true,
+    run: () => void repository.stashPop(stash.index),
+  }));
+
   const syncCommands: Command[] = [
     {
       id: 'sync:fetch',
@@ -218,5 +228,5 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   ];
 
-  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...syncCommands];
+  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...stashCommands, ...syncCommands];
 }

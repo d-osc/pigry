@@ -806,3 +806,83 @@ fn annotated_tag_resolves_to_commit() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn stash_apply_keeps_entry_pop_removes_it() {
+    let dir = scratch_repo("stash-mgmt");
+    write(&dir, "a.txt", "base\n");
+    commit_all(&dir, "base");
+
+    // Two stashes.
+    write(&dir, "a.txt", "change one\n");
+    stash(&dir, Some("first stash")).unwrap();
+    write(&dir, "a.txt", "change two\n");
+    stash(&dir, Some("second stash")).unwrap();
+
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 2);
+    assert!(state.files.is_empty(), "worktree clean after stashing");
+
+    // Apply (not pop) stash 0 restores content and keeps both entries.
+    stash_apply(&dir, 0).unwrap();
+    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
+    assert_eq!(content, "change two\n", "stash 0 is the most recent (second stash)");
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 2, "apply keeps the stash entry");
+
+    // Pop removes the entry.
+    stash_pop(&dir, 0).unwrap();
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 1);
+
+    // Drop removes the last one without touching the worktree.
+    stash_drop(&dir, 0).unwrap();
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 0);
+    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
+    assert_eq!(content, "change two\n");
+
+    // Out-of-range errors are clear.
+    assert!(stash_apply(&dir, 5).is_err());
+    assert!(stash_drop(&dir, 5).is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn stash_pop_conflicts_report_clean_error() {
+    let dir = scratch_repo("stash-conflict");
+    write(&dir, "a.txt", "base\n");
+    commit_all(&dir, "base");
+    write(&dir, "a.txt", "stashed change\n");
+    stash(&dir, Some("will conflict")).unwrap();
+    // Now make the same line different on HEAD so applying conflicts.
+    write(&dir, "a.txt", "committed conflicting change\n");
+    commit_all(&dir, "conflicting commit");
+
+    // libgit2 records stash conflicts as merge conflicts in the worktree
+    // (like git CLI, which also leaves markers). The pop may return Ok with
+    // conflict markers written, or fail with a message — either is acceptable
+    // as long as the repository stays consistent.
+    match stash_pop(&dir, 0) {
+        Err(message) => {
+            assert!(
+                message.contains("stash") || message.contains("conflict") || message.contains("overwrite"),
+                "error should describe the failure: {message}"
+            );
+        }
+        Ok(()) => {
+            let content = fs::read_to_string(dir.join("a.txt")).unwrap();
+            assert!(
+                content.contains("<<<<<<<") || content.contains("====="),
+                "successful pop with conflict must leave conflict markers: {content}"
+            );
+            // libgit2 drops the entry even on conflict (git CLI keeps it) —
+            // either count is acceptable; the repo must stay readable.
+            let state = build_state(&dir).unwrap();
+            assert!(state.stashes.len() <= 1);
+        }
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}

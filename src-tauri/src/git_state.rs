@@ -1573,3 +1573,57 @@ fn validate_tag_name(name: &str) -> Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Stash management: apply / pop / drop by index
+// ---------------------------------------------------------------------------
+
+fn stash_action(repo_path: &Path, index: usize, pop: bool) -> Result<()> {
+    let mut repo = Repository::discover(repo_path).map_err(err)?;
+    let count = std::cell::Cell::new(0usize);
+    repo.stash_foreach(|_, _, _| {
+        count.set(count.get() + 1);
+        true
+    })
+    .map_err(err)?;
+    let count = count.get();
+    if index >= count {
+        return Err(format!("stash #{index} does not exist"));
+    }
+    let mut opts = git2::StashApplyOptions::new();
+    opts.reinstantiate_index();
+    if pop {
+        repo.stash_pop(index, Some(&mut opts))
+            .map_err(|e| format!("stash pop failed: {}", e.message()))
+    } else {
+        repo.stash_apply(index, Some(&mut opts))
+            .map_err(|e| format!("stash apply failed: {}", e.message()))
+    }
+}
+
+/// Applies stash `index` to the working tree, keeping the stash entry.
+pub fn stash_apply(repo_path: &Path, index: usize) -> Result<()> {
+    stash_action(repo_path, index, false)
+}
+
+/// Applies stash `index` and removes it from the stash list.
+pub fn stash_pop(repo_path: &Path, index: usize) -> Result<()> {
+    stash_action(repo_path, index, true)
+}
+
+/// Removes stash `index` from the list without applying it.
+pub fn stash_drop(repo_path: &Path, index: usize) -> Result<()> {
+    let mut repo = Repository::discover(repo_path).map_err(err)?;
+    let count = std::cell::Cell::new(0usize);
+    repo.stash_foreach(|_, _, _| {
+        count.set(count.get() + 1);
+        true
+    })
+    .map_err(err)?;
+    let count = count.get();
+    if index >= count {
+        return Err(format!("stash #{index} does not exist"));
+    }
+    repo.stash_drop(index).map_err(err)?;
+    Ok(())
+}
