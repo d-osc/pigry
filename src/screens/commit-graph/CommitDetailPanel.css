@@ -245,3 +245,20 @@
   color: var(--text-muted);
   font-size: var(--fs-xs);
 }
+
+.commit-detail__signed {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--green-tint);
+  color: var(--green);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
+.commit-detail__signed--bad {
+  background: #3b2530;
+  color: var(--red);
+}

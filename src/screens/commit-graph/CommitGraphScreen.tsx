@@ -4,6 +4,7 @@ import { useRepository } from '../../hooks/useRepository';
 import { useCommitHistory } from '../../hooks/useCommitHistory';
 import { relativeTime } from '../../lib/relativeTime';
 import { CommitGraphColumn } from './CommitGraphColumn';
+import { RepoStatsBar } from './RepoStatsBar';
 import { CommitDetailPanel } from './CommitDetailPanel';
 import './CommitGraphScreen.css';
 
@@ -98,6 +99,7 @@ export function CommitGraphScreen() {
 
       {error && <div className="commit-history__notice">{error}</div>}
 
+      <RepoStatsBar />
       <div className="commit-history__content">
       <div className="commit-history__table">
         <div className="commit-history__head commit-row commit-row--head">

@@ -14,6 +14,8 @@ function statusClass(status: ChangedFile['status']): string {
   switch (status) {
     case 'A':
       return 'changed-file__status--added';
+    case 'C':
+      return 'changed-file__status--conflicted';
     case 'D':
       return 'changed-file__status--deleted';
     default:

@@ -11,6 +11,7 @@ import type {
   BlameLine,
   HunkInfo,
   LineChange,
+  RepoStats,
   NetResult,
   WorktreeFileContent,
 } from '../types/repository';
@@ -205,4 +206,12 @@ export async function cloneRepo(url: string, target: string): Promise<AppStatePa
 
 export async function rebaseOnto(base: string): Promise<AppStatePayload> {
   return invoke('rebase_onto', { base });
+}
+
+export async function getRepoStats(): Promise<RepoStats> {
+  return invoke('get_repo_stats');
+}
+
+export async function verifyCommitSig(oid: string): Promise<string> {
+  return invoke('verify_commit_sig', { oid });
 }

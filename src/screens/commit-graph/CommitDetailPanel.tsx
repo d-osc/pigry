@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { Undo2, X } from 'lucide-react';
+import { ShieldCheck, Undo2, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
+import { verifyCommitSig } from '../../lib/tauriClient';
 import { getCommitDetail, getCommitFileDiff } from '../../lib/tauriClient';
 import { relativeTime } from '../../lib/relativeTime';
 import type { CommitDetail, CommitFileEntry, FileDiffContent } from '../../types/repository';
@@ -29,6 +30,7 @@ function statusClass(status: string): string {
 export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
   const { revertCommit, busy } = useRepository();
   const [detail, setDetail] = useState<CommitDetail | null>(null);
+  const [signature, setSignature] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [selectedFile, setSelectedFile] = useState<CommitFileEntry | null>(null);
   const [fileDiff, setFileDiff] = useState<{
@@ -42,6 +44,9 @@ export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
     getCommitDetail(oid)
       .then((result) => {
         if (!cancelled) setDetail(result);
+        verifyCommitSig(result.oid).then((sig) => {
+          if (!cancelled) setSignature(sig);
+        }).catch(() => {});
       })
       .catch(() => {
         if (!cancelled) setLoadFailed(true);
@@ -73,6 +78,16 @@ export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
         <div className="commit-detail__title-row">
           <span className="commit-detail__sha">{detail?.shortOid ?? '…'}</span>
           {detail?.isMerge && <span className="commit-detail__merge">Merge</span>}
+          {signature === 'good' && (
+            <span className="commit-detail__signed" title="GPG signature verified">
+              <ShieldCheck size={11} /> Signed
+            </span>
+          )}
+          {signature === 'bad' && (
+            <span className="commit-detail__signed commit-detail__signed--bad" title="GPG signature invalid">
+              Invalid signature
+            </span>
+          )}
           <span className="commit-detail__time">
             {detail ? relativeTime(detail.timeSeconds) : ''}
           </span>

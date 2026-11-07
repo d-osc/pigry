@@ -194,3 +194,8 @@
   background: var(--bg-card);
   color: var(--text-primary);
 }
+
+.changed-file__status--conflicted {
+  color: var(--red);
+  background: #3b2530;
+}

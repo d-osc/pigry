@@ -1,6 +1,6 @@
 /** Shared repository types — mirrors the Rust payloads in src-tauri/src/git_state.rs. */
 
-export type ChangeStatus = 'M' | 'A' | 'D' | 'R';
+export type ChangeStatus = 'M' | 'A' | 'D' | 'R' | 'C';
 
 export interface AccountInfo {
   initials: string;
@@ -152,6 +152,33 @@ export interface BlameLine {
   timeSeconds: number;
   summary: string;
   uncommitted: boolean;
+}
+
+export interface BlameLine {
+  line: number;
+  shortOid: string;
+  authorName: string;
+  authorInitials: string;
+  timeSeconds: number;
+  summary: string;
+  uncommitted: boolean;
+}
+
+export interface Contributor {
+  name: string;
+  initials: string;
+  commits: number;
+}
+
+export interface LanguageCount {
+  language: string;
+  files: number;
+}
+
+export interface RepoStats {
+  totalCommits: number;
+  contributors: Contributor[];
+  languages: LanguageCount[];
 }
 
 export interface LineChange {
