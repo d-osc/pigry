@@ -1,0 +1,163 @@
+.commit-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-workspace);
+  flex-shrink: 0;
+}
+
+.commit-composer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.commit-composer__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.commit-composer__generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--purple);
+  font-size: var(--fs-xs);
+  transition: background var(--transition-fast);
+}
+
+.commit-composer__generate:hover {
+  background: var(--purple-tint);
+}
+
+.commit-composer__message {
+  min-height: 120px;
+  padding: 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.commit-composer__message:focus {
+  border-color: var(--accent-tint-3);
+}
+
+.commit-composer__options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.commit-composer__amend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.commit-composer__amend input {
+  accent-color: var(--accent);
+}
+
+.commit-composer__counter {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.commit-composer__counter.is-over {
+  color: var(--red);
+}
+
+.commit-composer__author {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar--sm {
+  width: 20px;
+  height: 20px;
+  font-size: 8px;
+}
+
+.commit-composer__author-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.commit-composer__author-name {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+}
+
+.commit-composer__author-email {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-composer__submit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #10131c;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: filter var(--transition-fast);
+}
+
+.primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.primary-button:disabled {
+  cursor: default;
+  background: var(--bg-card);
+  color: var(--text-muted);
+}
+
+.primary-button:disabled kbd {
+  display: none;
+}
+
+.primary-button kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  background: #10131c22;
+}
+
+.commit-composer__note {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  text-align: center;
+}

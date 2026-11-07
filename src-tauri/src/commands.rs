@@ -1,0 +1,261 @@
+//! Tauri command handlers — thin wrappers around `git_state` + `config`.
+
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+
+use serde::Serialize;
+use tauri::State;
+use tauri_plugin_dialog::DialogExt;
+
+use crate::config::{self, AppConfig};
+use crate::git_state::{self, FileDiffContent, RepositoryState};
+
+/// Shared app state guarded by a mutex. Git operations are fast (local
+/// repositories) so we keep them synchronous inside async commands.
+pub struct AppState {
+    pub config: AppConfig,
+    pub repo_path: Option<PathBuf>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppStatePayload {
+    pub active_path: Option<String>,
+    pub recent: Vec<String>,
+    pub repository: Option<RepositoryState>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitOutcome {
+    pub oid: String,
+    pub state: AppStatePayload,
+}
+
+fn repo_path_str(state: &AppState) -> Result<&Path, String> {
+    state
+        .repo_path
+        .as_deref()
+        .ok_or_else(|| "no repository open".to_string())
+}
+
+fn build_payload(state: &AppState) -> AppStatePayload {
+    let repository = state.repo_path.as_deref().and_then(|path| {
+        match git_state::build_state(path) {
+            Ok(value) => Some(value),
+            Err(e) => {
+                eprintln!("[orbit] build_state failed for {}: {e}", path.display());
+                None
+            }
+        }
+    });
+    AppStatePayload {
+        active_path: state.repo_path.as_ref().map(|p| p.display().to_string()),
+        recent: state.config.recent.clone(),
+        repository,
+    }
+}
+
+fn open_repo_sync(
+    app: &tauri::AppHandle,
+    state: &Mutex<AppState>,
+    path: &str,
+) -> Result<AppStatePayload, String> {
+    git2::Repository::discover(path)
+        .map_err(|e| format!("not a git repository: {}", e.message()))?;
+    let mut state = state.lock().map_err(|e| e.to_string())?;
+    config::set_active(&mut state.config, path);
+    config::save(app, &state.config);
+    state.repo_path = Some(PathBuf::from(path));
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn get_app_state(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn open_repository(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<AppStatePayload, String> {
+    open_repo_sync(&app, &state, &path)
+}
+
+/// Opens the OS folder picker; None when the user cancels.
+#[tauri::command]
+pub async fn pick_repository(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Option<AppStatePayload>, String> {
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Open repository")
+        .blocking_pick_folder();
+    let Some(path) = picked else {
+        return Ok(None);
+    };
+    open_repo_sync(&app, &state, &path.to_string()).map(Some)
+}
+
+#[tauri::command]
+pub async fn close_repository(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let mut state = state.lock().map_err(|e| e.to_string())?;
+    state.repo_path = None;
+    state.config.active = None;
+    config::save(&app, &state.config);
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn refresh(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn stage_paths(
+    state: State<'_, Mutex<AppState>>,
+    paths: Vec<String>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::stage_paths(&repo_path, &paths)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn unstage_paths(
+    state: State<'_, Mutex<AppState>>,
+    paths: Vec<String>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::unstage_paths(&repo_path, &paths)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn discard_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::discard_file(&repo_path, &path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn commit(
+    state: State<'_, Mutex<AppState>>,
+    title: String,
+    body: String,
+    amend: bool,
+) -> Result<CommitOutcome, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let oid = git_state::commit(&repo_path, &title, &body, amend)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(CommitOutcome {
+        oid,
+        state: build_payload(&state),
+    })
+}
+
+#[tauri::command]
+pub async fn stash_changes(
+    state: State<'_, Mutex<AppState>>,
+    message: Option<String>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::stash(&repo_path, message.as_deref())?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn get_file_diff(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    staged: bool,
+) -> Result<FileDiffContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::file_diff_at(&repo_path, &path, staged)
+}
+
+#[tauri::command]
+pub async fn get_commit_history(
+    state: State<'_, Mutex<AppState>>,
+    include_remotes: bool,
+) -> Result<git_state::CommitHistory, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::build_commit_history(&repo_path, include_remotes)
+}
+
+#[tauri::command]
+pub async fn get_file_tree(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<git_state::FileTree, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::list_tree(&repo_path)
+}
+
+#[tauri::command]
+pub async fn read_worktree_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<git_state::WorktreeFileContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_worktree_file(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn write_worktree_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::write_worktree_file(&repo_path, &path, &content)
+}

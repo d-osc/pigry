@@ -1,0 +1,72 @@
+/*
+ * Orbit design tokens — extracted from Figma file 417miudvyh3Kdz8eN4eILm.
+ * See .figma-analysis/DESIGN-SUMMARY.md for provenance.
+ */
+:root {
+  /* ---- Layered backgrounds (darkest → raised) ---- */
+  --bg-statusbar: #0e1014;
+  --bg-sidebar: #111317;
+  --bg-titlebar: #15171c;
+  --bg-panel: #191c22;
+  --bg-workspace: #1d2129;
+  --bg-card: #20242b;
+  --bg-input: #15171c;
+  --bg-code: #1a1d24;
+  --bg-code-alt: #1b1e28;
+
+  /* ---- Surfaces ---- */
+  --border: #2a2e37;
+  --border-strong: #343a46;
+  --border-hover: #3d4450;
+
+  /* ---- Text ---- */
+  --text-primary: #e9ebf0;
+  --text-secondary: #9299a7;
+  --text-muted: #656d7c;
+  --text-mid: #c9ced8;
+
+  /* ---- Accent (indigo) ---- */
+  --accent: #8b9dff;
+  --accent-tint-1: #252d49; /* selected rows, subtle fills */
+  --accent-tint-2: #38405b; /* hover fills */
+  --accent-tint-3: #43517b; /* borders on tinted surfaces */
+
+  /* ---- Semantic ---- */
+  --green: #6dd6ad;
+  --green-tint: #152a24;
+  --red: #e79098;
+  --orange: #edb675;
+  --orange-tint: #453a2c;
+  --cyan: #62cee7;
+  --purple: #b59aff;
+  --purple-bright: #a698ff;
+  --purple-tint: #3b3049;
+
+  /* ---- Typography ---- */
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+
+  --fs-2xs: 9px;  /* micro labels, badge text */
+  --fs-xs: 10px;  /* dense UI default */
+  --fs-sm: 11px;  /* list rows, controls */
+  --fs-md: 12px;  /* body text */
+  --fs-lg: 13px;  /* emphasized body */
+  --fs-xl: 15px;  /* screen titles */
+
+  /* ---- Radius ---- */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+
+  /* ---- Layout constants ---- */
+  --titlebar-height: 40px;
+  --sidebar-width: 224px;
+  --statusbar-height: 28px;
+  --file-list-width: 360px;
+
+  /* ---- Motion ---- */
+  --transition-fast: 120ms ease;
+}

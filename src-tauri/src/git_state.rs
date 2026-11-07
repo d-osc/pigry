@@ -1,0 +1,1118 @@
+//! Git operations via libgit2. All functions are synchronous and return
+//! `Result<_, String>` so Tauri commands can surface errors to the UI.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use git2::{
+    build::CheckoutBuilder, BranchType, DiffOptions, ObjectType, Repository, Status,
+    StatusOptions,
+};
+use serde::Serialize;
+
+#[cfg(test)]
+mod tests;
+
+const MAX_DIFF_BYTES: usize = 1_000_000;
+const MAX_TAGS_SHOWN: usize = 20;
+
+type Result<T> = std::result::Result<T, String>;
+
+fn err<E: std::fmt::Display>(e: E) -> String {
+    e.to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Payload types (camelCase to match the frontend `src/types/repository.ts`)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    pub initials: String,
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpstreamInfo {
+    pub name: String,
+    pub ahead: usize,
+    pub behind: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchInfo {
+    pub name: String,
+    pub is_head: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteGroup {
+    pub remote: String,
+    pub branches: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StashInfo {
+    pub index: usize,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    /// Stable row id: `<path>:staged|unstaged`
+    pub id: String,
+    pub path: String,
+    pub name: String,
+    pub directory: String,
+    /// M | A | D | R
+    pub status: String,
+    pub additions: u32,
+    pub deletions: u32,
+    pub staged: bool,
+    pub untracked: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepositoryState {
+    pub organization: String,
+    pub name: String,
+    /// Some("Local") when the repository has no remote; None otherwise.
+    pub visibility: Option<String>,
+    pub local_path: String,
+    pub current_branch: String,
+    pub upstream: Option<UpstreamInfo>,
+    pub account: AccountInfo,
+    pub files: Vec<ChangedFile>,
+    pub branches: Vec<BranchInfo>,
+    pub remotes: Vec<RemoteGroup>,
+    pub tags: Vec<String>,
+    pub tag_total: usize,
+    pub stashes: Vec<StashInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiffContent {
+    pub original: Option<String>,
+    pub modified: Option<String>,
+    pub binary: bool,
+    pub too_large: bool,
+    pub language: String,
+}
+
+#[derive(Default)]
+struct LineCounts {
+    additions: u32,
+    deletions: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Repository state
+// ---------------------------------------------------------------------------
+
+pub fn build_state(path: &Path) -> Result<RepositoryState> {
+    let mut repo = Repository::discover(path).map_err(err)?;
+
+    let (files, untracked_paths) = collect_files(&repo)?;
+    let head_tree = head_tree(&repo);
+    let staged_counts = diff_counts(&repo, DiffSide::Staged, &head_tree);
+    let unstaged_counts = diff_counts(&repo, DiffSide::Unstaged, &head_tree);
+    // Tree borrows `repo`; release it before the mutable stash scan below.
+    drop(head_tree);
+
+    // Attach diffstat numbers to their rows.
+    let mut rows: Vec<ChangedFile> = Vec::new();
+    for mut file in files {
+        let counts = if file.staged {
+            staged_counts.get(&file.path)
+        } else {
+            unstaged_counts.get(&file.path)
+        };
+        if let Some(counts) = counts {
+            file.additions = counts.additions;
+            file.deletions = counts.deletions;
+        }
+        rows.push(file);
+    }
+    let _ = untracked_paths; // untracked rows are built inside collect_files
+
+    let (organization, name, visibility) = repo_identity(&repo)?;
+    let current_branch = current_branch(&repo)?;
+    let upstream = upstream_info(&repo, &current_branch)?;
+    let account = account_info(&repo)?;
+    let branches = local_branches(&repo)?;
+    let remotes = remote_branches(&repo)?;
+    let (tags, tag_total) = tags(&repo)?;
+    let stashes = stash_list(&mut repo)?;
+    let local_path = repo
+        .workdir()
+        .unwrap_or_else(|| repo.path())
+        .to_string_lossy()
+        .trim_end_matches(['/', '\\'])
+        .to_string();
+
+    Ok(RepositoryState {
+        organization,
+        name,
+        visibility,
+        local_path,
+        current_branch,
+        upstream,
+        account,
+        files: rows,
+        branches,
+        remotes,
+        tags,
+        tag_total,
+        stashes,
+    })
+}
+
+/// Build one ChangedFile row per (path, staged-flag) pair — a path with both
+/// staged and unstaged edits intentionally produces two rows.
+fn collect_files(repo: &Repository) -> Result<(Vec<ChangedFile>, Vec<String>)> {
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .renames_head_to_index(true)
+        .renames_index_to_workdir(true)
+        .exclude_submodules(true);
+
+    let statuses = repo.statuses(Some(&mut opts)).map_err(err)?;
+    let mut rows = Vec::new();
+    let mut untracked = Vec::new();
+
+    for entry in statuses.iter() {
+        let Some(path) = entry.path().map(str::to_string) else {
+            continue;
+        };
+        let flags = entry.status();
+        let conflicted = flags.contains(Status::CONFLICTED);
+        if conflicted {
+            // Conflicts are out of scope for M2 — skip rather than misreport.
+            continue;
+        }
+
+        let staged_flags = Status::INDEX_NEW
+            | Status::INDEX_MODIFIED
+            | Status::INDEX_DELETED
+            | Status::INDEX_RENAMED
+            | Status::INDEX_TYPECHANGE;
+        let unstaged_flags = Status::WT_MODIFIED
+            | Status::WT_DELETED
+            | Status::WT_RENAMED
+            | Status::WT_TYPECHANGE;
+
+        let new_file = |staged: bool| {
+            let (name, directory) = split_path(&path);
+            ChangedFile {
+                id: format!("{}:{}", path, if staged { "staged" } else { "unstaged" }),
+                path: path.clone(),
+                name,
+                directory,
+                status: status_letter(flags, staged).to_string(),
+                additions: 0,
+                deletions: 0,
+                staged,
+                untracked: !staged && flags.contains(Status::WT_NEW),
+            }
+        };
+
+        if flags.intersects(staged_flags) {
+            rows.push(new_file(true));
+        }
+        if flags.intersects(unstaged_flags) || flags.contains(Status::WT_NEW) {
+            let row = new_file(false);
+            if row.untracked {
+                untracked.push(path.clone());
+            }
+            rows.push(row);
+        }
+    }
+
+    rows.sort_by(|a, b| a.path.cmp(&b.path).then(a.staged.cmp(&b.staged)));
+    Ok((rows, untracked))
+}
+
+fn status_letter(flags: Status, staged: bool) -> char {
+    let check = |mask: Status| flags.intersects(mask);
+    if staged {
+        if check(Status::INDEX_RENAMED) {
+            'R'
+        } else if check(Status::INDEX_NEW) {
+            'A'
+        } else if check(Status::INDEX_DELETED) {
+            'D'
+        } else {
+            'M'
+        }
+    } else if check(Status::WT_RENAMED) {
+        'R'
+    } else if check(Status::WT_NEW) {
+        'A'
+    } else if check(Status::WT_DELETED) {
+        'D'
+    } else {
+        'M'
+    }
+}
+
+fn split_path(path: &str) -> (String, String) {
+    match path.rfind(['/', '\\']) {
+        Some(idx) => (path[idx + 1..].to_string(), path[..idx].to_string()),
+        None => (path.to_string(), String::new()),
+    }
+}
+
+enum DiffSide {
+    Staged,
+    Unstaged,
+}
+
+/// Per-file addition/deletion counts computed from libgit2 diffs.
+fn diff_counts(
+    repo: &Repository,
+    side: DiffSide,
+    head_tree: &Option<git2::Tree<'_>>,
+) -> BTreeMap<String, LineCounts> {
+    let diff = match side {
+        DiffSide::Staged => {
+            let index = match repo.index() {
+                Ok(index) => index,
+                Err(_) => return BTreeMap::new(),
+            };
+            repo.diff_tree_to_index(head_tree.as_ref(), Some(&index), None)
+        }
+        DiffSide::Unstaged => {
+            let mut opts = DiffOptions::new();
+            opts.include_untracked(true)
+                .show_untracked_content(true)
+                .recurse_untracked_dirs(true);
+            repo.diff_index_to_workdir(None, Some(&mut opts))
+        }
+    };
+    let mut diff = match diff {
+        Ok(diff) => diff,
+        Err(_) => return BTreeMap::new(),
+    };
+    // Detect renames so counts land on the current path.
+    let _ = diff.find_similar(None);
+
+    let mut counts = BTreeMap::new();
+    for idx in 0..diff.deltas().len() {
+        let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) else {
+            // Binary or undiffable — record zeros so the row still shows.
+            if let Some(delta) = diff.get_delta(idx) {
+                if let Some(path) = delta.new_file().path() {
+                    counts.insert(
+                        path.to_string_lossy().to_string(),
+                        LineCounts::default(),
+                    );
+                }
+            }
+            continue;
+        };
+        let mut file_counts = LineCounts::default();
+        for h in 0..patch.num_hunks() {
+            let Ok((_, hunk_len)) = patch.hunk(h) else {
+                continue;
+            };
+            for l in 0..hunk_len {
+                let Ok(line) = patch.line_in_hunk(h, l) else {
+                    continue;
+                };
+                match line.origin() {
+                    '+' => file_counts.additions += 1,
+                    '-' => file_counts.deletions += 1,
+                    _ => {}
+                }
+            }
+        }
+        if let Some(delta) = diff.get_delta(idx) {
+            let key = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .map(|p| p.to_string_lossy().to_string());
+            if let Some(key) = key {
+                counts.insert(key, file_counts);
+            }
+        }
+    }
+    counts
+}
+
+// ---------------------------------------------------------------------------
+// Identity / refs
+// ---------------------------------------------------------------------------
+
+fn repo_identity(repo: &Repository) -> Result<(String, String, Option<String>)> {
+    let origin = repo.find_remote("origin").ok();
+    let url = origin
+        .as_ref()
+        .and_then(|remote| remote.url().map(str::to_string));
+
+    if let Some(url) = url {
+        // git@host:org/name.git | https://host/org/name.git | ssh://git@host/org/name
+        let tail = url
+            .trim_start_matches("git@")
+            .trim_start_matches("https://")
+            .trim_start_matches("http://")
+            .trim_start_matches("ssh://git@");
+        let tail = tail.split('/').collect::<Vec<_>>();
+        if tail.len() >= 2 {
+            let org = tail[tail.len() - 2].to_string();
+            let name = tail[tail.len() - 1]
+                .trim_end_matches(".git")
+                .to_string();
+            if !org.is_empty() && !name.is_empty() {
+                return Ok((org, name, None));
+            }
+        }
+    }
+
+    // No usable remote: derive from the folder name, mark as Local.
+    let dir = repo
+        .workdir()
+        .unwrap_or_else(|| repo.path())
+        .to_string_lossy()
+        .trim_end_matches(['/', '\\'])
+        .to_string();
+    let name = dir
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("repository")
+        .to_string();
+    let organization = dir
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .nth(1)
+        .unwrap_or("")
+        .to_string();
+    Ok((organization, name, Some("Local".to_string())))
+}
+
+fn current_branch(repo: &Repository) -> Result<String> {
+    if let Ok(head) = repo.head() {
+        if let Some(shorthand) = head.shorthand() {
+            return Ok(shorthand.to_string());
+        }
+    }
+    // Unborn branch: HEAD is a symbolic ref to refs/heads/<name>.
+    repo.find_reference("HEAD")
+        .ok()
+        .and_then(|head| head.symbolic_target().map(str::to_string))
+        .map(|target| target.trim_start_matches("refs/heads/").to_string())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| "detached HEAD".to_string())
+}
+
+fn upstream_info(repo: &Repository, branch_name: &str) -> Result<Option<UpstreamInfo>> {
+    let branch = match repo.find_branch(branch_name, BranchType::Local) {
+        Ok(branch) => branch,
+        Err(_) => return Ok(None),
+    };
+    let upstream = match branch.upstream() {
+        Ok(upstream) => upstream,
+        Err(_) => return Ok(None),
+    };
+    let name = upstream
+        .name()
+        .ok()
+        .flatten()
+        .unwrap_or("upstream")
+        .to_string();
+    let local_oid = match branch.get().target() {
+        Some(oid) => oid,
+        None => return Ok(None),
+    };
+    let upstream_oid = match upstream.get().target() {
+        Some(oid) => oid,
+        None => return Ok(None),
+    };
+    let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid).map_err(err)?;
+    Ok(Some(UpstreamInfo { name, ahead, behind }))
+}
+
+fn account_info(repo: &Repository) -> Result<AccountInfo> {
+    // Missing user.name/user.email must not break the whole state — the
+    // commit action surfaces a clear error instead.
+    let signature = repo.signature().ok();
+    let name = signature
+        .as_ref()
+        .and_then(|s| s.name())
+        .unwrap_or("Unknown")
+        .to_string();
+    let email = signature
+        .as_ref()
+        .and_then(|s| s.email())
+        .unwrap_or("not configured")
+        .to_string();
+    Ok(AccountInfo {
+        initials: initials_for(&name),
+        name,
+        email,
+    })
+}
+
+fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
+    let mut branches = Vec::new();
+    for entry in repo.branches(Some(BranchType::Local)).map_err(err)? {
+        let (branch, _) = entry.map_err(err)?;
+        let name = branch.name().ok().flatten().unwrap_or("").to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let is_head = branch.is_head();
+        branches.push(BranchInfo { name, is_head });
+    }
+    branches.sort_by(|a, b| b.is_head.cmp(&a.is_head).then(a.name.cmp(&b.name)));
+    Ok(branches)
+}
+
+fn remote_branches(repo: &Repository) -> Result<Vec<RemoteGroup>> {
+    let mut groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut shorthands = Vec::new();
+    for reference in repo.references().map_err(err)? {
+        let Ok(reference) = reference else {
+            continue;
+        };
+        if let Some(shorthand) = reference.shorthand() {
+            shorthands.push(shorthand.to_string());
+        }
+    }
+    shorthands.sort();
+    for shorthand in shorthands {
+        // "origin/main" -> remote "origin", branch "main"
+        if let Some((remote, branch)) = shorthand.split_once('/') {
+            groups
+                .entry(remote.to_string())
+                .or_default()
+                .push(branch.to_string());
+        }
+    }
+    Ok(groups
+        .into_iter()
+        .map(|(remote, branches)| RemoteGroup { remote, branches })
+        .collect())
+}
+
+fn tags(repo: &Repository) -> Result<(Vec<String>, usize)> {
+    let mut names = Vec::new();
+    for reference in repo.references().map_err(err)? {
+        let Ok(reference) = reference else {
+            continue;
+        };
+        let Some(full) = reference.name() else {
+            continue;
+        };
+        if let Some(name) = full.strip_prefix("refs/tags/") {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    names.reverse();
+    let total = names.len();
+    if names.len() > MAX_TAGS_SHOWN {
+        names.truncate(MAX_TAGS_SHOWN);
+    }
+    Ok((names, total))
+}
+
+fn stash_list(repo: &mut Repository) -> Result<Vec<StashInfo>> {
+    let mut stashes = Vec::new();
+    repo.stash_foreach(|index, message, _oid| {
+        stashes.push(StashInfo {
+            index,
+            message: message.to_string(),
+        });
+        true
+    })
+    .map_err(err)?;
+    Ok(stashes)
+}
+
+// ---------------------------------------------------------------------------
+// File diff content
+// ---------------------------------------------------------------------------
+
+pub fn file_diff_at(repo_path: &Path, path: &str, staged: bool) -> Result<FileDiffContent> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    file_diff_in(&repo, path, staged)
+}
+
+fn file_diff_in(repo: &Repository, path: &str, staged: bool) -> Result<FileDiffContent> {
+    let original = if staged {
+        head_blob(repo, path)
+    } else {
+        index_blob(repo, path)
+    };
+    let modified = if staged {
+        index_blob(repo, path)
+    } else {
+        worktree_bytes(repo, path)
+    };
+
+    let language = language_for(path);
+
+    let too_large = original.as_ref().is_some_and(|b| b.len() > MAX_DIFF_BYTES)
+        || modified.as_ref().is_some_and(|b| b.len() > MAX_DIFF_BYTES);
+    if too_large {
+        return Ok(FileDiffContent {
+            original: None,
+            modified: None,
+            binary: false,
+            too_large: true,
+            language,
+        });
+    }
+
+    let binary = original.as_ref().is_some_and(|b| is_binary(b))
+        || modified.as_ref().is_some_and(|b| is_binary(b));
+    if binary {
+        return Ok(FileDiffContent {
+            original: None,
+            modified: None,
+            binary: true,
+            too_large: false,
+            language,
+        });
+    }
+
+    Ok(FileDiffContent {
+        original: Some(decode(original.as_deref())),
+        modified: Some(decode(modified.as_deref())),
+        binary: false,
+        too_large: false,
+        language,
+    })
+}
+
+fn head_tree(repo: &Repository) -> Option<git2::Tree<'_>> {
+    let head = repo.head().ok()?;
+    let commit = head.peel_to_commit().ok()?;
+    commit.tree().ok()
+}
+
+fn head_blob(repo: &Repository, path: &str) -> Option<Vec<u8>> {
+    let tree = head_tree(repo)?;
+    let entry = tree.get_path(Path::new(path)).ok()?;
+    let blob = entry.to_object(repo).ok()?.peel_to_blob().ok()?;
+    Some(blob.content().to_vec())
+}
+
+fn index_blob(repo: &Repository, path: &str) -> Option<Vec<u8>> {
+    let index = repo.index().ok()?;
+    let entry = index.get_path(Path::new(path), 0)?;
+    let blob = repo
+        .find_object(entry.id, Some(ObjectType::Blob))
+        .ok()?
+        .peel_to_blob()
+        .ok()?;
+    Some(blob.content().to_vec())
+}
+
+fn worktree_bytes(repo: &Repository, path: &str) -> Option<Vec<u8>> {
+    std::fs::read(repo.workdir()?.join(path)).ok()
+}
+
+fn is_binary(bytes: &[u8]) -> bool {
+    bytes[..bytes.len().min(8000)].contains(&0)
+}
+
+fn decode(bytes: Option<&[u8]>) -> String {
+    bytes.map(String::from_utf8_lossy).unwrap_or_default().into_owned()
+}
+
+fn language_for(path: &str) -> String {
+    let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+    match ext.as_str() {
+        "ts" => "typescript",
+        "tsx" => "typescript",
+        "js" | "jsx" | "mjs" | "cjs" => "javascript",
+        "json" => "json",
+        "css" | "scss" | "less" => "css",
+        "html" => "html",
+        "md" | "markdown" => "markdown",
+        "rs" => "rust",
+        "py" => "python",
+        "go" => "go",
+        "java" => "java",
+        "c" | "h" => "c",
+        "cpp" | "cc" | "hpp" => "cpp",
+        "toml" => "ini",
+        "yml" | "yaml" => "yaml",
+        "sh" | "bash" => "shell",
+        _ => "plaintext",
+    }
+    .to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
+
+pub fn stage_paths(repo_path: &Path, paths: &[String]) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut index = repo.index().map_err(err)?;
+    for path in paths {
+        let workdir_path = repo.workdir().ok_or("bare repository")?.join(path);
+        if workdir_path.is_file() {
+            index.add_path(Path::new(path)).map_err(err)?;
+        } else {
+            // Deleted in the worktree — record the removal.
+            index.remove_path(Path::new(path)).map_err(err)?;
+        }
+    }
+    index.write().map_err(err)?;
+    Ok(())
+}
+
+pub fn unstage_paths(repo_path: &Path, paths: &[String]) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    // reset_default wants the committish whose content seeds the index.
+    let target = repo
+        .head()
+        .ok()
+        .and_then(|head| head.peel_to_commit().ok())
+        .map(|commit| commit.as_object().clone());
+    let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+    repo.reset_default(target.as_ref(), path_refs.iter().copied())
+        .map_err(err)?;
+    Ok(())
+}
+
+/// Discard unstaged worktree changes. Untracked files are deleted.
+pub fn discard_file(repo_path: &Path, path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let workdir_path = repo.workdir().ok_or("bare repository")?.join(path);
+
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true).pathspec(path);
+    let statuses = repo.statuses(Some(&mut opts)).map_err(err)?;
+    let flags = statuses
+        .iter()
+        .next()
+        .map(|entry| entry.status())
+        .unwrap_or(Status::empty());
+
+    if flags.contains(Status::WT_NEW) {
+        std::fs::remove_file(&workdir_path)
+            .map_err(|e| format!("failed to delete untracked file: {e}"))?;
+        return Ok(());
+    }
+    if !flags.intersects(
+        Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_TYPECHANGE,
+    ) {
+        return Ok(()); // nothing to discard
+    }
+
+    let mut index = repo.index().map_err(err)?;
+    let mut builder = CheckoutBuilder::new();
+    builder.path(path).force().update_index(false);
+    repo.checkout_index(Some(&mut index), Some(&mut builder))
+        .map_err(|e| format!("failed to restore file: {e}"))?;
+    Ok(())
+}
+
+pub fn commit(repo_path: &Path, title: &str, body: &str, amend: bool) -> Result<String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("commit title is required".to_string());
+    }
+    let message = if body.trim().is_empty() {
+        title.to_string()
+    } else {
+        format!("{title}\n\n{}", body.trim())
+    };
+
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut index = repo.index().map_err(err)?;
+    let staged = repo
+        .statuses(None)
+        .map_err(err)?
+        .iter()
+        .any(|entry| {
+            entry.status().intersects(
+                Status::INDEX_NEW
+                    | Status::INDEX_MODIFIED
+                    | Status::INDEX_DELETED
+                    | Status::INDEX_RENAMED
+                    | Status::INDEX_TYPECHANGE,
+            )
+        });
+    if !staged && !amend {
+        return Err("no staged files to commit".to_string());
+    }
+
+    let signature = repo.signature().map_err(err)?;
+    let tree_oid = index.write_tree().map_err(err)?;
+    let tree = repo.find_tree(tree_oid).map_err(err)?;
+    let head = repo.head().ok().map(|h| h.peel_to_commit()).transpose().map_err(err)?;
+
+    let oid = if amend {
+        let head = head.ok_or("nothing to amend — HEAD not found")?;
+        head.amend(Some("HEAD"), Some(&signature), Some(&signature), None, Some(&message), Some(&tree))
+            .map_err(err)?
+    } else {
+        let parents: Vec<&git2::Commit> = head.as_ref().map(|c| vec![c]).unwrap_or_default();
+        repo.commit(Some("HEAD"), &signature, &signature, &message, &tree, &parents)
+            .map_err(err)?
+    };
+
+    Ok(oid.to_string())
+}
+
+pub fn stash(repo_path: &Path, message: Option<&str>) -> Result<()> {
+    let mut repo = Repository::discover(repo_path).map_err(err)?;
+    let mut signature = repo.signature().map_err(err)?;
+    let flags = git2::StashFlags::INCLUDE_UNTRACKED | git2::StashFlags::KEEP_INDEX;
+    repo.stash_save(&mut signature, message.unwrap_or("WIP"), Some(flags))
+        .map_err(err)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Commit history + lane graph
+// ---------------------------------------------------------------------------
+
+const MAX_HISTORY_ROWS: usize = 500;
+const MAX_REF_LABELS: usize = 3;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitRow {
+    pub oid: String,
+    pub short_oid: String,
+    pub summary: String,
+    pub author_name: String,
+    pub author_initials: String,
+    pub time_seconds: i64,
+    /// Lane index this commit sits on.
+    pub lane: u32,
+    /// Lane indices of its parents (length 1 for normal, 2+ for merges).
+    pub parent_lanes: Vec<u32>,
+    /// Active lanes entering this row (top edge) — for drawing.
+    pub active_before: Vec<u32>,
+    /// Active lanes leaving this row (bottom edge).
+    pub active_after: Vec<u32>,
+    pub is_head: bool,
+    pub is_merge: bool,
+    /// Branch labels pointing at this commit ("main", "origin/main").
+    pub refs: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitHistory {
+    pub total: usize,
+    pub truncated: bool,
+    pub commits: Vec<CommitRow>,
+}
+
+pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<CommitHistory> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+
+    // Ref labels per commit (local + optional remote).
+    let mut ref_labels: BTreeMap<git2::Oid, Vec<String>> = BTreeMap::new();
+    let mut head_oid: Option<git2::Oid> = None;
+    if let Ok(head) = repo.head() {
+        if let Ok(commit) = head.peel_to_commit() {
+            head_oid = Some(commit.id());
+        }
+    }
+    collect_ref_labels(&repo, "refs/heads/", "", &mut ref_labels);
+    if include_remotes {
+        collect_ref_labels(&repo, "refs/remotes/", "", &mut ref_labels);
+    }
+
+    // Walk from HEAD + every requested ref tip.
+    let mut revwalk = repo.revwalk().map_err(err)?;
+    revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    let mut pushed = false;
+    if let Some(oid) = head_oid {
+        revwalk.push(oid).map_err(err)?;
+        pushed = true;
+    }
+    for (oid, _) in &ref_labels {
+        // Local labels always push; remote labels only when requested
+        // (collect_ref_labels already filtered them).
+        if revwalk.push(*oid).is_ok() {
+            pushed = true;
+        }
+    }
+    if !pushed {
+        // Unborn repository — nothing to show.
+        return Ok(CommitHistory { total: 0, truncated: false, commits: Vec::new() });
+    }
+
+    let mut commits = Vec::new();
+    let mut truncated = false;
+    let mut total = 0usize;
+    // lane -> the commit oid that lane is currently waiting for.
+    let mut lanes: Vec<Option<git2::Oid>> = Vec::new();
+
+    for oid in revwalk {
+        let oid = oid.map_err(err)?;
+        total += 1;
+        if commits.len() >= MAX_HISTORY_ROWS {
+            truncated = true;
+            continue; // keep counting for `total`
+        }
+        let commit = repo.find_commit(oid).map_err(err)?;
+        let summary = commit.summary().unwrap_or_default().to_string();
+
+        let active_before: Vec<u32> = lanes
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, slot)| slot.map(|_| idx as u32))
+            .collect();
+
+        // Find lanes waiting for this commit (collapse duplicates on merges).
+        let positions: Vec<usize> = lanes
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, slot)| (*slot == Some(oid)).then_some(idx))
+            .collect();
+        let lane = match positions.first() {
+            Some(&idx) => idx,
+            None => {
+                // New tip: first free lane, or append one.
+                let idx = lanes.iter().position(|slot| slot.is_none()).unwrap_or(lanes.len());
+                if idx == lanes.len() {
+                    lanes.push(None);
+                }
+                idx
+            }
+        };
+        for &extra in positions.iter().skip(1) {
+            lanes[extra] = None; // merge collapsed this lane into `lane`
+        }
+
+        let parents: Vec<git2::Oid> = commit.parent_ids().collect();
+        let mut parent_lanes = Vec::with_capacity(parents.len());
+        if parents.is_empty() {
+            lanes[lane] = None;
+        } else {
+            lanes[lane] = Some(parents[0]);
+            parent_lanes.push(lane as u32);
+            for &parent in parents.iter().skip(1) {
+                // Reuse a free lane, otherwise append.
+                let idx = lanes
+                    .iter()
+                    .position(|slot| slot.is_none())
+                    .unwrap_or(lanes.len());
+                if idx == lanes.len() {
+                    lanes.push(None);
+                }
+                lanes[idx] = Some(parent);
+                parent_lanes.push(idx as u32);
+            }
+        }
+
+        let active_after: Vec<u32> = lanes
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, slot)| slot.map(|_| idx as u32))
+            .collect();
+
+        let author = commit.author();
+        let author_name = author.name().unwrap_or("Unknown").to_string();
+
+        let mut labels = ref_labels.get(&oid).cloned().unwrap_or_default();
+        // HEAD ref itself is implicit; trim overflow.
+        if labels.len() > MAX_REF_LABELS {
+            labels.truncate(MAX_REF_LABELS);
+        }
+
+        commits.push(CommitRow {
+            oid: oid.to_string(),
+            short_oid: oid.to_string()[..7].to_string(),
+            summary,
+            author_name,
+            author_initials: initials_for(&commit.author().name().unwrap_or("")),
+            time_seconds: commit.time().seconds() as i64,
+            lane: lane as u32,
+            parent_lanes,
+            active_before,
+            active_after,
+            is_head: head_oid == Some(oid),
+            is_merge: parents.len() > 1,
+            refs: labels,
+        });
+    }
+
+    Ok(CommitHistory { total, truncated, commits })
+}
+
+fn collect_ref_labels(
+    repo: &Repository,
+    prefix: &str,
+    _unused: &str,
+    labels: &mut BTreeMap<git2::Oid, Vec<String>>,
+) {
+    let Ok(mut refs) = repo.references() else {
+        return;
+    };
+    while let Some(Ok(reference)) = refs.next() {
+        let Some(name) = reference.name() else { continue };
+        let Some(short) = name.strip_prefix(prefix) else { continue };
+        if short.ends_with("/HEAD") {
+            continue;
+        }
+        let Some(target) = reference.target() else { continue };
+        labels.entry(target).or_default().push(short.to_string());
+    }
+}
+
+pub(crate) fn initials_for(name: &str) -> String {
+    let initials: String = name
+        .split_whitespace()
+        .filter(|part| part.chars().next().map_or(false, |c| c.is_alphabetic()))
+        .filter_map(|part| part.chars().next())
+        .take(2)
+        .flat_map(char::to_uppercase)
+        .collect();
+    if initials.is_empty() { "?".to_string() } else { initials }
+}
+
+// ---------------------------------------------------------------------------
+// Explorer: worktree tree + file read/write
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileTree {
+    /// All visible file paths (tracked + untracked, ignored excluded).
+    pub entries: Vec<String>,
+    /// Paths with pending changes, for status dots on the tree.
+    pub changed_paths: Vec<String>,
+}
+
+pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+
+    let mut paths: Vec<String> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    // Tracked files from the index.
+    let index = repo.index().map_err(err)?;
+    for entry in index.iter() {
+        let path = String::from_utf8_lossy(&entry.path).to_string();
+        if seen.insert(path.clone()) {
+            paths.push(path);
+        }
+    }
+
+    // Untracked files (ignored excluded via default status behavior).
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true).recurse_untracked_dirs(true);
+    let statuses = repo.statuses(Some(&mut opts)).map_err(err)?;
+    let mut changed_paths = Vec::new();
+    for entry in statuses.iter() {
+        let Some(path) = entry.path().map(str::to_string) else {
+            continue;
+        };
+        let flags = entry.status();
+        if flags.contains(Status::WT_NEW) {
+            if seen.insert(path.clone()) {
+                paths.push(path.clone());
+            }
+        }
+        if flags.intersects(
+            Status::INDEX_NEW
+                | Status::INDEX_MODIFIED
+                | Status::INDEX_DELETED
+                | Status::INDEX_RENAMED
+                | Status::WT_NEW
+                | Status::WT_MODIFIED
+                | Status::WT_DELETED
+                | Status::WT_RENAMED,
+        ) && !changed_paths.contains(&path)
+        {
+            changed_paths.push(path);
+        }
+    }
+
+    paths.sort();
+    changed_paths.sort();
+    Ok(FileTree { entries: paths, changed_paths })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeFileContent {
+    pub content: String,
+    pub binary: bool,
+    pub too_large: bool,
+    pub language: String,
+}
+
+/// Reject absolute paths and traversal outside the worktree. When the file
+/// may not exist yet (writing), only the parent directory is canonicalized.
+fn safe_worktree_path(repo: &Repository, path: &str, must_exist: bool) -> Result<std::path::PathBuf> {
+    if path.is_empty()
+        || path.starts_with('/')
+        || path.starts_with('\\')
+        || path.contains("..")
+        || path.contains(':')
+    {
+        return Err(format!("invalid file path: {path}"));
+    }
+    let workdir = repo.workdir().ok_or("bare repository")?;
+    let joined = workdir.join(path);
+    let root = workdir.canonicalize().map_err(err)?;
+    let target = if must_exist {
+        joined.canonicalize()
+            .map_err(|e| format!("file not found: {e}"))?
+    } else {
+        match joined.parent().and_then(|parent| parent.canonicalize().ok()) {
+            Some(parent) if parent.starts_with(&root) => {}
+            // Parent missing is fine — the writer creates it.
+            _ => {}
+        }
+        joined.clone()
+    };
+    if must_exist && !target.starts_with(&root) {
+        return Err(format!("path escapes the repository: {path}"));
+    }
+    Ok(joined)
+}
+
+pub fn read_worktree_file(repo_path: &Path, path: &str) -> Result<WorktreeFileContent> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    let bytes = std::fs::read(&full).map_err(|e| format!("failed to read {path}: {e}"))?;
+
+    let language = language_for(path);
+    if bytes.len() > MAX_DIFF_BYTES {
+        return Ok(WorktreeFileContent { content: String::new(), binary: false, too_large: true, language });
+    }
+    if is_binary(&bytes) {
+        return Ok(WorktreeFileContent { content: String::new(), binary: true, too_large: false, language });
+    }
+    Ok(WorktreeFileContent {
+        content: String::from_utf8_lossy(&bytes).into_owned(),
+        binary: false,
+        too_large: false,
+        language,
+    })
+}
+
+pub fn write_worktree_file(repo_path: &Path, path: &str, content: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, false)?;
+    if let Some(parent) = full.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&full, content).map_err(|e| format!("failed to write {path}: {e}"))?;
+    Ok(())
+}

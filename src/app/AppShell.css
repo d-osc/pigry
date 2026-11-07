@@ -1,0 +1,29 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-workspace);
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-shell__workspace {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.error-banner {
+  flex-shrink: 0;
+  padding: 6px 24px;
+  background: #3b2530;
+  border-bottom: 1px solid #5d3944;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}

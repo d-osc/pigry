@@ -1,0 +1,70 @@
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--statusbar-height);
+  padding: 0 16px;
+  background: var(--bg-statusbar);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.status-bar__connection {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+}
+
+.status-bar__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 5px var(--green);
+}
+
+.status-bar__dot--dirty {
+  background: var(--orange);
+  box-shadow: 0 0 5px var(--orange);
+}
+
+.status-bar__summary {
+  color: inherit;
+  font-size: inherit;
+}
+
+.status-bar__summary:disabled {
+  cursor: default;
+}
+
+.status-bar__path {
+  font-family: var(--font-mono);
+}
+
+.status-bar__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.status-bar__sep {
+  margin: 0 6px;
+  color: var(--border-strong);
+}
+
+.status-bar__terminal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+}
+
+.status-bar__terminal:hover {
+  color: var(--text-primary);
+}

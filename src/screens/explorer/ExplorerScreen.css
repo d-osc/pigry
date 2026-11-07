@@ -1,0 +1,51 @@
+.explorer-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-workspace);
+}
+
+.explorer-screen__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.explorer-screen__title {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.explorer-screen__count {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.explorer-screen__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.explorer-screen__tree {
+  width: 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.explorer-screen__placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
