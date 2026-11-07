@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar } from './StatusBar';
+import { ToastContainer } from './Toast';
+import { SettingsModal } from './settings/SettingsModal';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
@@ -54,6 +56,7 @@ function renderScreen(screen: NavId, explorerOpenPath: string | null) {
 
 function AppShellInner() {
   const [screen, setScreen] = useState<NavId>('working-changes');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('commands');
   const [paletteFilesRequest, setPaletteFilesRequest] = useState<{
@@ -69,7 +72,8 @@ function AppShellInner() {
     setScreen(next);
   }, []);
 
-  // Ctrl/Cmd+K toggles the command palette; Ctrl/Cmd+P opens file search.
+  // Ctrl/Cmd+K toggles the command palette; Ctrl/Cmd+P opens file search;
+  // Ctrl/Cmd+, opens repository settings.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -81,6 +85,9 @@ function AppShellInner() {
         setPaletteMode('files');
         setFilesRequestId((id) => id + 1);
         setPaletteOpen(true);
+      } else if ((event.ctrlKey || event.metaKey) && event.key === ',') {
+        event.preventDefault();
+        setSettingsOpen(true);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -123,6 +130,7 @@ function AppShellInner() {
         navigate,
         activeScreen: screen,
         repository: repository as RepositoryContextValue,
+        openSettings: () => setSettingsOpen(true),
       }),
     [navigate, screen, repository],
   );
@@ -131,13 +139,13 @@ function AppShellInner() {
 
   return (
     <div className="app-shell">
-      <TitleBar onOpenPalette={() => setPaletteOpen(true)} />
+      <TitleBar onOpenPalette={() => setPaletteOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
       {mode === 'browser' && <BrowserNotice />}
       {mode === 'tauri' && !repository.repository && <NoRepositoryScreen />}
       {showWorkspace && (
         <>
           <div className="app-shell__body">
-            <NavSidebar activeScreen={screen} onNavigate={setScreen} />
+            <NavSidebar activeScreen={screen} onNavigate={setScreen} onOpenSettings={() => setSettingsOpen(true)} />
             <main className="app-shell__workspace">
               <ErrorBanner />
               {renderScreen(screen, explorerOpenPath)}
@@ -163,6 +171,10 @@ function AppShellInner() {
           onClose={() => setPaletteOpen(false)}
         />
       )}
+      {settingsOpen && (
+        <SettingsModal onClose={() => setSettingsOpen(false)} notify={repository.notify} />
+      )}
+      <ToastContainer toasts={repository.toasts} />
     </div>
   );
 }

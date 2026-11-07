@@ -190,6 +190,16 @@ export interface NetResult {
   summary: string;
 }
 
+export interface GitUserInfo {
+  name: string | null;
+  email: string | null;
+}
+
+export interface RemoteEntry {
+  name: string;
+  url: string;
+}
+
 export interface CommitFileEntry {
   path: string;
   name: string;

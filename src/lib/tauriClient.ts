@@ -13,6 +13,8 @@ import type {
   LineChange,
   RepoStats,
   NetResult,
+  GitUserInfo,
+  RemoteEntry,
   WorktreeFileContent,
 } from '../types/repository';
 
@@ -214,4 +216,28 @@ export async function getRepoStats(): Promise<RepoStats> {
 
 export async function verifyCommitSig(oid: string): Promise<string> {
   return invoke('verify_commit_sig', { oid });
+}
+
+export async function getUserInfo(): Promise<GitUserInfo> {
+  return invoke('get_user_info');
+}
+
+export async function setUserInfo(name: string, email: string): Promise<AppStatePayload> {
+  return invoke('set_user_info', { name, email });
+}
+
+export async function listRemotes(): Promise<RemoteEntry[]> {
+  return invoke('list_remotes');
+}
+
+export async function addRemote(name: string, url: string): Promise<AppStatePayload> {
+  return invoke('add_remote', { name, url });
+}
+
+export async function removeRemote(name: string): Promise<AppStatePayload> {
+  return invoke('remove_remote', { name });
+}
+
+export async function setRemoteUrl(name: string, url: string): Promise<AppStatePayload> {
+  return invoke('set_remote_url', { name, url });
 }

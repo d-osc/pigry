@@ -11,6 +11,7 @@ import {
   GitBranchPlus,
   Network,
   RefreshCw,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import type { NavId } from './navigation';
@@ -34,10 +35,11 @@ interface CommandDeps {
   navigate: (screen: NavId) => void;
   activeScreen: NavId;
   repository: RepositoryContextValue;
+  openSettings: () => void;
 }
 
 /** Builds the palette command list from current app state. */
-export function buildCommands({ navigate, activeScreen, repository }: CommandDeps): Command[] {
+export function buildCommands({ navigate, activeScreen, repository, openSettings }: CommandDeps): Command[] {
   const { repository: repo, refresh, stage, unstage, stash, fetchRemote, pullRemote, pushRemote, pickRepository } =
     repository;
 
@@ -67,6 +69,14 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
       icon: RefreshCw,
       enabled: true,
       run: () => void refresh(),
+    },
+    {
+      id: 'repo:settings',
+      title: 'Open repository settings',
+      section: 'Repository',
+      icon: Settings,
+      enabled: true,
+      run: openSettings,
     },
     {
       id: 'repo:stage-all',

@@ -4,6 +4,7 @@ mod config;
 pub mod git_state;
 pub mod net;
 pub mod ops;
+pub mod settings;
 mod watcher;
 
 use std::sync::Mutex;
@@ -75,6 +76,12 @@ pub fn run() {
             commands::cherry_pick,
             commands::merge_branch,
             commands::get_line_changes,
+            commands::get_user_info,
+            commands::set_user_info,
+            commands::list_remotes,
+            commands::add_remote,
+            commands::remove_remote,
+            commands::set_remote_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -16,6 +16,7 @@ import './NavSidebar.css';
 interface NavSidebarProps {
   activeScreen: NavId;
   onNavigate: (screen: NavId) => void;
+  onOpenSettings: () => void;
 }
 
 function Section({
@@ -45,7 +46,7 @@ function Section({
   );
 }
 
-export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
+export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSidebarProps) {
   const {
     repository,
     checkoutBranch,
@@ -314,7 +315,7 @@ export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
             )}
           </div>
         </div>
-        <button type="button" className="nav-preferences">
+        <button type="button" className="nav-preferences" onClick={onOpenSettings}>
           <Settings size={13} />
           <span>Preferences</span>
           <kbd>⌘,</kbd>

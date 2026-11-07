@@ -11,6 +11,7 @@ use crate::config::{self, AppConfig};
 use crate::FileWatcherHolder;
 use crate::git_state::{self, FileDiffContent, RepositoryState};
 use crate::ops;
+use crate::settings;
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
 /// repositories) so we keep them synchronous inside async commands.
@@ -645,4 +646,85 @@ pub async fn verify_commit_sig(
         repo_path_str(&state)?.to_path_buf()
     };
     ops::verify_commit(&repo_path, &oid)
+}
+
+#[tauri::command]
+pub async fn get_user_info(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<settings::GitUserInfo, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::get_user_info(&repo_path)
+}
+
+#[tauri::command]
+pub async fn set_user_info(
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+    email: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::set_user_info(&repo_path, &name, &email)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn list_remotes(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<settings::RemoteEntry>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::list_remotes(&repo_path)
+}
+
+#[tauri::command]
+pub async fn add_remote(
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+    url: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::add_remote(&repo_path, &name, &url)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn remove_remote(
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::remove_remote(&repo_path, &name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn set_remote_url(
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+    url: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    settings::set_remote_url(&repo_path, &name, &url)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
 }
