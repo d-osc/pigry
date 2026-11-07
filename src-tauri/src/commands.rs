@@ -622,3 +622,27 @@ pub async fn rebase_onto(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+
+#[tauri::command]
+pub async fn get_repo_stats(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<ops::RepoStats, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::repo_stats(&repo_path)
+}
+
+#[tauri::command]
+pub async fn verify_commit_sig(
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::verify_commit(&repo_path, &oid)
+}

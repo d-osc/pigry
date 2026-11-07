@@ -10,6 +10,7 @@ use std::time::Duration;
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 type Result<T> = std::result::Result<T, String>;
+fn err<E: std::fmt::Display>(e: E) -> String { e.to_string() }
 
 fn run_git(repo_path: &Path, args: &[String]) -> Result<String> {
     let output = Command::new("git")
@@ -83,7 +84,124 @@ pub fn rebase_onto(repo_path: &Path, base: &str) -> Result<String> {
 
 /// Checks if the repository has unresolved merge conflicts.
 pub fn has_conflicts(repo_path: &Path) -> Result<bool> {
-    let repo = git2::Repository::discover(repo_path).map_err(|e| e.to_string())?;
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
     let index = repo.index().map_err(|e| e.to_string())?;
     Ok(index.has_conflicts())
+}
+
+/// Verifies a commit's GPG signature using git CLI.
+/// Returns "good", "bad", "unsigned", or an error.
+pub fn verify_commit(repo_path: &Path, oid: &str) -> Result<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(["verify-commit", oid])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("failed to verify: {e}"))?;
+    if output.status.success() {
+        Ok("good".to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("no signature") || stderr.contains("has no signature") {
+            Ok("unsigned".to_string())
+        } else {
+            Ok("bad".to_string())
+        }
+    }
+}
+
+/// Repository statistics for the dashboard.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RepoStats {
+    pub total_commits: usize,
+    pub contributors: Vec<Contributor>,
+    pub languages: Vec<LanguageCount>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contributor {
+    pub name: String,
+    pub initials: String,
+    pub commits: usize,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanguageCount {
+    pub language: String,
+    pub files: usize,
+}
+
+pub fn repo_stats(repo_path: &Path) -> std::result::Result<RepoStats, String> {
+    let repo = git2::Repository::discover(repo_path).map_err(|e| e.to_string())?;
+    
+    // Total commits + contributors from revwalk
+    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
+    revwalk.push_head().map_err(|e| e.to_string())?;
+    let mut total_commits = 0usize;
+    let mut contributors: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for oid in revwalk {
+        let oid = oid.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        let author = commit.author();
+        let name = author.name().unwrap_or("Unknown").to_string();
+        *contributors.entry(name).or_insert(0) += 1;
+        total_commits += 1;
+        if total_commits >= 5000 { break; } // safety valve
+    }
+    let mut contributor_list: Vec<Contributor> = contributors
+        .into_iter()
+        .map(|(name, commits)| Contributor {
+            initials: crate::git_state::initials_for(&name),
+            name,
+            commits,
+        })
+        .collect();
+    contributor_list.sort_by(|a, b| b.commits.cmp(&a.commits));
+
+    // Language counts from file extensions in the tree.
+    let head = repo.head().ok();
+    let mut languages: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    if let Some(tree) = head.and_then(|h| h.peel_to_tree().ok()) {
+        tree.walk(git2::TreeWalkMode::PreOrder, |_, entry| {
+            if entry.kind() == Some(git2::ObjectType::Blob) {
+                let name = entry.name().unwrap_or("");
+                let ext = std::path::Path::new(name)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("");
+                let lang = match ext {
+                    "rs" => "Rust",
+                    "ts" | "tsx" => "TypeScript",
+                    "js" | "jsx" => "JavaScript",
+                    "css" | "scss" => "CSS",
+                    "html" => "HTML",
+                    "json" => "JSON",
+                    "md" => "Markdown",
+                    "toml" => "TOML",
+                    "yaml" | "yml" => "YAML",
+                    "py" => "Python",
+                    "go" => "Go",
+                    _ => return git2::TreeWalkResult::Ok,
+                };
+                *languages.entry(lang.to_string()).or_insert(0) += 1;
+            }
+            git2::TreeWalkResult::Ok
+        })
+        .map_err(|e| e.to_string())?;
+    }
+    let mut language_list: Vec<LanguageCount> = languages
+        .into_iter()
+        .map(|(language, files)| LanguageCount { language, files })
+        .collect();
+    language_list.sort_by(|a, b| b.files.cmp(&a.files));
+
+    Ok(RepoStats {
+        total_commits,
+        contributors: contributor_list,
+        languages: language_list,
+    })
 }

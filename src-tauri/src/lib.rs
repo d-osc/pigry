@@ -69,6 +69,8 @@ pub fn run() {
             commands::get_file_blame,
             commands::clone_repo,
             commands::rebase_onto,
+            commands::get_repo_stats,
+            commands::verify_commit_sig,
             commands::revert_commit,
             commands::cherry_pick,
             commands::merge_branch,

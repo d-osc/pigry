@@ -195,9 +195,20 @@ fn collect_files(repo: &Repository) -> Result<(Vec<ChangedFile>, Vec<String>)> {
             continue;
         };
         let flags = entry.status();
-        let conflicted = flags.contains(Status::CONFLICTED);
-        if conflicted {
-            // Conflicts are out of scope for M2 — skip rather than misreport.
+        if flags.contains(Status::CONFLICTED) {
+            // Conflicted: show with status C for manual resolution.
+            let (name, directory) = split_path(&path);
+            rows.push(ChangedFile {
+                id: format!("{}:conflicted", path),
+                path: path.clone(),
+                name,
+                directory,
+                status: "C".to_string(),
+                additions: 0,
+                deletions: 0,
+                staged: false,
+                untracked: false,
+            });
             continue;
         }
 
