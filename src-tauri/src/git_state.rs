@@ -1752,10 +1752,17 @@ pub fn stage_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<()>
     // Old content: index blob (empty for untracked files).
     let old_bytes = index_blob(&repo, path).unwrap_or_default();
     let old_text = String::from_utf8_lossy(&old_bytes);
-    let old_lines: Vec<&str> = if old_text.is_empty() {
+    let had_trailing_newline = old_text.ends_with('\n');
+    let mut old_lines: Vec<String> = if old_text.is_empty() {
         Vec::new()
     } else {
-        old_text.split('\n').collect()
+        let mut segs: Vec<String> =
+            old_text.split('\n').map(|line| line.to_string()).collect();
+        // Drop the phantom trailing element a final newline produces.
+        if had_trailing_newline {
+            segs.pop();
+        }
+        segs
     };
     let header = hunk.header();
     let (old_start, old_lines_count, _, _, _) = parse_hunk_header(header);
@@ -1763,26 +1770,21 @@ pub fn stage_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<()>
     let prefix_end = (old_start as usize).saturating_sub(1).min(old_lines.len());
     let suffix_start = (prefix_end + old_lines_count as usize).min(old_lines.len());
 
-    let mut new_content = String::new();
-    for line in &old_lines[..prefix_end] {
-        new_content.push_str(line);
-        new_content.push('\n');
-    }
+    let mut parts: Vec<String> = Vec::new();
+    parts.extend(old_lines[..prefix_end].iter().cloned());
     for l in 0..line_count {
         let line = patch.line_in_hunk(hunk_index, l).map_err(err)?;
+        let content = String::from_utf8_lossy(line.content());
         match line.origin() {
-            ' ' => {
-                new_content.push_str(&String::from_utf8_lossy(line.content()));
-            }
-            '+' => {
-                new_content.push_str(&String::from_utf8_lossy(line.content()));
-            }
+            ' ' => parts.push(content.trim_end_matches('\n').to_string()),
+            '+' => parts.push(content.trim_end_matches('\n').to_string()),
             '-' => {} // removed — skip
             _ => {}
         }
     }
-    for line in &old_lines[suffix_start..] {
-        new_content.push_str(line);
+    parts.extend(old_lines[suffix_start..].iter().cloned());
+    let mut new_content = parts.join("\n");
+    if had_trailing_newline && !new_content.ends_with("\n") {
         new_content.push('\n');
     }
 
