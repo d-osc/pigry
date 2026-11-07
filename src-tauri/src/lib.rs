@@ -44,6 +44,9 @@ pub fn run() {
             commands::git_push,
             commands::get_commit_detail,
             commands::get_commit_file_diff,
+            commands::create_branch,
+            commands::checkout_branch,
+            commands::delete_branch,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

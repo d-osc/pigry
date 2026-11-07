@@ -118,3 +118,15 @@ export async function getCommitFileDiff(
 ): Promise<FileDiffContent> {
   return invoke('get_commit_file_diff', { oid, path });
 }
+
+export async function createBranch(name: string, checkout: boolean): Promise<AppStatePayload> {
+  return invoke('create_branch', { name, checkout });
+}
+
+export async function checkoutBranch(name: string): Promise<AppStatePayload> {
+  return invoke('checkout_branch', { name });
+}
+
+export async function deleteBranch(name: string): Promise<AppStatePayload> {
+  return invoke('delete_branch', { name });
+}

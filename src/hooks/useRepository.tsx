@@ -28,6 +28,9 @@ export interface RepositoryContextValue {
   discard: (path: string) => Promise<void>;
   commit: (title: string, body: string, amend: boolean) => Promise<void>;
   stash: (message?: string) => Promise<void>;
+  createBranch: (name: string, checkout: boolean) => Promise<void>;
+  checkoutBranch: (name: string) => Promise<void>;
+  deleteBranch: (name: string) => Promise<void>;
   fetchRemote: () => Promise<boolean>;
   pullRemote: () => Promise<boolean>;
   pushRemote: () => Promise<boolean>;
@@ -111,6 +114,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         await run(() => client.commitChanges(title, body, amend), (outcome) => outcome.state);
       },
       stash: (message) => run(() => client.stashChanges(message), (p) => p),
+      createBranch: (name, checkout) => run(() => client.createBranch(name, checkout), (p) => p),
+      checkoutBranch: (name) => run(() => client.checkoutBranch(name), (p) => p),
+      deleteBranch: (name) => run(() => client.deleteBranch(name), (p) => p),
       fetchRemote: () => runNet(() => client.gitFetch()),
       pullRemote: () => runNet(() => client.gitPull()),
       pushRemote: () => runNet(() => client.gitPush()),

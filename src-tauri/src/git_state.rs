@@ -1385,3 +1385,121 @@ fn resolve_commit_oid(repo: &Repository, oid: &str) -> Result<git2::Oid> {
     }
     git2::Oid::from_str(oid).map_err(|e| format!("invalid commit id: {e}"))
 }
+
+// ---------------------------------------------------------------------------
+// Branch operations: create / checkout / delete
+// ---------------------------------------------------------------------------
+
+/// Validates a user-supplied branch name the way git refs do.
+fn validate_branch_name(name: &str) -> Result<()> {
+    let invalid = name.is_empty()
+        || name.starts_with('-')
+        || name.starts_with('/')
+        || name.ends_with('/')
+        || name.ends_with('.')
+        || name.contains("..")
+        || name.contains("..\\")
+        || name.contains(' ')
+        || name.contains("..")
+        || name.ends_with(".lock")
+        || name.chars().any(|c| c.is_control() || "?*[]:\\".contains(c));
+    if invalid {
+        return Err(format!("invalid branch name: '{name}'"));
+    }
+    Ok(())
+}
+
+/// Creates a branch at HEAD; optionally checks it out afterwards.
+pub fn create_branch(repo_path: &Path, name: &str, checkout: bool) -> Result<()> {
+    validate_branch_name(name)?;
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let head = repo
+        .head()
+        .map_err(err)?
+        .peel_to_commit()
+        .map_err(err)?;
+    if repo.find_branch(name, BranchType::Local).is_ok() {
+        return Err(format!("branch '{name}' already exists"));
+    }
+    repo.branch(name, &head, false).map_err(err)?;
+    if checkout {
+        checkout_branch(repo_path, name)?;
+    }
+    Ok(())
+}
+
+/// Checks out a local branch. Uses a safe checkout: it refuses (with an
+/// error) when uncommitted working-tree changes would be overwritten.
+pub fn checkout_branch(repo_path: &Path, name: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let branch = repo.find_branch(name, BranchType::Local).map_err(|_| {
+        format!("branch '{name}' not found")
+    })?;
+    let refname = branch
+        .get()
+        .name()
+        .ok_or("invalid branch reference")?
+        .to_string();
+    let tree = branch.get().peel_to_tree().map_err(err)?;
+
+    let mut builder = CheckoutBuilder::new();
+    builder.safe();
+    repo.checkout_tree(tree.as_object(), Some(&mut builder))
+        .map_err(|e| {
+            format!(
+                "cannot checkout '{name}': your local changes would be overwritten — commit or stash first ({})",
+                e.message()
+            )
+        })?;
+    repo.set_head(&refname).map_err(err)?;
+    Ok(())
+}
+
+/// True when `ancestor_oid` is reachable from `head_oid` (bounded walk).
+fn is_ancestor(repo: &Repository, ancestor_oid: git2::Oid, head_oid: git2::Oid) -> Result<bool> {
+    if ancestor_oid == head_oid {
+        return Ok(true);
+    }
+    let mut revwalk = repo.revwalk().map_err(err)?;
+    revwalk.set_sorting(git2::Sort::TOPOLOGICAL).map_err(err)?;
+    revwalk.push(head_oid).map_err(err)?;
+    let mut visited = 0usize;
+    for oid in revwalk {
+        let oid = oid.map_err(err)?;
+        if oid == ancestor_oid {
+            return Ok(true);
+        }
+        visited += 1;
+        if visited >= 5000 {
+            break; // safety valve for very long histories
+        }
+    }
+    Ok(false)
+}
+
+/// Deletes a merged local branch. Refuses the current branch and branches
+/// with commits not reachable from HEAD.
+pub fn delete_branch(repo_path: &Path, name: &str) -> Result<()> {
+    let mut repo = Repository::discover(repo_path).map_err(err)?;
+    let current = current_branch(&repo)?;
+    if current == name {
+        return Err("cannot delete the branch you are currently on".to_string());
+    }
+    let mut branch = repo
+        .find_branch(name, BranchType::Local)
+        .map_err(|_| format!("branch '{name}' not found"))?;
+    let tip = branch.get().target().ok_or("branch has no commits")?;
+    let head_oid = repo
+        .head()
+        .map_err(err)?
+        .peel_to_commit()
+        .map_err(err)?
+        .id();
+    if !is_ancestor(&repo, tip, head_oid)? {
+        return Err(format!(
+            "branch '{name}' has unmerged commits — merge it into {current} first"
+        ));
+    }
+    branch.delete().map_err(err)?;
+    Ok(())
+}

@@ -112,6 +112,39 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
 
   const upstream = repo?.upstream ?? null;
   const hasRemote = (repo?.remotes.length ?? 0) > 0;
+  const branchCommands: Command[] = (repo?.branches ?? [])
+    .filter((branch) => !branch.isHead)
+    .map((branch) => ({
+      id: `branch:checkout:${branch.name}`,
+      title: `Checkout branch ${branch.name}`,
+      section: "Repository" as const,
+      icon: FolderTree,
+      enabled: true,
+      run: () => void repository.checkoutBranch(branch.name),
+    }));
+  const deleteCommands: Command[] = (repo?.branches ?? [])
+    .filter((branch) => !branch.isHead)
+    .map((branch) => ({
+      id: `branch:delete:${branch.name}`,
+      title: `Delete branch ${branch.name} (merged)`,
+      section: "Repository" as const,
+      icon: ListMinus,
+      enabled: true,
+      run: () => void repository.deleteBranch(branch.name),
+    }));
+  const createCommand: Command = {
+    id: "branch:create",
+    title: "Create branch from HEAD…",
+    section: "Repository" as const,
+    icon: FolderTree,
+    hint: repo?.currentBranch,
+    enabled: true,
+    run: () => {
+      const name = window.prompt("New branch name");
+      if (name && name.trim()) void repository.createBranch(name.trim(), true);
+    },
+  };
+
   const syncCommands: Command[] = [
     {
       id: 'sync:fetch',
@@ -162,5 +195,5 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   ];
 
-  return [...navigation, ...repoCommands, ...syncCommands];
+  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...syncCommands];
 }

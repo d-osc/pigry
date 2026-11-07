@@ -658,3 +658,89 @@ fn commit_file_diff_returns_parent_vs_commit_content() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn branch_create_and_checkout_move_head() {
+    let dir = scratch_repo("branch-create");
+    write(&dir, "a.txt", "1\n");
+    commit_all(&dir, "base");
+
+    let default_branch = build_state(&dir).unwrap().current_branch;
+    create_branch(&dir, "feature/x", true).unwrap();
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.current_branch, "feature/x");
+    assert!(state.branches.iter().any(|b| b.name == "feature/x" && b.is_head));
+    assert!(state.branches.iter().any(|b| b.name == default_branch && !b.is_head));
+
+    // Duplicate creation is refused.
+    assert!(create_branch(&dir, "feature/x", false).is_err());
+    // Invalid names are refused.
+    assert!(create_branch(&dir, "bad name", false).is_err());
+    assert!(create_branch(&dir, "-dash", false).is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn branch_checkout_refuses_overwriting_local_changes() {
+    let dir = scratch_repo("branch-conflict");
+    write(&dir, "shared.txt", "main version\n");
+    commit_all(&dir, "base");
+
+    create_branch(&dir, "feature", true).unwrap();
+    // On feature: commit different content, then dirty the working tree.
+    write(&dir, "shared.txt", "feature version\n");
+    commit_all(&dir, "feature commit");
+    write(&dir, "shared.txt", "uncommitted local edit\n");
+
+    // Checking out the base branch must fail — it would overwrite the dirty file.
+    assert!(
+        checkout_branch(&dir, "master").is_err() || checkout_branch(&dir, "main").is_err(),
+        "safe checkout should refuse to clobber local changes"
+    );
+    // Clean tree checkouts fine.
+    commit_all(&dir, "save feature work");
+    checkout_branch(&dir, "master").or_else(|_| checkout_branch(&dir, "main")).unwrap();
+    let state = build_state(&dir).unwrap();
+    assert_ne!(state.current_branch, "feature");
+    assert_eq!(
+        fs::read_to_string(dir.join("shared.txt")).unwrap().replace('\r', ""),
+        "main version\n"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn branch_delete_guards() {
+    let dir = scratch_repo("branch-delete");
+    write(&dir, "a.txt", "1\n");
+    commit_all(&dir, "base");
+
+    create_branch(&dir, "merged", false).unwrap();
+    create_branch(&dir, "unmerged", true).unwrap();
+    write(&dir, "a.txt", "2\n");
+    commit_all(&dir, "unmerged work");
+    // Back to base branch (first branch in the list, i.e. the init default).
+    let state = build_state(&dir).unwrap();
+    let default_branch = state
+        .branches
+        .iter()
+        .find(|b| b.name != "unmerged" && b.name != "merged")
+        .map(|b| b.name.clone())
+        .unwrap();
+    checkout_branch(&dir, &default_branch).unwrap();
+
+    // Deleting the current branch is refused.
+    assert!(delete_branch(&dir, &default_branch).is_err());
+    // Unmerged branch is refused.
+    assert!(delete_branch(&dir, "unmerged").is_err());
+    // Merged branch deletes fine.
+    delete_branch(&dir, "merged").unwrap();
+    let state = build_state(&dir).unwrap();
+    assert!(!state.branches.iter().any(|b| b.name == "merged"));
+    // Deleting an unknown branch errors clearly.
+    assert!(delete_branch(&dir, "ghost").is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}

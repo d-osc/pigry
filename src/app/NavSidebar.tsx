@@ -21,11 +21,13 @@ function Section({
   title,
   count,
   defaultOpen = true,
+  action,
   children,
 }: {
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -36,14 +38,34 @@ function Section({
         <span className="nav-section__title">{title}</span>
         {count !== undefined && <span className="nav-section__count">{count}</span>}
       </button>
+      {open && action && <div className="nav-section__action">{action}</div>}
       {open && <div className="nav-section__body">{children}</div>}
     </section>
   );
 }
 
 export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
-  const { repository } = useRepository();
+  const { repository, checkoutBranch, createBranch, deleteBranch, busy } = useRepository();
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
   if (!repository) return null;
+
+  const submitNewBranch = () => {
+    const name = newName.trim();
+    setCreating(false);
+    setNewName('');
+    if (name) void createBranch(name, true);
+  };
+
+  const handleBranchClick = (event: React.MouseEvent, branch: string) => {
+    if (branch === repository.currentBranch || busy) return;
+    if (event.shiftKey) {
+      // Shift+click: delete (backend refuses unmerged and the current branch).
+      void deleteBranch(branch);
+    } else {
+      void checkoutBranch(branch);
+    }
+  };
 
   const staged = repository.files.filter((f) => f.staged).length;
   const unstaged = repository.files.length - staged;
@@ -75,12 +97,52 @@ export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
       </div>
 
       <div className="nav-sidebar__refs">
-        <Section title="Local branches" count={repository.branches.length}>
+        <Section
+          title="Local branches"
+          count={repository.branches.length}
+          action={
+            <button
+              type="button"
+              className="nav-section__add"
+              aria-label="Create branch"
+              onClick={() => setCreating(true)}
+            >
+              +
+            </button>
+          }
+        >
+          {creating && (
+            <div className="nav-branch-create">
+              <input
+                autoFocus
+                className="nav-branch-create__input"
+                placeholder="branch name…"
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') submitNewBranch();
+                  if (event.key === 'Escape') {
+                    setCreating(false);
+                    setNewName('');
+                  }
+                }}
+                onBlur={submitNewBranch}
+                aria-label="New branch name"
+                spellCheck={false}
+              />
+            </div>
+          )}
           {repository.branches.map((branch) => (
             <button
               key={branch.name}
               type="button"
               className={`nav-branch${branch.isHead ? ' nav-branch--active' : ''}`}
+              onClick={(event) => handleBranchClick(event, branch.name)}
+              title={
+                branch.isHead
+                  ? branch.name
+                  : `Click to checkout — Shift+click to delete ${branch.name}`
+              }
             >
               <GitBranch size={12} className="nav-branch__icon" />
               <span className="nav-branch__name">{branch.name}</span>

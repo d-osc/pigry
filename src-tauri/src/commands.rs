@@ -339,3 +339,49 @@ pub async fn get_commit_file_diff(
     };
     git_state::read_commit_file_diff(&repo_path, &oid, &path)
 }
+
+#[tauri::command]
+pub async fn create_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+    checkout: bool,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::create_branch(&repo_path, &name, checkout)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn checkout_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::checkout_branch(&repo_path, &name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn delete_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::delete_branch(&repo_path, &name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
