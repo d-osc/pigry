@@ -66,6 +66,7 @@ pub fn run() {
             commands::unstage_hunk,
             commands::discard_hunk,
             commands::get_file_blame,
+            commands::get_line_changes,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

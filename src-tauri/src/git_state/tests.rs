@@ -1120,3 +1120,38 @@ fn file_blame_attributes_lines_to_commits() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn line_changes_classifies_added_and_modified() {
+    let dir = scratch_repo("gutter");
+    let base: Vec<String> = (1..=15).map(|i| format!("line{i}")).collect();
+    write(&dir, "code.txt", &(base.join("\n") + "\n"));
+    commit_all(&dir, "base");
+
+    // Edit line 3 (modified), add after line 10 (added), edit line 14 (modified).
+    let mut edited = base.clone();
+    edited[2] = "line3 MODIFIED".to_string();
+    edited.insert(10, "INSERTED LINE".to_string());
+    edited[14] = "line15 MODIFIED".to_string(); // now at index 14 after insert
+    write(&dir, "code.txt", &(edited.join("\n") + "\n"));
+
+    let changes = line_changes(&dir, "code.txt").unwrap();
+    let added: Vec<u32> = changes.iter().filter(|c| c.change == "added").map(|c| c.line).collect();
+    let modified: Vec<u32> = changes.iter().filter(|c| c.change == "modified").map(|c| c.line).collect();
+
+    assert!(
+        added.contains(&11),
+        "the inserted line (worktree line 11) should be added: added={added:?} modified={modified:?}"
+    );
+    assert!(
+        modified.contains(&3),
+        "line 3 should be modified: added={added:?} modified={modified:?}"
+    );
+    assert!(
+        modified.contains(&15),
+        "line 15 (was line 14 in HEAD, shifted by insert) should be modified: added={added:?} modified={modified:?}"
+    );
+    assert!(!added.is_empty() || !modified.is_empty());
+
+    let _ = fs::remove_dir_all(&dir);
+}

@@ -534,3 +534,15 @@ pub async fn get_file_blame(
     };
     git_state::file_blame(&repo_path, &path)
 }
+
+#[tauri::command]
+pub async fn get_line_changes(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<Vec<git_state::LineChange>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::line_changes(&repo_path, &path)
+}

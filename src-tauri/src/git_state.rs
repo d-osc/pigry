@@ -2089,3 +2089,76 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
     lines.sort_by_key(|line| line.line);
     Ok(lines)
 }
+
+// ---------------------------------------------------------------------------
+// Diff gutter — per-line change status vs HEAD for the editor margin
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LineChange {
+    /// 1-based line number in the worktree file.
+    pub line: u32,
+    /// "added" (new line) or "modified" (existing line with changed content).
+    pub change: String,
+}
+
+/// Per-line change status of a file vs HEAD, for editor gutter decorations.
+/// Deletions are not reported (they have no position in the current file).
+pub fn line_changes(repo_path: &Path, path: &str) -> Result<Vec<LineChange>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path);
+    let mut diff = repo
+        .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))
+        .map_err(err)?;
+    let _ = diff.find_similar(None);
+
+    let mut changes = Vec::new();
+    for idx in 0..diff.deltas().len() {
+        let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) else {
+            continue;
+        };
+        for h in 0..patch.num_hunks() {
+            let Ok((hunk, line_count)) = patch.hunk(h) else { continue };
+            let (_, _, new_start, _, _) = parse_hunk_header(hunk.header());
+
+            let mut new_line = new_start;
+            let mut del_count = 0usize;
+            let mut pending_adds: Vec<u32> = Vec::new();
+
+            let flush = |pending: &mut Vec<u32>, dels: usize, out: &mut Vec<LineChange>| {
+                let kind = if dels > 0 { "modified" } else { "added" };
+                for pos in pending.drain(..) {
+                    out.push(LineChange {
+                        line: pos,
+                        change: kind.to_string(),
+                    });
+                }
+            };
+
+            for l in 0..line_count {
+                let line = patch.line_in_hunk(h, l).map_err(err)?;
+                match line.origin() {
+                    '+' => {
+                        pending_adds.push(new_line);
+                        new_line += 1;
+                    }
+                    '-' => {
+                        del_count += 1;
+                    }
+                    ' ' => {
+                        flush(&mut pending_adds, del_count, &mut changes);
+                        del_count = 0;
+                        new_line += 1;
+                    }
+                    _ => {}
+                }
+            }
+            flush(&mut pending_adds, del_count, &mut changes);
+        }
+    }
+    changes.sort_by_key(|c| c.line);
+    Ok(changes)
+}
