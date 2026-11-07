@@ -46,6 +46,7 @@ pub fn run() {
             commands::get_commit_file_diff,
             commands::get_file_hunks,
             commands::stage_hunk,
+            commands::unstage_hunk,
             commands::create_branch,
             commands::checkout_branch,
             commands::delete_branch,

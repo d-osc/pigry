@@ -152,10 +152,20 @@ export async function stashDrop(index: number): Promise<AppStatePayload> {
   return invoke("stash_drop", { index });
 }
 
-export async function getFileHunks(path: string): Promise<HunkInfo[]> {
-  return invoke('get_file_hunks', { path });
+export async function getFileHunks(
+  path: string,
+  staged: boolean,
+): Promise<HunkInfo[]> {
+  return invoke("get_file_hunks", { path, staged });
 }
 
 export async function stageHunk(path: string, hunkIndex: number): Promise<AppStatePayload> {
   return invoke('stage_hunk', { path, hunkIndex });
+}
+
+export async function unstageHunk(
+  path: string,
+  hunkIndex: number,
+): Promise<AppStatePayload> {
+  return invoke('unstage_hunk', { path, hunkIndex });
 }

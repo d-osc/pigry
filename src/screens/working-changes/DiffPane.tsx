@@ -119,13 +119,11 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
         </div>
       </div>
 
-      {!staged && (
-        <HunkBar
-          selectedFileId={selectedFileId}
-          reloadKey={hunkReloadKey}
-          onStaged={() => setHunkReloadKey((k) => k + 1)}
-        />
-      )}
+      <HunkBar
+        selectedFileId={selectedFileId}
+        reloadKey={hunkReloadKey}
+        onMutated={() => setHunkReloadKey((k) => k + 1)}
+      />
 
       <div className="diff-pane__editor">
         {loading ? (

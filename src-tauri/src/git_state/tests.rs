@@ -528,7 +528,7 @@ fn network_push_pull_flow_with_local_bare_remote() {
     commit_all(&alice, "initial");
     // Seed the bare remote via a direct push from alice.
     let alice_repo = Repository::open(&alice).unwrap();
-    let sig = Signature::now("Alice", "alice@test.dev").unwrap();
+    let _sig = Signature::now("Alice", "alice@test.dev").unwrap();
     drop(alice_repo);
     let _ = run_cli(&alice, &["push", "--set-upstream", "origin", "master"]);
 
@@ -900,7 +900,7 @@ fn hunk_listing_and_partial_staging() {
     edited[19] = "line20 EDITED".to_string();
     write(&dir, "code.txt", &(edited.join("\n") + "\n"));
 
-    let hunks = file_hunks(&dir, "code.txt").unwrap();
+    let hunks = file_hunks(&dir, "code.txt", false).unwrap();
     assert_eq!(hunks.len(), 2, "two separated edits → two hunks");
     assert_eq!(hunks[0].old_start, 1);
     assert!(hunks[1].old_start >= 14, "second edit near line 20 minus context");
@@ -953,7 +953,7 @@ fn stage_hunk_untracked_file_stages_content() {
     let dir = scratch_repo("hunk-untracked");
     write(&dir, "brand-new.ts", "export const a = 1;\n");
 
-    let hunks = file_hunks(&dir, "brand-new.ts").unwrap();
+    let hunks = file_hunks(&dir, "brand-new.ts", false).unwrap();
     assert_eq!(hunks.len(), 1, "untracked file = one hunk");
 
     stage_hunk(&dir, "brand-new.ts", 0).unwrap();
@@ -962,6 +962,85 @@ fn stage_hunk_untracked_file_stages_content() {
     assert!(
         index.get_path(Path::new("brand-new.ts"), 0).is_some(),
         "file staged after staging its single hunk"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn unstage_hunk_reverses_only_target_hunk() {
+    let dir = scratch_repo("unstage-hunk");
+    // 20-line committed file; both edits staged entirely.
+    let base: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
+    write(&dir, "code.txt", &(base.join("\n") + "\n"));
+    commit_all(&dir, "base");
+    let mut edited = base.clone();
+    edited[0] = "line1 EDITED".to_string();
+    edited[19] = "line20 EDITED".to_string();
+    write(&dir, "code.txt", &(edited.join("\n") + "\n"));
+    stage_paths(&dir, &["code.txt".to_string()]).unwrap();
+
+    // Two staged hunks (line 1 and line 20).
+    let staged_hunks = file_hunks(&dir, "code.txt", true).unwrap();
+    assert_eq!(staged_hunks.len(), 2);
+
+    // Unstage the first staged hunk (line 1).
+    unstage_hunk(&dir, "code.txt", 0).unwrap();
+
+    // Index must now contain only the line-20 change.
+    let repo = Repository::open(&dir).unwrap();
+    let index = repo.index().unwrap();
+    let entry = index.get_path(Path::new("code.txt"), 0).unwrap();
+    let blob = repo
+        .find_object(entry.id, Some(ObjectType::Blob))
+        .unwrap()
+        .peel_to_blob()
+        .unwrap();
+    let index_content = String::from_utf8_lossy(blob.content()).to_string();
+    drop(index);
+    assert!(
+        !index_content.contains("line1 EDITED"),
+        "line-1 change unstaged: {index_content}"
+    );
+    assert!(
+        index_content.contains("line20 EDITED"),
+        "line-20 change still staged: {index_content}"
+    );
+    assert!(
+        index_content.starts_with("line1\n"),
+        "index back to HEAD for the unstaged hunk: {index_content}"
+    );
+
+    // Worktree untouched — both edits still present.
+    let worktree = fs::read_to_string(dir.join("code.txt"))
+        .unwrap()
+        .replace('\r', "");
+    assert!(worktree.contains("line1 EDITED"));
+    assert!(worktree.contains("line20 EDITED"));
+
+    // Out-of-range staged hunk errors clearly.
+    assert!(unstage_hunk(&dir, "code.txt", 9).is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn unstage_hunk_on_added_file_removes_staged_lines() {
+    let dir = scratch_repo("unstage-added");
+    // Commit some unrelated file so HEAD exists, then add a new file.
+    write(&dir, "base.txt", "x\n");
+    commit_all(&dir, "base");
+    write(&dir, "added.txt", "kept line\nremoved line\n");
+    stage_paths(&dir, &["added.txt".to_string()]).unwrap();
+
+    // The whole added file is one staged hunk — unstaging it empties the
+    // index entry (the added content is all '+' lines).
+    unstage_hunk(&dir, "added.txt", 0).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let index = repo.index().unwrap();
+    assert!(
+        index.get_path(Path::new("added.txt"), 0).is_none(),
+        "fully-unstaged added file leaves no index entry"
     );
 
     let _ = fs::remove_dir_all(&dir);

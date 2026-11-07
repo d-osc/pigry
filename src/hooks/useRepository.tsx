@@ -29,6 +29,7 @@ export interface RepositoryContextValue {
   commit: (title: string, body: string, amend: boolean) => Promise<void>;
   stash: (message?: string) => Promise<void>;
   stageHunk: (path: string, hunkIndex: number) => Promise<void>;
+  unstageHunk: (path: string, hunkIndex: number) => Promise<void>;
   stashApply: (index: number) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
@@ -121,6 +122,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       },
       stash: (message) => run(() => client.stashChanges(message), (p) => p),
       stageHunk: (path, hunkIndex) => run(() => client.stageHunk(path, hunkIndex), (p) => p),
+      unstageHunk: (path, hunkIndex) => run(() => client.unstageHunk(path, hunkIndex), (p) => p),
       stashApply: (index) => run(() => client.stashApply(index), (p) => p),
       stashPop: (index) => run(() => client.stashPop(index), (p) => p),
       stashDrop: (index) => run(() => client.stashDrop(index), (p) => p),

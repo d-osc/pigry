@@ -465,12 +465,29 @@ pub async fn stash_drop(
 pub async fn get_file_hunks(
     state: State<'_, Mutex<AppState>>,
     path: String,
+    staged: bool,
 ) -> Result<Vec<git_state::HunkInfo>, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::file_hunks(&repo_path, &path)
+    git_state::file_hunks(&repo_path, &path, staged)
+}
+
+#[tauri::command]
+pub async fn unstage_hunk(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    hunk_index: usize,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::unstage_hunk(&repo_path, &path, hunk_index)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
 }
 
 #[tauri::command]

@@ -1,5 +1,5 @@
-/** Hunk bar: per-hunk rows with "+ Stage hunk" between controls and diff. */
-import { Plus } from 'lucide-react';
+/** Hunk bar: per-hunk rows with Stage/Unstage hunk buttons. */
+import { Minus, Plus } from 'lucide-react';
 import { useFileHunks } from '../../hooks/useFileHunks';
 import { useRepository } from '../../hooks/useRepository';
 import './HunkBar.css';
@@ -8,20 +8,20 @@ interface HunkBarProps {
   /** selectedFileId = "<path>:staged|unstaged" */
   selectedFileId: string;
   reloadKey: number;
-  onStaged: () => void;
+  onMutated: () => void;
 }
 
-export function HunkBar({ selectedFileId, reloadKey, onStaged }: HunkBarProps) {
-  const { stageHunk, busy } = useRepository();
+export function HunkBar({ selectedFileId, reloadKey, onMutated }: HunkBarProps) {
+  const { stageHunk, unstageHunk, busy } = useRepository();
   const sep = selectedFileId.lastIndexOf(':');
   const path = selectedFileId.slice(0, sep);
   const staged = selectedFileId.slice(sep + 1) === 'staged';
-  const { hunks, loading } = useFileHunks(path, reloadKey);
+  const { hunks, loading } = useFileHunks(path, reloadKey, staged);
 
-  if (staged || loading || !hunks || hunks.length === 0) return null;
+  if (loading || !hunks || hunks.length === 0) return null;
 
   return (
-    <div className="hunk-bar" aria-label="Unstaged hunks">
+    <div className="hunk-bar" aria-label={staged ? 'Staged hunks' : 'Unstaged hunks'}>
       {hunks.map((hunk) => (
         <div key={hunk.index} className="hunk-bar__row">
           <span className="hunk-bar__header">
@@ -33,14 +33,17 @@ export function HunkBar({ selectedFileId, reloadKey, onStaged }: HunkBarProps) {
           </span>
           <button
             type="button"
-            className="hunk-bar__stage"
+            className={`hunk-bar__stage${staged ? ' hunk-bar__stage--unstage' : ''}`}
             onClick={() => {
-              void stageHunk(path, hunk.index).then(() => onStaged());
+              const action = staged
+                ? unstageHunk(path, hunk.index)
+                : stageHunk(path, hunk.index);
+              void action.then(() => onMutated());
             }}
             disabled={busy}
           >
-            <Plus size={11} />
-            Stage hunk
+            {staged ? <Minus size={11} /> : <Plus size={11} />}
+            {staged ? 'Unstage hunk' : 'Stage hunk'}
           </button>
         </div>
       ))}

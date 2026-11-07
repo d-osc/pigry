@@ -65,3 +65,12 @@
   opacity: 0.5;
   cursor: default;
 }
+
+.hunk-bar__stage--unstage {
+  background: var(--orange-tint);
+  color: var(--orange);
+}
+
+.hunk-bar__stage--unstage:hover:not(:disabled) {
+  background: #5d4a35;
+}
