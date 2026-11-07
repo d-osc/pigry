@@ -63,6 +63,17 @@ export interface RepositoryState {
   tags: TagInfo[];
   tagTotal: number;
   stashes: StashInfo[];
+  /** Current HEAD commit oid; null on an unborn branch. */
+  headOid: string | null;
+  /** True while an interactive/regular rebase is mid-flight. */
+  rebaseInProgress: boolean;
+}
+
+export type RebaseAction = 'pick' | 'squash' | 'drop';
+
+export interface RebaseStep {
+  oid: string;
+  action: RebaseAction;
 }
 
 export interface FileDiffContent {

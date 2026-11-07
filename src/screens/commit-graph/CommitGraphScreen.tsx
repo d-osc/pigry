@@ -8,13 +8,17 @@ import { RepoStatsBar } from './RepoStatsBar';
 import { CommitDetailPanel } from './CommitDetailPanel';
 import './CommitGraphScreen.css';
 
-export function CommitGraphScreen() {
+export function CommitGraphScreen({ onStartRebase }: { onStartRebase: (oid: string) => void }) {
   const { repository, fetchRemote, busy } = useRepository();
   const [includeRemotes, setIncludeRemotes] = useState(false);
   const [query, setQuery] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
-  const { history, error, loading } = useCommitHistory(includeRemotes, reloadKey);
+  const { history, error, loading } = useCommitHistory(
+    includeRemotes,
+    reloadKey,
+    repository?.headOid ?? null,
+  );
 
   const handleFetch = async () => {
     const ok = await fetchRemote();
@@ -162,6 +166,7 @@ export function CommitGraphScreen() {
           key={selectedCommit}
           oid={selectedCommit}
           onClose={() => setSelectedCommit(null)}
+          onStartRebase={onStartRebase}
         />
       )}
       </div>

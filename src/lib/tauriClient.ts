@@ -15,6 +15,7 @@ import type {
   NetResult,
   GitUserInfo,
   RemoteEntry,
+  RebaseStep,
   WorktreeFileContent,
 } from '../types/repository';
 
@@ -240,4 +241,15 @@ export async function removeRemote(name: string): Promise<AppStatePayload> {
 
 export async function setRemoteUrl(name: string, url: string): Promise<AppStatePayload> {
   return invoke('set_remote_url', { name, url });
+}
+
+export async function interactiveRebase(
+  base: string,
+  steps: RebaseStep[],
+): Promise<AppStatePayload> {
+  return invoke('interactive_rebase', { base, steps });
+}
+
+export async function abortRebase(): Promise<AppStatePayload> {
+  return invoke('abort_rebase');
 }

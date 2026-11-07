@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { ShieldCheck, Undo2, X } from 'lucide-react';
+import { ListTree, ShieldCheck, Undo2, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { verifyCommitSig } from '../../lib/tauriClient';
 import { getCommitDetail, getCommitFileDiff } from '../../lib/tauriClient';
@@ -12,6 +12,8 @@ import './CommitDetailPanel.css';
 interface CommitDetailPanelProps {
   oid: string;
   onClose: () => void;
+  /** Opens the interactive rebase planner with this commit as the base. */
+  onStartRebase: (oid: string) => void;
 }
 
 function statusClass(status: string): string {
@@ -27,7 +29,7 @@ function statusClass(status: string): string {
   }
 }
 
-export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
+export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailPanelProps) {
   const { revertCommit, busy } = useRepository();
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
@@ -100,6 +102,16 @@ export function CommitDetailPanel({ oid, onClose }: CommitDetailPanelProps) {
           >
             <Undo2 size={12} />
             Revert
+          </button>
+          <button
+            type="button"
+            className="commit-detail__revert"
+            title="Replay every commit above this one (reorder, squash, drop)"
+            onClick={() => onStartRebase(oid)}
+            disabled={busy}
+          >
+            <ListTree size={12} />
+            Rebase…
           </button>
           <button
             type="button"

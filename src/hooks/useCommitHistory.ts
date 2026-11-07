@@ -1,4 +1,4 @@
-/** Loads commit history from the backend; reloads on toggle or reloadKey change. */
+/** Loads commit history from the backend; reloads on toggle, reloadKey or HEAD change. */
 import { useEffect, useState } from 'react';
 import { getCommitHistory } from '../lib/tauriClient';
 import type { CommitHistory } from '../types/repository';
@@ -9,7 +9,7 @@ interface HistoryEntry {
   error: null;
 }
 
-export function useCommitHistory(includeRemotes: boolean, reloadKey = 0) {
+export function useCommitHistory(includeRemotes: boolean, reloadKey = 0, headOid: string | null = null) {
   const [entry, setEntry] = useState<HistoryEntry | null>(null);
   const [failed, setFailed] = useState<{ includeRemotes: boolean; error: string } | null>(
     null,
@@ -32,7 +32,9 @@ export function useCommitHistory(includeRemotes: boolean, reloadKey = 0) {
     return () => {
       cancelled = true;
     };
-  }, [includeRemotes, reloadKey]);
+    // headOid: history-rewriting ops (rebase, revert, cherry-pick, merge, pull)
+    // move HEAD — reload the graph when it changes.
+  }, [includeRemotes, reloadKey, headOid]);
 
   const isCurrent = (key: { includeRemotes: boolean }) =>
     key.includeRemotes === includeRemotes;

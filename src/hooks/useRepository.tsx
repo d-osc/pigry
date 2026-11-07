@@ -11,7 +11,7 @@ import {
 import { listen } from '@tauri-apps/api/event';
 import * as client from '../lib/tauriClient';
 import { useToasts, type Toast } from '../app/Toast';
-import type { AppStatePayload } from '../types/repository';
+import type { AppStatePayload, RebaseStep } from '../types/repository';
 
 export type BackendMode = 'tauri' | 'browser';
 
@@ -37,6 +37,8 @@ export interface RepositoryContextValue {
   discardHunk: (path: string, hunkIndex: number) => Promise<void>;
   cloneRepo: (url: string, target: string) => Promise<void>;
   rebaseOnto: (base: string) => Promise<void>;
+  interactiveRebase: (base: string, steps: RebaseStep[]) => Promise<void>;
+  abortRebase: () => Promise<void>;
   revertCommit: (oid: string) => Promise<void>;
   cherryPick: (oid: string) => Promise<void>;
   mergeBranch: (branch: string) => Promise<void>;
@@ -163,6 +165,13 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       discardHunk: (path, hunkIndex) => run(() => client.discardHunk(path, hunkIndex), (p) => p, 'Hunk discarded'),
       cloneRepo: (url, target) => run(() => client.cloneRepo(url, target), (p) => p, 'Repository cloned'),
       rebaseOnto: (base) => run(() => client.rebaseOnto(base), (p) => p, `Rebased onto ${base}`),
+      interactiveRebase: (base, steps) =>
+        run(
+          () => client.interactiveRebase(base, steps),
+          (p) => p,
+          `Rebase applied: ${steps.length} commit${steps.length === 1 ? '' : 's'} replayed`,
+        ),
+      abortRebase: () => run(() => client.abortRebase(), (p) => p, 'Rebase aborted'),
       revertCommit: (oid) => run(() => client.revertCommit(oid), (p) => p, 'Commit reverted'),
       cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p, 'Commit cherry-picked'),
       mergeBranch: (branch) => run(() => client.mergeBranch(branch), (p) => p, `Merged ${branch}`),

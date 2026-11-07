@@ -1,0 +1,135 @@
+.rebase {
+  width: 620px;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 50%);
+}
+
+.rebase__base {
+  margin: 2px 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.rebase__base code {
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.rebase__base-summary {
+  margin-left: 6px;
+  color: var(--text-secondary);
+}
+
+.rebase__error {
+  margin: 10px 16px;
+  padding: 8px 10px;
+  font-size: var(--fs-xs);
+  color: var(--red);
+  background: rgb(231 144 152 / 10%);
+  border: 1px solid #5d3944;
+  border-radius: var(--radius);
+}
+
+.rebase__hint-pad {
+  padding: 0 16px 12px;
+}
+
+.rebase__list {
+  list-style: none;
+  margin: 6px 16px;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.rebase__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rebase__row:last-child {
+  border-bottom: none;
+}
+
+.rebase__row--drop .rebase__oid,
+.rebase__row--drop .rebase__summary {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.rebase__action {
+  min-width: 52px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rebase__action[data-action='pick'] {
+  color: var(--green);
+  border-color: rgb(109 214 173 / 40%);
+}
+
+.rebase__action[data-action='squash'] {
+  color: var(--orange);
+  border-color: rgb(237 182 117 / 40%);
+}
+
+.rebase__action[data-action='drop'] {
+  color: var(--red);
+  border-color: rgb(231 144 152 / 40%);
+}
+
+.rebase__oid {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.rebase__summary {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rebase__move {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.rebase__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px 16px;
+}
+
+.rebase__footer .settings__hint {
+  margin: 0;
+  flex: 1;
+}
+
+.rebase__footer-buttons {
+  display: flex;
+  gap: 8px;
+}

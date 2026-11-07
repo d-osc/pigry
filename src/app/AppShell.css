@@ -27,3 +27,19 @@
   color: var(--red);
   font-size: var(--fs-xs);
 }
+
+.rebase-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgb(237 182 117 / 10%);
+  border-bottom: 1px solid rgb(237 182 117 / 35%);
+  color: var(--orange);
+  font-size: var(--fs-xs);
+}
+
+.rebase-banner strong {
+  color: var(--text-primary);
+}

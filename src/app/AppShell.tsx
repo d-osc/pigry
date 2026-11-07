@@ -4,6 +4,8 @@ import { NavSidebar } from './NavSidebar';
 import { StatusBar } from './StatusBar';
 import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
+import { RebaseModal } from './rebase/RebaseModal';
+import { Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
@@ -41,12 +43,29 @@ function ErrorBanner() {
   return <div className="error-banner" role="alert">{error}</div>;
 }
 
-function renderScreen(screen: NavId, explorerOpenPath: string | null) {
+function RebaseBanner({ onAbort }: { onAbort: () => void }) {
+  const { repository, busy } = useRepository();
+  if (!repository?.rebaseInProgress) return null;
+  return (
+    <div className="rebase-banner" role="alert">
+      <span>
+        A rebase is in progress on <strong>{repository.currentBranch}</strong> — resolve conflicts
+        and continue in a terminal, or abort to restore the branch.
+      </span>
+      <button type="button" className="settings__btn settings__btn--small" onClick={onAbort} disabled={busy}>
+        <Undo2 size={11} />
+        Abort rebase
+      </button>
+    </div>
+  );
+}
+
+function renderScreen(screen: NavId, explorerOpenPath: string | null, startRebase: (oid: string) => void) {
   switch (screen) {
     case 'working-changes':
       return <WorkingChangesScreen />;
     case 'commit-graph':
-      return <CommitGraphScreen />;
+      return <CommitGraphScreen onStartRebase={startRebase} />;
     case 'explorer':
       return <ExplorerScreen key={explorerOpenPath ?? 'explorer'} openPath={explorerOpenPath} />;
     default:
@@ -65,6 +84,7 @@ function AppShellInner() {
   } | null>(null);
   const [filesRequestId, setFilesRequestId] = useState(0);
   const [explorerOpenPath, setExplorerOpenPath] = useState<string | null>(null);
+  const [rebaseBase, setRebaseBase] = useState<string | null>(null);
   const repository = useRepository();
   const { mode } = repository;
 
@@ -147,8 +167,9 @@ function AppShellInner() {
           <div className="app-shell__body">
             <NavSidebar activeScreen={screen} onNavigate={setScreen} onOpenSettings={() => setSettingsOpen(true)} />
             <main className="app-shell__workspace">
+              <RebaseBanner onAbort={() => void repository.abortRebase()} />
               <ErrorBanner />
-              {renderScreen(screen, explorerOpenPath)}
+              {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid))}
             </main>
           </div>
           <StatusBar />
@@ -174,6 +195,7 @@ function AppShellInner() {
       {settingsOpen && (
         <SettingsModal onClose={() => setSettingsOpen(false)} notify={repository.notify} />
       )}
+      {rebaseBase && <RebaseModal baseOid={rebaseBase} onClose={() => setRebaseBase(null)} />}
       <ToastContainer toasts={repository.toasts} />
     </div>
   );

@@ -96,6 +96,10 @@ pub struct RepositoryState {
     pub tags: Vec<TagInfo>,
     pub tag_total: usize,
     pub stashes: Vec<StashInfo>,
+    /// Current HEAD commit oid; None on an unborn branch.
+    pub head_oid: Option<String>,
+    /// True while an interactive/regular rebase is mid-flight.
+    pub rebase_in_progress: bool,
 }
 
 #[derive(Serialize)]
@@ -158,6 +162,15 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         .to_string_lossy()
         .trim_end_matches(['/', '\\'])
         .to_string();
+    let rebase_in_progress = {
+        let git_dir = repo.path();
+        git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
+    };
+    let head_oid = repo
+        .head()
+        .ok()
+        .and_then(|head| head.peel_to_commit().ok())
+        .map(|commit| commit.id().to_string());
 
     Ok(RepositoryState {
         organization,
@@ -173,6 +186,8 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         tags,
         tag_total,
         stashes,
+        head_oid,
+        rebase_in_progress,
     })
 }
 

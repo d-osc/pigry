@@ -728,3 +728,31 @@ pub async fn set_remote_url(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+#[tauri::command]
+pub async fn interactive_rebase(
+    state: State<'_, Mutex<AppState>>,
+    base: String,
+    steps: Vec<ops::RebaseStep>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::interactive_rebase(&repo_path, &base, &steps)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn abort_rebase(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::abort_rebase(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}

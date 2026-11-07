@@ -206,3 +206,206 @@ fn clone_repo_copies_repository() {
 
     let _ = fs::remove_dir_all(&base);
 }
+
+// --- interactive rebase ---
+
+use crate::ops::{abort_rebase, interactive_rebase, rebase_in_progress, RebaseStep};
+
+/// Scratch repo with 3 commits on a feature branch; returns (dir, [oid1..oid3]).
+fn rebase_scratch(name: &str) -> (PathBuf, Vec<String>) {
+    let dir = std::env::temp_dir().join(format!("orbit-rebase-{}-{}", name, std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let repo = Repository::init(&dir).unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    drop(config);
+
+    let oids: Vec<String> = ["one", "two", "three"]
+        .iter()
+        .map(|msg| {
+            fs::write(dir.join(format!("{msg}.txt")), format!("{msg} content\n")).unwrap();
+            let mut repo = Repository::open(&dir).unwrap();
+            let mut index = repo.index().unwrap();
+            index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+            index.write().unwrap();
+            let tree_oid = index.write_tree().unwrap();
+            let tree = repo.find_tree(tree_oid).unwrap();
+            let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+            let parent = repo.head().ok().map(|h| h.peel_to_commit().unwrap());
+            let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
+            let oid = repo
+                .commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents)
+                .unwrap();
+            oid.to_string()
+        })
+        .collect();
+    (dir, oids)
+}
+
+fn head_oids(dir: &PathBuf, count: usize) -> Vec<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C").arg(dir)
+        .args(["rev-list", "--reverse", &format!("-{}", count), "HEAD"])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn interactive_rebase_drops_middle_commit() {
+    let (dir, oids) = rebase_scratch("drop");
+    // Base is oids[0]; the plan covers only the two commits above it.
+    let plan = vec![
+        RebaseStep { oid: oids[2].clone(), action: "pick".into() },
+        RebaseStep { oid: oids[1].clone(), action: "drop".into() },
+    ];
+    interactive_rebase(&dir, &oids[0], &plan).unwrap();
+
+    let after = head_oids(&dir, 3);
+    assert_eq!(after.len(), 2, "one commit dropped");
+    assert_eq!(after[0], oids[0], "base commit unchanged (not rewritten)");
+    // Rebase rewrites oid2 (new parent), so assert the subject instead.
+    let tip = std::process::Command::new("git")
+        .arg("-C").arg(&dir)
+        .args(["log", "--format=%s", "-1", "HEAD"])
+        .output()
+        .unwrap();
+    assert_eq!(String::from_utf8_lossy(&tip.stdout).trim(), "three");
+    assert!(!dir.join("two.txt").exists(), "dropped commit's file is gone");
+    assert!(dir.join("one.txt").exists() && dir.join("three.txt").exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn interactive_rebase_squashes_two_into_one() {
+    let (dir, oids) = rebase_scratch("squash");
+    // Display order (newest first): oid2 squashes into oid1, oid0 is the base.
+    let plan = vec![
+        RebaseStep { oid: oids[2].clone(), action: "squash".into() },
+        RebaseStep { oid: oids[1].clone(), action: "pick".into() },
+    ];
+    interactive_rebase(&dir, &oids[0], &plan).unwrap();
+
+    let after = head_oids(&dir, 3);
+    assert_eq!(after.len(), 2, "three commits squashed into two");
+    assert_eq!(after[0], oids[0], "first commit untouched");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn interactive_rebase_reorders_commits() {
+    let (dir, oids) = rebase_scratch("reorder");
+    // Swapping the two commits above base oids[0]: "two" ends up newest.
+    let plan = vec![
+        RebaseStep { oid: oids[1].clone(), action: "pick".into() },
+        RebaseStep { oid: oids[2].clone(), action: "pick".into() },
+    ];
+    interactive_rebase(&dir, &oids[0], &plan).unwrap();
+
+    // All three still exist; the tip's parent is now the reordered chain.
+    let out = std::process::Command::new("git")
+        .arg("-C").arg(&dir)
+        .args(["log", "--format=%s", "HEAD~1..HEAD"])
+        .output()
+        .unwrap();
+    let tip_subject = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert_eq!(tip_subject, "two", "oid[1] becomes the new tip after reorder");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn interactive_rebase_validates_plan() {
+    let (dir, oids) = rebase_scratch("validate");
+    let base = head_oids(&dir, 3)[0].clone();
+
+    // Incomplete plan is rejected.
+    let plan = vec![RebaseStep { oid: oids[2].clone(), action: "pick".into() }];
+    assert!(interactive_rebase(&dir, &base, &plan)
+        .unwrap_err()
+        .contains("exactly"));
+
+    // Unknown action rejected.
+    let plan = vec![
+        RebaseStep { oid: oids[2].clone(), action: "fixup".into() },
+        RebaseStep { oid: oids[1].clone(), action: "pick".into() },
+        RebaseStep { oid: oids[0].clone(), action: "pick".into() },
+    ];
+    assert!(interactive_rebase(&dir, &base, &plan).is_err());
+
+    // Squashing the OLDEST selected commit is rejected (it would fold into base).
+    let plan = vec![
+        RebaseStep { oid: oids[2].clone(), action: "pick".into() },
+        RebaseStep { oid: oids[1].clone(), action: "squash".into() },
+    ];
+    assert!(interactive_rebase(&dir, &base, &plan)
+        .unwrap_err()
+        .contains("oldest selected commit cannot be squashed"));
+
+    // Empty plan rejected.
+    assert!(interactive_rebase(&dir, &base, &[]).is_err());
+    assert!(!rebase_in_progress(&dir), "validation failures leave no rebase behind");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn rebase_conflict_then_abort_restores_original_tip() {
+    let dir = std::env::temp_dir().join(format!("orbit-rebase-abort-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let repo = Repository::init(&dir).unwrap();
+    let mut config = repo.config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    drop(config);
+
+    // Two commits touching the SAME line of the same file: reordering them
+    // forces a merge conflict mid-rebase.
+    fs::write(dir.join("shared.txt"), "one\n").unwrap();
+    let mut repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let base_oid = repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
+
+    let make_commit = |msg: &str, content: &str| {
+        fs::write(dir.join("shared.txt"), content).unwrap();
+        let mut repo = Repository::open(&dir).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &[&parent]).unwrap()
+    };
+    let c1 = make_commit("edit1", "from edit1\n");
+    let c2 = make_commit("edit2", "from edit2\n");
+    drop(sig);
+
+    assert!(!rebase_in_progress(&dir));
+    // Swap the two conflicting commits (todo becomes c2 then c1).
+    let plan = vec![
+        RebaseStep { oid: c1.to_string(), action: "pick".into() },
+        RebaseStep { oid: c2.to_string(), action: "pick".into() },
+    ];
+    let result = interactive_rebase(&dir, &base_oid.to_string(), &plan);
+    assert!(result.is_err(), "conflicting reorder must fail");
+    assert!(rebase_in_progress(&dir), "failed rebase leaves the repo mid-rebase");
+
+    abort_rebase(&dir).unwrap();
+    assert!(!rebase_in_progress(&dir), "abort restores the pre-rebase state");
+    // Original tip intact: HEAD == c2.
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), c2);
+    assert_eq!(
+        fs::read_to_string(dir.join("shared.txt")).unwrap().replace('\r', ""),
+        "from edit2\n"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}

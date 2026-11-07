@@ -82,6 +82,8 @@ pub fn run() {
             commands::add_remote,
             commands::remove_remote,
             commands::set_remote_url,
+            commands::interactive_rebase,
+            commands::abort_rebase,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
