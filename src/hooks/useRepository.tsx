@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import * as client from '../lib/tauriClient';
 import type { AppStatePayload } from '../types/repository';
 
@@ -61,6 +62,18 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       .getAppState()
       .then(setState)
       .catch((e: unknown) => setError(String(e)));
+  }, [mode]);
+
+  // Auto-refresh when the file watcher detects external changes.
+  useEffect(() => {
+    if (mode !== 'tauri') return;
+    let unlisten: (() => void) | null = null;
+    listen('repo-changed', () => {
+      client.refresh()
+        .then(setState)
+        .catch(() => {});
+    }).then((off) => { unlisten = off; });
+    return () => { unlisten?.(); };
   }, [mode]);
 
   const run = useCallback(

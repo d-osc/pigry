@@ -8,6 +8,7 @@ use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::config::{self, AppConfig};
+use crate::FileWatcherHolder;
 use crate::git_state::{self, FileDiffContent, RepositoryState};
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
