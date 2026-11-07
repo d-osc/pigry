@@ -144,6 +144,16 @@ export interface HunkInfo {
   preview: string;
 }
 
+export interface BlameLine {
+  line: number;
+  shortOid: string;
+  authorName: string;
+  authorInitials: string;
+  timeSeconds: number;
+  summary: string;
+  uncommitted: boolean;
+}
+
 export interface NetResult {
   summary: string;
 }

@@ -8,6 +8,7 @@ import type {
   FileCommitEntry,
   FileDiffContent,
   FileTree,
+  BlameLine,
   HunkInfo,
   NetResult,
   WorktreeFileContent,
@@ -175,4 +176,8 @@ export async function discardHunk(
   hunkIndex: number,
 ): Promise<AppStatePayload> {
   return invoke('discard_hunk', { path, hunkIndex });
+}
+
+export async function getFileBlame(path: string): Promise<BlameLine[]> {
+  return invoke('get_file_blame', { path });
 }

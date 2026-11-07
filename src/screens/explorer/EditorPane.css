@@ -122,3 +122,12 @@
   color: var(--text-muted);
   font-size: var(--fs-sm);
 }
+
+.blame-annotation {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  margin-left: 24px;
+  opacity: 0.7;
+  pointer-events: none;
+}

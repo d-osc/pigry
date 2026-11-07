@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Editor } from '@monaco-editor/react';
+import { Editor, type Monaco } from '@monaco-editor/react';
+import type { editor as MonacoEditorNS } from 'monaco-editor';
 import { Save } from 'lucide-react';
 import { readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
+import { useFileBlame } from '../../hooks/useFileBlame';
+import { relativeTime } from '../../lib/relativeTime';
 import type { WorktreeFileContent } from '../../types/repository';
 import '../../editor/monacoSetup';
 import './EditorPane.css';
@@ -33,11 +36,14 @@ export function EditorPane({
   const [draft, setDraft] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [blameOn, setBlameOn] = useState(false);
+  const [editorInstance, setEditorInstance] =
+    useState<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
   const draftRef = useRef(draft);
 
-  useEffect(() => {
-    draftRef.current = draft;
-  }, [draft]);
+  const { lines: blameLines } = useFileBlame(path, blameOn);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +109,39 @@ export function EditorPane({
   const segments = path.split('/');
   const dirty = entry?.path === path && draft !== entry.content.content;
 
+  // Blame decorations: inject author + sha after each line when blame mode
+  // is on. Cleared when toggled off or when the file changes.
+  useEffect(() => {
+    const collection = decorationsRef.current;
+    if (!blameOn || !blameLines || !editorInstance) {
+      collection?.clear();
+      return;
+    }
+    const model = editorInstance.getModel();
+    if (!model) return;
+    const monaco = monacoRef.current;
+    if (!monaco) return;
+    const decorations = blameLines
+      .filter((line) => line.line <= model.getLineCount())
+      .map((line) => {
+        const lineNum = line.line;
+        const maxCol = model.getLineMaxColumn(lineNum);
+        const label = line.uncommitted
+          ? '  — Uncommitted'
+          : `  ${line.shortOid} ${line.authorInitials} · ${relativeTime(line.timeSeconds)}`;
+        return {
+          range: new monaco.Range(lineNum, 1, lineNum, maxCol),
+          options: {
+            after: {
+              content: label,
+              inlineClassName: 'blame-annotation',
+            },
+          },
+        };
+      });
+    decorationsRef.current = editorInstance.createDecorationsCollection(decorations);
+  }, [blameOn, blameLines, editorInstance, path]);
+
   return (
     <div className="editor-pane">
       <header className="editor-pane__bar">
@@ -138,6 +177,13 @@ export function EditorPane({
           >
             Compare code <span>{compareOn ? 'ON' : 'OFF'}</span>
           </button>
+          <button
+            type="button"
+            className={`toggle-pill${blameOn ? ' toggle-pill--on' : ''}`}
+            onClick={() => setBlameOn((value) => !value)}
+          >
+            Blame <span>{blameOn ? 'ON' : 'OFF'}</span>
+          </button>
         </div>
         <button
           type="button"
@@ -166,6 +212,10 @@ export function EditorPane({
             language={entry.content.language}
             theme="orbit-dark"
             onChange={handleDraftChange}
+            onMount={(editor, monaco) => {
+              setEditorInstance(editor);
+              monacoRef.current = monaco;
+            }}
             options={{
               fontSize: 12,
               lineHeight: 19,
