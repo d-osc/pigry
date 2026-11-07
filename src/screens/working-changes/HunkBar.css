@@ -74,3 +74,18 @@
 .hunk-bar__stage--unstage:hover:not(:disabled) {
   background: #5d4a35;
 }
+.hunk-bar__actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.hunk-bar__stage--discard {
+  background: #3b2530;
+  color: var(--red);
+}
+
+.hunk-bar__stage--discard:hover:not(:disabled) {
+  background: #5d3944;
+}

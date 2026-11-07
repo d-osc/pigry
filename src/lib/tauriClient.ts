@@ -169,3 +169,10 @@ export async function unstageHunk(
 ): Promise<AppStatePayload> {
   return invoke('unstage_hunk', { path, hunkIndex });
 }
+
+export async function discardHunk(
+  path: string,
+  hunkIndex: number,
+): Promise<AppStatePayload> {
+  return invoke('discard_hunk', { path, hunkIndex });
+}

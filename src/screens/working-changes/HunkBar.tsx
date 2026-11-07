@@ -1,5 +1,5 @@
-/** Hunk bar: per-hunk rows with Stage/Unstage hunk buttons. */
-import { Minus, Plus } from 'lucide-react';
+/** Hunk bar: per-hunk rows with Stage/Unstage/Discard hunk buttons. */
+import { Minus, Plus, X } from 'lucide-react';
 import { useFileHunks } from '../../hooks/useFileHunks';
 import { useRepository } from '../../hooks/useRepository';
 import './HunkBar.css';
@@ -12,7 +12,7 @@ interface HunkBarProps {
 }
 
 export function HunkBar({ selectedFileId, reloadKey, onMutated }: HunkBarProps) {
-  const { stageHunk, unstageHunk, busy } = useRepository();
+  const { stageHunk, unstageHunk, discardHunk, busy } = useRepository();
   const sep = selectedFileId.lastIndexOf(':');
   const path = selectedFileId.slice(0, sep);
   const staged = selectedFileId.slice(sep + 1) === 'staged';
@@ -31,20 +31,52 @@ export function HunkBar({ selectedFileId, reloadKey, onMutated }: HunkBarProps) 
           <span className="hunk-bar__preview" title={hunk.preview}>
             {hunk.preview}
           </span>
-          <button
-            type="button"
-            className={`hunk-bar__stage${staged ? ' hunk-bar__stage--unstage' : ''}`}
-            onClick={() => {
-              const action = staged
-                ? unstageHunk(path, hunk.index)
-                : stageHunk(path, hunk.index);
-              void action.then(() => onMutated());
-            }}
-            disabled={busy}
-          >
-            {staged ? <Minus size={11} /> : <Plus size={11} />}
-            {staged ? 'Unstage hunk' : 'Stage hunk'}
-          </button>
+          <span className="hunk-bar__actions">
+            {staged ? (
+              <button
+                type="button"
+                className="hunk-bar__stage hunk-bar__stage--unstage"
+                onClick={() => {
+                  void unstageHunk(path, hunk.index).then(() => onMutated());
+                }}
+                disabled={busy}
+              >
+                <Minus size={11} />
+                Unstage hunk
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="hunk-bar__stage"
+                  onClick={() => {
+                    void stageHunk(path, hunk.index).then(() => onMutated());
+                  }}
+                  disabled={busy}
+                >
+                  <Plus size={11} />
+                  Stage hunk
+                </button>
+                <button
+                  type="button"
+                  className="hunk-bar__stage hunk-bar__stage--discard"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'Discard this hunk? The changes in it will be lost.',
+                      )
+                    ) {
+                      void discardHunk(path, hunk.index).then(() => onMutated());
+                    }
+                  }}
+                  disabled={busy}
+                >
+                  <X size={11} />
+                  Discard hunk
+                </button>
+              </>
+            )}
+          </span>
         </div>
       ))}
     </div>
