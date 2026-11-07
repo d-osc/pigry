@@ -505,3 +505,19 @@ pub async fn stage_hunk(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+#[tauri::command]
+pub async fn discard_hunk(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    hunk_index: usize,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::discard_hunk(&repo_path, &path, hunk_index)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}

@@ -1045,3 +1045,55 @@ fn unstage_hunk_on_added_file_removes_staged_lines() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn discard_hunk_reverts_only_target_hunk() {
+    let dir = scratch_repo("discard-hunk");
+    let base: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
+    write(&dir, "code.txt", &(base.join("\n") + "\n"));
+    commit_all(&dir, "base");
+    let mut edited = base.clone();
+    edited[0] = "line1 EDITED".to_string();
+    edited[19] = "line20 EDITED".to_string();
+    write(&dir, "code.txt", &(edited.join("\n") + "\n"));
+
+    let hunks = file_hunks(&dir, "code.txt", false).unwrap();
+    assert_eq!(hunks.len(), 2);
+
+    // Discard the first hunk (line 1 edit).
+    discard_hunk(&dir, "code.txt", 0).unwrap();
+    let content = fs::read_to_string(dir.join("code.txt"))
+        .unwrap()
+        .replace('\r', "");
+    assert!(
+        content.contains("line1\n"),
+        "hunk 0 reverted: {content}"
+    );
+    assert!(
+        content.contains("line20 EDITED"),
+        "hunk 1 untouched: {content}"
+    );
+    // Index untouched — the line-20 edit was never staged.
+    assert!(build_state(&dir).unwrap().files.iter().all(|f| !f.staged));
+
+    // Out-of-range errors clearly.
+    assert!(discard_hunk(&dir, "code.txt", 9).is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn discard_hunk_on_untracked_file_deletes_it() {
+    let dir = scratch_repo("discard-untracked");
+    write(&dir, "untracked.txt", "temporary\n");
+
+    let hunks = file_hunks(&dir, "untracked.txt", false).unwrap();
+    assert_eq!(hunks.len(), 1);
+    discard_hunk(&dir, "untracked.txt", 0).unwrap();
+    assert!(
+        !dir.join("untracked.txt").exists(),
+        "fully discarded untracked file is deleted"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

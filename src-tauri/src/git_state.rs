@@ -1934,3 +1934,83 @@ pub fn unstage_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<(
     index.write().map_err(err)?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Discard hunk — revert one unstaged hunk in the worktree to match the index
+// ---------------------------------------------------------------------------
+
+/// Reverts hunk `hunk_index` of `path`'s unstaged diff in the worktree:
+/// '+' lines (worktree additions) are removed, '-' lines (index content)
+/// are restored, context is kept. Untracked files are deleted when their
+/// whole content is discarded.
+pub fn discard_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path)
+        .include_untracked(true)
+        .show_untracked_content(true)
+        .recurse_untracked_dirs(true);
+    let mut diff = repo
+        .diff_index_to_workdir(None, Some(&mut opts))
+        .map_err(err)?;
+    let _ = diff.find_similar(None);
+    let patch = git2::Patch::from_diff(&diff, 0)
+        .map_err(|e| format!("no unstaged diff for {path}: {e}"))?
+        .ok_or_else(|| format!("no unstaged diff for {path}"))?;
+    if hunk_index >= patch.num_hunks() {
+        return Err(format!("hunk #{hunk_index} does not exist for {path}"));
+    }
+    let (hunk, line_count) = patch.hunk(hunk_index).map_err(err)?;
+    let (_, _, new_start, new_lines, _) = parse_hunk_header(hunk.header());
+
+    // Worktree content (empty for deleted or untracked files).
+    let workdir_path = repo.workdir().ok_or("bare repository")?.join(path);
+    let wt_bytes = std::fs::read(&workdir_path).unwrap_or_default();
+    let wt_text = String::from_utf8_lossy(&wt_bytes);
+    let had_trailing_newline = wt_text.ends_with('\n');
+    let mut wt_lines: Vec<String> = if wt_text.is_empty() {
+        Vec::new()
+    } else {
+        let mut segs: Vec<String> =
+            wt_text.split('\n').map(|line| line.to_string()).collect();
+        if had_trailing_newline {
+            segs.pop(); // phantom trailing element
+        }
+        segs
+    };
+
+    let prefix_end = (new_start as usize).saturating_sub(1).min(wt_lines.len());
+    let suffix_start = (prefix_end + new_lines as usize).min(wt_lines.len());
+
+    let mut parts: Vec<String> = Vec::new();
+    parts.extend(wt_lines[..prefix_end].iter().cloned());
+    let mut last_hunk_line_had_nl = false;
+    for l in 0..line_count {
+        let line = patch.line_in_hunk(hunk_index, l).map_err(err)?;
+        let content = String::from_utf8_lossy(line.content());
+        last_hunk_line_had_nl = content.ends_with('\n');
+        let trimmed = content.trim_end_matches('\n').to_string();
+        match line.origin() {
+            ' ' => parts.push(trimmed),   // context stays
+            '+' => {}                     // worktree addition — reverted
+            '-' => parts.push(trimmed),   // index content restored
+            _ => {}
+        }
+    }
+    parts.extend(wt_lines[suffix_start..].iter().cloned());
+
+    if parts.is_empty() {
+        // Nothing remains — delete the file (untracked or fully reverted).
+        std::fs::remove_file(&workdir_path).map_err(|e| format!("failed to discard: {e}"))?;
+        return Ok(());
+    }
+
+    let mut new_content = parts.join("\n");
+    let restore_nl = had_trailing_newline || last_hunk_line_had_nl;
+    if restore_nl && !new_content.ends_with('\n') {
+        new_content.push('\n');
+    }
+    std::fs::write(&workdir_path, new_content)
+        .map_err(|e| format!("failed to write {path}: {e}"))?;
+    Ok(())
+}
