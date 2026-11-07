@@ -1256,3 +1256,90 @@ fn compose_commit_message_builds_conventional_title_and_body() {
     assert!(body.contains("(+1/−0)") || body.contains("(+1/−1)") || body.contains("(+2/−0)"),
         "body shows per-file diffstats: {body}");
 }
+
+// --- linked repositories: submodules + worktrees ---
+
+#[test]
+fn worktrees_list_branches_and_current_flag() {
+    let dir = scratch_repo("worktrees");
+    write(&dir, "a.txt", "base\n");
+    commit_all(&dir, "base");
+    let base = dir.clone();
+    let wt_path = dir.parent().unwrap().join(format!("orbit-wt-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&wt_path);
+
+    let out = std::process::Command::new("git")
+        .arg("-C").arg(&base)
+        .args(["worktree", "add", wt_path.to_str().unwrap(), "-b", "feature-wt"])
+        .output()
+        .expect("git CLI available");
+    assert!(out.status.success(), "worktree add failed: {}", String::from_utf8_lossy(&out.stderr));
+
+    let trees = list_worktrees(&base, base.to_str().unwrap()).unwrap();
+    assert_eq!(trees.len(), 2, "main + linked worktree");
+    let main = trees.iter().find(|t| t.is_current).unwrap();
+    assert_eq!(main.name, dir.file_name().unwrap().to_string_lossy());
+    let linked = trees.iter().find(|t| !t.is_current).unwrap();
+    assert_eq!(linked.branch, "feature-wt");
+    assert!(linked.path.ends_with(&format!("orbit-wt-{}", std::process::id())));
+
+    // Opened from INSIDE the linked worktree: it becomes the current one.
+    let from_linked = list_worktrees(&wt_path, wt_path.to_str().unwrap()).unwrap();
+    let current = from_linked.iter().filter(|t| t.is_current).count();
+    assert_eq!(current, 1, "exactly one worktree marked current");
+
+    let _ = fs::remove_dir_all(&wt_path);
+    let _ = std::process::Command::new("git")
+        .arg("-C").arg(&base)
+        .args(["worktree", "prune"])
+        .output();
+}
+
+#[test]
+fn submodules_list_empty_when_none() {
+    let dir = scratch_repo("no-submodule");
+    write(&dir, "a.txt", "base\n");
+    commit_all(&dir, "base");
+    assert!(list_submodules(&dir).unwrap().is_empty());
+
+    // Add a real submodule from a local sibling repo via the CLI.
+    let inner = dir.parent().unwrap().join(format!("orbit-sub-inner-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&inner);
+    fs::create_dir_all(&inner).unwrap();
+    let _ = Repository::init(&inner);
+    fs::write(inner.join("lib.txt"), "inner\n").unwrap();
+    let init = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C").arg(&inner)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "Test User")
+            .env("GIT_AUTHOR_EMAIL", "test@orbit.dev")
+            .env("GIT_COMMITTER_NAME", "Test User")
+            .env("GIT_COMMITTER_EMAIL", "test@orbit.dev")
+            .output()
+            .expect("git CLI")
+    };
+    init(&["add", "."]);
+    init(&["commit", "-m", "inner"]);
+    let outer_init = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C").arg(&dir)
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "Test User")
+            .env("GIT_AUTHOR_EMAIL", "test@orbit.dev")
+            .env("GIT_COMMITTER_NAME", "Test User")
+            .env("GIT_COMMITTER_EMAIL", "test@orbit.dev")
+            .output()
+            .expect("git CLI")
+    };
+    outer_init(&["-c", "protocol.file.allow=always", "submodule", "add", inner.to_str().unwrap(), "vendor/inner"]);
+    outer_init(&["commit", "-m", "add submodule"]);
+
+    let subs = list_submodules(&dir).unwrap();
+    assert_eq!(subs.len(), 1);
+    let sub = &subs[0];
+    assert_eq!(sub.name, "vendor/inner");
+    assert_eq!(sub.path, "vendor/inner");
+    assert!(sub.abs_path.ends_with("vendor/inner"));
+    assert!(!sub.dirty, "freshly added submodule matches the index");
+}

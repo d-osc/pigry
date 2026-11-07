@@ -11,9 +11,11 @@ import './ExplorerScreen.css';
 interface ExplorerScreenProps {
   /** Path requested by the palette (⌘P) — opens it when it changes. */
   openPath?: string | null;
+  /** Opens the commit graph focused on the given commit. */
+  onJumpToCommit: (oid: string) => void;
 }
 
-export function ExplorerScreen({ openPath }: ExplorerScreenProps) {
+export function ExplorerScreen({ openPath, onJumpToCommit }: ExplorerScreenProps) {
   const { repository } = useRepository();
   const [tree, setTree] = useState<FileTreeData | null>(null);
   // Remounted by AppShell on openPath change (key), so the initializer runs.
@@ -86,6 +88,7 @@ export function ExplorerScreen({ openPath }: ExplorerScreenProps) {
               onToggleHistory={() => setHistoryOn((value) => !value)}
               onToggleCompare={() => setCompareOn((value) => !value)}
               onBufferChange={handleBufferChange}
+              onJumpToCommit={onJumpToCommit}
             />
             {historyOn && (
               <div className="explorer-screen__panels">

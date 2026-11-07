@@ -67,6 +67,26 @@ export interface RepositoryState {
   headOid: string | null;
   /** True while an interactive/regular rebase is mid-flight. */
   rebaseInProgress: boolean;
+  submodules: SubmoduleInfo[];
+  worktrees: WorktreeInfo[];
+}
+
+export interface SubmoduleInfo {
+  name: string;
+  path: string;
+  /** Absolute path of the submodule worktree, for opening it as a workspace. */
+  absPath: string;
+  url: string;
+  /** True when the checked-out commit differs from the recorded one. */
+  dirty: boolean;
+}
+
+export interface WorktreeInfo {
+  name: string;
+  path: string;
+  branch: string;
+  /** True when this worktree is the currently open workspace. */
+  isCurrent: boolean;
 }
 
 export type RebaseAction = 'pick' | 'squash' | 'drop';
@@ -163,16 +183,8 @@ export interface HunkInfo {
 export interface BlameLine {
   line: number;
   shortOid: string;
-  authorName: string;
-  authorInitials: string;
-  timeSeconds: number;
-  summary: string;
-  uncommitted: boolean;
-}
-
-export interface BlameLine {
-  line: number;
-  shortOid: string;
+  /** Full commit oid — used by jump-to-commit in the blame hover. */
+  oid: string;
   authorName: string;
   authorInitials: string;
   timeSeconds: number;

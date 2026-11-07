@@ -9,6 +9,7 @@ import {
   ListChecks,
   ListMinus,
   GitBranchPlus,
+  Keyboard,
   Network,
   RefreshCw,
   Settings,
@@ -36,10 +37,11 @@ interface CommandDeps {
   activeScreen: NavId;
   repository: RepositoryContextValue;
   openSettings: () => void;
+  openShortcuts: () => void;
 }
 
 /** Builds the palette command list from current app state. */
-export function buildCommands({ navigate, activeScreen, repository, openSettings }: CommandDeps): Command[] {
+export function buildCommands({ navigate, activeScreen, repository, openSettings, openShortcuts }: CommandDeps): Command[] {
   const { repository: repo, refresh, stage, unstage, stash, fetchRemote, pullRemote, pushRemote, pickRepository } =
     repository;
 
@@ -77,6 +79,14 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
       icon: Settings,
       enabled: true,
       run: openSettings,
+    },
+    {
+      id: 'app:shortcuts',
+      title: 'Show keyboard shortcuts',
+      section: 'Navigate',
+      icon: Keyboard,
+      enabled: true,
+      run: openShortcuts,
     },
     {
       id: 'repo:stage-all',

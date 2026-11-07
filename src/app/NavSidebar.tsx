@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronRight,
   Cloud,
+  FolderGit2,
   GitBranch,
   Settings,
   Tag as TagIcon,
@@ -57,6 +58,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
     stashApply,
     stashPop,
     stashDrop,
+    openRepository,
     busy,
   } = useRepository();
   const [creating, setCreating] = useState(false);
@@ -286,6 +288,49 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
                   </button>
                 </span>
               </div>
+            ))}
+          </Section>
+        )}
+
+        {repository.worktrees.length > 0 && (
+          <Section title="Worktrees" count={repository.worktrees.length}>
+            {repository.worktrees.map((tree) => (
+              <button
+                key={tree.name}
+                type="button"
+                className={`nav-branch${tree.isCurrent ? ' nav-branch--current' : ''}`}
+                onClick={() => {
+                  if (!tree.isCurrent && !busy) void openRepository(tree.path);
+                }}
+                title={`${tree.path} — branch ${tree.branch}${tree.isCurrent ? ' (open)' : ' — click to open as workspace'}`}
+              >
+                <GitBranch size={12} className="nav-branch__icon" />
+                <span className="nav-branch__name">{tree.name}</span>
+                <span className="nav-worktree__branch">{tree.branch}</span>
+              </button>
+            ))}
+          </Section>
+        )}
+
+        {repository.submodules.length > 0 && (
+          <Section title="Submodules" count={repository.submodules.length}>
+            {repository.submodules.map((sub) => (
+              <button
+                key={sub.name}
+                type="button"
+                className="nav-branch"
+                onClick={() => {
+                  if (!busy) void openRepository(sub.absPath);
+                }}
+                title={`${sub.path}\n${sub.url} — click to open as workspace`}
+              >
+                <FolderGit2 size={12} className="nav-branch__icon" />
+                <span className="nav-branch__name">{sub.name}</span>
+                <span
+                  className={`nav-submodule__dot${sub.dirty ? ' nav-submodule__dot--dirty' : ''}`}
+                  title={sub.dirty ? 'Checked-out commit differs from the index' : 'In sync'}
+                />
+              </button>
             ))}
           </Section>
         )}

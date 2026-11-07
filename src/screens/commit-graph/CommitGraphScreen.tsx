@@ -8,12 +8,19 @@ import { RepoStatsBar } from './RepoStatsBar';
 import { CommitDetailPanel } from './CommitDetailPanel';
 import './CommitGraphScreen.css';
 
-export function CommitGraphScreen({ onStartRebase }: { onStartRebase: (oid: string) => void }) {
+export function CommitGraphScreen({
+  onStartRebase,
+  focusCommit,
+}: {
+  onStartRebase: (oid: string) => void;
+  /** Commit to select on first mount (jump-to-commit from blame hover). */
+  focusCommit?: string | null;
+}) {
   const { repository, fetchRemote, busy } = useRepository();
   const [includeRemotes, setIncludeRemotes] = useState(false);
   const [query, setQuery] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(focusCommit ?? null);
   const { history, error, loading } = useCommitHistory(
     includeRemotes,
     reloadKey,

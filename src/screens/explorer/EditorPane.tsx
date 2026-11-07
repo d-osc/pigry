@@ -19,6 +19,8 @@ interface EditorPaneProps {
   onToggleCompare: () => void;
   /** Reports the current buffer so the compare panel can diff against it. */
   onBufferChange: (buffer: { content: string; language: string } | null) => void;
+  /** Opens the commit graph focused on the given commit. */
+  onJumpToCommit: (oid: string) => void;
 }
 
 export function EditorPane({
@@ -28,6 +30,7 @@ export function EditorPane({
   onToggleHistory,
   onToggleCompare,
   onBufferChange,
+  onJumpToCommit,
 }: EditorPaneProps) {
   const { refresh, busy } = useRepository();
   const [entry, setEntry] = useState<{
@@ -43,6 +46,10 @@ export function EditorPane({
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
   const draftRef = useRef(draft);
+  const jumpRef = useRef(onJumpToCommit);
+  useEffect(() => {
+    jumpRef.current = onJumpToCommit;
+  }, [onJumpToCommit]);
 
   const { lines: blameLines } = useFileBlame(path, blameOn);
   const { repository } = useRepository();
@@ -150,6 +157,53 @@ export function EditorPane({
       });
     decorationsRef.current = editorInstance.createDecorationsCollection(decorations);
   }, [blameOn, blameLines, editorInstance, path]);
+
+  // Jump-to-commit command used by the blame hover popup links. Commands die
+  // with their editor instance, so no dispose is needed here.
+  useEffect(() => {
+    if (!editorInstance) return;
+    editorInstance.addCommand(
+      0,
+      (_ctx, oid: string) => jumpRef.current(oid),
+      'orbit.jumpToCommit',
+    );
+  }, [editorInstance]);
+
+  // Blame hover popup: commit summary, author and a jump-to-commit link.
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    const model = editorInstance?.getModel();
+    if (!blameOn || !blameLines || !editorInstance || !monaco || !model) {
+      return;
+    }
+    const byLine = new Map(blameLines.map((line) => [line.line, line]));
+    const disposable = monaco.languages.registerHoverProvider(
+      model.getLanguageId(),
+      {
+        provideHover: (
+          _model: MonacoEditorNS.ITextModel,
+          position: { lineNumber: number },
+        ) => {
+          const info = byLine.get(position.lineNumber);
+          if (!info || info.uncommitted) return null;
+          return {
+            range: new monaco.Range(position.lineNumber, 1, position.lineNumber, 1),
+            contents: [
+              { value: `**${info.summary}**` },
+              {
+                value: `${info.authorName} · ${relativeTime(info.timeSeconds)} · ${info.shortOid}`,
+              },
+              {
+                value: `[View commit in graph](command:orbit.jumpToCommit "${info.oid}")`,
+                isTrusted: true,
+              },
+            ],
+          };
+        },
+      },
+    );
+    return () => disposable.dispose();
+  }, [blameOn, blameLines, editorInstance]);
 
   // Gutter decorations: mark added/modified lines vs HEAD.
   const gutterDecorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);

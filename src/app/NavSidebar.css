@@ -358,3 +358,26 @@
   background: #3b2530;
   color: var(--red);
 }
+.nav-worktree__branch {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.nav-branch--current .nav-worktree__branch {
+  color: var(--accent);
+}
+
+.nav-submodule__dot {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.nav-submodule__dot--dirty {
+  background: var(--orange);
+}

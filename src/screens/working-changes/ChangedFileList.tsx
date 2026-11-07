@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import type { ChangedFile } from '../../types/repository';
@@ -26,6 +26,19 @@ function statusClass(status: ChangedFile['status']): string {
 export function ChangedFileList({ files, selectedFileId, onSelect }: ChangedFileListProps) {
   const { stage, unstage, busy } = useRepository();
   const [filter, setFilter] = useState('');
+  const filterRef = useRef<HTMLInputElement | null>(null);
+
+  // ⌘F / Ctrl+F focuses the file filter.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        filterRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const { unstaged, staged } = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -76,6 +89,7 @@ export function ChangedFileList({ files, selectedFileId, onSelect }: ChangedFile
       <div className="file-filter">
         <Search size={12} className="file-filter__icon" />
         <input
+          ref={filterRef}
           className="file-filter__input"
           placeholder="Filter files…"
           value={filter}

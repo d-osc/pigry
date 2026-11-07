@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { composeCommitMessage } from '../../lib/tauriClient';
@@ -34,6 +34,18 @@ export function CommitComposer() {
       setCommitting(false);
     }
   };
+
+  // ⌘↵ / Ctrl+↵ commits from anywhere in the app.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void handleCommit();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
 
   const handleGenerate = async () => {
     if (generating || busy) return;

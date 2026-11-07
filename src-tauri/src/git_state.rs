@@ -100,6 +100,10 @@ pub struct RepositoryState {
     pub head_oid: Option<String>,
     /// True while an interactive/regular rebase is mid-flight.
     pub rebase_in_progress: bool,
+    /// Registered git submodules.
+    pub submodules: Vec<SubmoduleInfo>,
+    /// Linked worktrees (main worktree included).
+    pub worktrees: Vec<WorktreeInfo>,
 }
 
 #[derive(Serialize)]
@@ -171,6 +175,8 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         .ok()
         .and_then(|head| head.peel_to_commit().ok())
         .map(|commit| commit.id().to_string());
+    let submodules = list_submodules(path).unwrap_or_default();
+    let worktrees = list_worktrees(path, &local_path).unwrap_or_default();
 
     Ok(RepositoryState {
         organization,
@@ -188,6 +194,8 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         stashes,
         head_oid,
         rebase_in_progress,
+        submodules,
+        worktrees,
     })
 }
 
@@ -2181,6 +2189,124 @@ pub fn compose_commit_message(repo_path: &Path) -> Result<ComposedCommitMessage>
     Ok(ComposedCommitMessage { title, body })
 }
 
+/// A registered git submodule of the open repository.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmoduleInfo {
+    pub name: String,
+    /// Path relative to the repository root (slash-normalized).
+    pub path: String,
+    /// Absolute path of the submodule worktree, for opening it as a workspace.
+    pub abs_path: String,
+    pub url: String,
+    /// True when the submodule's checked-out commit differs from the recorded one.
+    pub dirty: bool,
+}
+
+/// All submodules registered in `.gitmodules`.
+pub fn list_submodules(repo_path: &Path) -> Result<Vec<SubmoduleInfo>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let workdir = repo.workdir().unwrap_or_else(|| repo.path());
+    let mut out = Vec::new();
+    for sub in repo.submodules().map_err(err)? {
+        let name = sub.name().unwrap_or("").to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let rel = sub.path().to_string_lossy().replace('\\', "/");
+        let dirty = match (sub.workdir_id(), sub.index_id()) {
+            (Some(w), Some(i)) => w != i,
+            // Initialized in the index but not checked out yet.
+            (Some(_), None) => true,
+            _ => false,
+        };
+        out.push(SubmoduleInfo {
+            name,
+            abs_path: workdir.join(&rel).to_string_lossy().replace('\\', "/"),
+            path: rel,
+            url: sub.url().unwrap_or("").to_string(),
+            dirty,
+        });
+    }
+    Ok(out)
+}
+
+/// A linked worktree of the open repository.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeInfo {
+    pub name: String,
+    pub path: String,
+    pub branch: String,
+    /// True when this worktree is the currently open workspace.
+    pub is_current: bool,
+}
+
+fn normalize_path(p: &str) -> String {
+    p.replace('\\', "/").trim_end_matches('/').to_lowercase()
+}
+
+/// All linked worktrees, with the branch each one has checked out. The
+/// current worktree (whatever path the repo was opened from) is listed first;
+/// git2's `worktrees()` only covers linked entries, so the current one is
+/// added here and duplicates are dropped.
+pub fn list_worktrees(repo_path: &Path, active_path: &str) -> Result<Vec<WorktreeInfo>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let active = normalize_path(active_path);
+    let mut out = Vec::new();
+
+    // The current worktree: HEAD read through the opened repo.
+    let current_path = repo
+        .workdir()
+        .unwrap_or_else(|| repo.path())
+        .to_string_lossy()
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_string();
+    let current_branch = repo
+        .head()
+        .ok()
+        .and_then(|head| head.shorthand().map(str::to_string))
+        .unwrap_or_else(|| "detached".to_string());
+    let current_name = current_path
+        .rsplit('/')
+        .next()
+        .unwrap_or(&current_path)
+        .to_string();
+    out.push(WorktreeInfo {
+        name: current_name,
+        is_current: normalize_path(&current_path) == active,
+        path: current_path.clone(),
+        branch: current_branch,
+    });
+
+    for name in repo.worktrees().map_err(err)?.iter().flatten() {
+        let wt = repo.find_worktree(name).map_err(err)?;
+        let path = wt
+            .path()
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_end_matches('/')
+            .to_string();
+        if normalize_path(&path) == normalize_path(&current_path) {
+            continue; // the current worktree is already listed above
+        }
+        let branch = {
+            let wt_repo = Repository::open(wt.path());
+            let head = wt_repo.as_ref().ok().and_then(|r| r.head().ok());
+            head.and_then(|h| h.shorthand().map(str::to_string))
+                .unwrap_or_else(|| "detached".to_string())
+        };
+        out.push(WorktreeInfo {
+            name: name.to_string(),
+            is_current: normalize_path(&path) == active,
+            path,
+            branch,
+        });
+    }
+    Ok(out)
+}
+
 /// Un-stages hunk `hunk_index` of `path`: reverse-applies the staged hunk
 /// onto the index so those lines return to their HEAD state in the index,
 /// while other hunks of the file stay staged.
@@ -2384,6 +2510,8 @@ pub struct BlameLine {
     /// 1-based line number in the worktree file.
     pub line: u32,
     pub short_oid: String,
+    /// Full commit oid, for jump-to-commit from the blame popup.
+    pub oid: String,
     pub author_name: String,
     pub author_initials: String,
     pub time_seconds: i64,
@@ -2415,6 +2543,7 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
                 lines.push(BlameLine {
                     line: start + offset,
                     short_oid: "———".to_string(),
+                    oid: String::new(),
                     author_name: "Uncommitted".to_string(),
                     author_initials: "—".to_string(),
                     time_seconds: 0,
@@ -2437,6 +2566,7 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
             lines.push(BlameLine {
                 line: start + offset,
                 short_oid: short_oid.clone(),
+                oid: commit_id.to_string(),
                 author_name: author_name.clone(),
                 author_initials: initials.clone(),
                 time_seconds,

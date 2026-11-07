@@ -6,6 +6,7 @@ import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
 import { WorkspaceBar } from './WorkspaceBar';
+import { ShortcutSheet } from './ShortcutSheet';
 import { Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
@@ -61,14 +62,26 @@ function RebaseBanner({ onAbort }: { onAbort: () => void }) {
   );
 }
 
-function renderScreen(screen: NavId, explorerOpenPath: string | null, startRebase: (oid: string) => void) {
+function renderScreen(
+  screen: NavId,
+  explorerOpenPath: string | null,
+  startRebase: (oid: string) => void,
+  focusCommit: string | null,
+  jumpToCommit: (oid: string) => void,
+) {
   switch (screen) {
     case 'working-changes':
       return <WorkingChangesScreen />;
     case 'commit-graph':
-      return <CommitGraphScreen onStartRebase={startRebase} />;
+      return <CommitGraphScreen onStartRebase={startRebase} focusCommit={focusCommit} />;
     case 'explorer':
-      return <ExplorerScreen key={explorerOpenPath ?? 'explorer'} openPath={explorerOpenPath} />;
+      return (
+        <ExplorerScreen
+          key={explorerOpenPath ?? 'explorer'}
+          openPath={explorerOpenPath}
+          onJumpToCommit={jumpToCommit}
+        />
+      );
     default:
       return <PlaceholderScreen screen={screen} />;
   }
@@ -77,6 +90,7 @@ function renderScreen(screen: NavId, explorerOpenPath: string | null, startRebas
 function AppShellInner() {
   const [screen, setScreen] = useState<NavId>('working-changes');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('commands');
   const [paletteFilesRequest, setPaletteFilesRequest] = useState<{
@@ -85,30 +99,52 @@ function AppShellInner() {
   } | null>(null);
   const [filesRequestId, setFilesRequestId] = useState(0);
   const [explorerOpenPath, setExplorerOpenPath] = useState<string | null>(null);
+  const [focusCommit, setFocusCommit] = useState<string | null>(null);
   const [rebaseBase, setRebaseBase] = useState<string | null>(null);
   const repository = useRepository();
   const { mode } = repository;
+
+  const jumpToCommit = useCallback((oid: string) => {
+    setFocusCommit(oid);
+    setScreen('commit-graph');
+  }, []);
 
   const navigate = useCallback((next: NavId) => {
     setScreen(next);
   }, []);
 
   // Ctrl/Cmd+K toggles the command palette; Ctrl/Cmd+P opens file search;
-  // Ctrl/Cmd+, opens repository settings.
+  // Ctrl/Cmd+, opens repository settings; Ctrl/Cmd+/ shows the shortcut sheet;
+  // Ctrl/Cmd+1..3 jumps between the main screens.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      const cmd = event.ctrlKey || event.metaKey;
+      if (!cmd) return;
+      const key = event.key.toLowerCase();
+      if (key === 'k') {
         event.preventDefault();
         setPaletteMode('commands');
         setPaletteOpen((open) => !open);
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+      } else if (key === 'p') {
         event.preventDefault();
         setPaletteMode('files');
         setFilesRequestId((id) => id + 1);
         setPaletteOpen(true);
-      } else if ((event.ctrlKey || event.metaKey) && event.key === ',') {
+      } else if (event.key === ',') {
         event.preventDefault();
         setSettingsOpen(true);
+      } else if (key === '/') {
+        event.preventDefault();
+        setShortcutsOpen((open) => !open);
+      } else if (key === '1') {
+        event.preventDefault();
+        setScreen('working-changes');
+      } else if (key === '2') {
+        event.preventDefault();
+        setScreen('commit-graph');
+      } else if (key === '3') {
+        event.preventDefault();
+        setScreen('explorer');
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -152,6 +188,7 @@ function AppShellInner() {
         activeScreen: screen,
         repository: repository as RepositoryContextValue,
         openSettings: () => setSettingsOpen(true),
+        openShortcuts: () => setShortcutsOpen(true),
       }),
     [navigate, screen, repository],
   );
@@ -171,7 +208,7 @@ function AppShellInner() {
             <main className="app-shell__workspace">
               <RebaseBanner onAbort={() => void repository.abortRebase()} />
               <ErrorBanner />
-              {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid))}
+              {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit)}
             </main>
           </div>
           <StatusBar />
@@ -197,6 +234,7 @@ function AppShellInner() {
       {settingsOpen && (
         <SettingsModal onClose={() => setSettingsOpen(false)} notify={repository.notify} />
       )}
+      {shortcutsOpen && <ShortcutSheet onClose={() => setShortcutsOpen(false)} />}
       {rebaseBase && <RebaseModal baseOid={rebaseBase} onClose={() => setRebaseBase(null)} />}
       <ToastContainer toasts={repository.toasts} />
     </div>
