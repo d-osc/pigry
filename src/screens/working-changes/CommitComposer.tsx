@@ -1,15 +1,17 @@
 import { useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
+import { composeCommitMessage } from '../../lib/tauriClient';
 import './CommitComposer.css';
 
 const TITLE_LIMIT = 72;
 
 export function CommitComposer() {
-  const { repository, commit, busy } = useRepository();
+  const { repository, commit, busy, notify } = useRepository();
   const [message, setMessage] = useState('');
   const [amend, setAmend] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const stagedCount = repository?.files.filter((f) => f.staged).length ?? 0;
   const canCommit = !busy && !committing && stagedCount > 0;
@@ -33,13 +35,32 @@ export function CommitComposer() {
     }
   };
 
+  const handleGenerate = async () => {
+    if (generating || busy) return;
+    setGenerating(true);
+    try {
+      const composed = await composeCommitMessage();
+      setMessage(composed.body ? `${composed.title}\n\n${composed.body}` : composed.title);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="commit-composer">
       <div className="commit-composer__head">
         <h2 className="commit-composer__title">Create commit</h2>
-        <button type="button" className="commit-composer__generate" title="Coming soon">
+        <button
+          type="button"
+          className="commit-composer__generate"
+          title="Compose a message from the staged diff"
+          onClick={() => void handleGenerate()}
+          disabled={generating || busy || stagedCount === 0}
+        >
           <Sparkles size={12} />
-          Generate message
+          {generating ? 'Composing…' : 'Generate message'}
         </button>
       </div>
 

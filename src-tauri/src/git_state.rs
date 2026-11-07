@@ -73,8 +73,8 @@ pub struct ChangedFile {
     pub directory: String,
     /// M | A | D | R
     pub status: String,
-    pub additions: u32,
-    pub deletions: u32,
+    pub additions: usize,
+    pub deletions: usize,
     pub staged: bool,
     pub untracked: bool,
 }
@@ -114,8 +114,8 @@ pub struct FileDiffContent {
 
 #[derive(Default)]
 struct LineCounts {
-    additions: u32,
-    deletions: u32,
+    additions: usize,
+    deletions: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -1275,8 +1275,8 @@ pub struct CommitFileEntry {
     pub directory: String,
     /// M | A | D | R
     pub status: String,
-    pub additions: u32,
-    pub deletions: u32,
+    pub additions: usize,
+    pub deletions: usize,
 }
 
 #[derive(Serialize)]
@@ -1846,6 +1846,339 @@ pub fn file_hunks(repo_path: &Path, path: &str, staged: bool) -> Result<Vec<Hunk
         }
     }
     Ok(hunks)
+}
+
+/// One emitted patch line of a line-level stage operation.
+struct PatchLine {
+    /// '+', '-' or ' '.
+    origin: char,
+    old_no: Option<u32>,
+    new_no: Option<u32>,
+    content: String,
+}
+
+/// Builds a minimal unified-diff hunk from the selected lines of one hunk.
+///
+/// Forward mode (`reverse = false`, stage): the patch applies to the index,
+/// whose content equals the diff's old side.
+/// - context lines are kept,
+/// - selected additions are emitted as `+`, unselected additions omitted,
+/// - selected deletions emitted as `-`, unselected deletions become context.
+///
+/// Reverse mode (`reverse = true`, unstage): the patch removes the selected
+/// changes from the index, whose content equals the diff's NEW side — roles
+/// swap: selected additions become `-`, selected deletions become `+`,
+/// unselected additions become context, unselected deletions are omitted.
+///
+/// `base_start` is the hunk start in the apply-target file (old_start for
+/// forward, new_start for reverse); `shift` is the cumulative delta of
+/// previously emitted hunks. Returns None when no change line is selected.
+fn build_selected_hunk(
+    lines: &[PatchLine],
+    selected_old: &[u32],
+    selected_new: &[u32],
+    base_start: u32,
+    shift: i64,
+    reverse: bool,
+) -> Option<(String, i64)> {
+    let old_sel = |no: Option<u32>| no.map(|n| selected_old.contains(&n)).unwrap_or(false);
+    let new_sel = |no: Option<u32>| no.map(|n| selected_new.contains(&n)).unwrap_or(false);
+
+    let mut emitted: Vec<(char, String)> = Vec::new();
+    let mut any_change = false;
+    for line in lines {
+        let content = line.content.clone();
+        match (reverse, line.origin) {
+            (false, '+') if new_sel(line.new_no) => {
+                emitted.push(('+', content));
+                any_change = true;
+            }
+            (false, '-') if old_sel(line.old_no) => {
+                emitted.push(('-', content));
+                any_change = true;
+            }
+            (false, '-') => emitted.push((' ', content)),
+            (false, ' ') => emitted.push((' ', content)),
+            (true, '+') if new_sel(line.new_no) => {
+                emitted.push(('-', content));
+                any_change = true;
+            }
+            (true, '-') if old_sel(line.old_no) => {
+                emitted.push(('+', content));
+                any_change = true;
+            }
+            (true, '+') => emitted.push((' ', content)),
+            (true, ' ') => emitted.push((' ', content)),
+            _ => {}
+        }
+    }
+    if !any_change {
+        return None;
+    }
+
+    let old_count = emitted.iter().filter(|(o, _)| *o != '+').count() as u32;
+    let new_count = emitted.iter().filter(|(o, _)| *o != '-').count() as u32;
+    let mut body = format!(
+        "@@ -{base_start},{old_count} +{},{} @@\n",
+        base_start as i64 + shift,
+        new_count
+    );
+    for (origin, content) in &emitted {
+        let mut l = format!("{origin}{content}");
+        if !l.ends_with('\n') {
+            // Final line without a newline: mark it explicitly.
+            l.push_str("\n\\ No newline at end of file\n");
+        }
+        body.push_str(&l);
+    }
+    Some((body, new_count as i64 - old_count as i64))
+}
+
+/// Stages (side = "unstaged") or un-stages (side = "staged") individual lines
+/// of `path` by building a minimal patch and applying it to the index.
+/// `selected_old` / `selected_new` are the old-file / new-file line numbers
+/// highlighted in the diff viewer (either may be empty).
+pub fn stage_lines(
+    repo_path: &Path,
+    path: &str,
+    side: &str,
+    selected_old: &[u32],
+    selected_new: &[u32],
+) -> Result<()> {
+    if selected_old.is_empty() && selected_new.is_empty() {
+        return Err("no lines selected".to_string());
+    }
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path)
+        .include_untracked(true)
+        .show_untracked_content(true)
+        .recurse_untracked_dirs(true);
+    let reverse = side == "staged";
+    let mut diff = if reverse {
+        repo.diff_tree_to_index(head_tree.as_ref(), None, Some(&mut opts))
+            .map_err(err)?
+    } else {
+        repo.diff_index_to_workdir(None, Some(&mut opts))
+            .map_err(err)?
+    };
+
+    let mut body = String::new();
+    let mut shift: i64 = 0;
+    for idx in 0..diff.deltas().len() {
+        let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) else {
+            continue;
+        };
+        for h in 0..patch.num_hunks() {
+            let (hunk, line_count) = patch.hunk(h).map_err(err)?;
+            let (old_start, _, new_start, _, _) = parse_hunk_header(hunk.header());
+            // The apply target's content equals this side of the diff.
+            let base_start = if reverse { new_start } else { old_start };
+            let mut lines: Vec<PatchLine> = Vec::new();
+            for l in 0..line_count {
+                let line = patch.line_in_hunk(h, l).map_err(err)?;
+                let origin = line.origin();
+                if origin == '\\' {
+                    // EOF marker: attach to the previously emitted line.
+                    if let Some(last) = lines.last_mut() {
+                        let c = last.content.trim_end_matches('\n').to_string();
+                        last.content = format!("{c}\n\\ No newline at end of file\n");
+                    }
+                    continue;
+                }
+                lines.push(PatchLine {
+                    origin,
+                    old_no: line.old_lineno(),
+                    new_no: line.new_lineno(),
+                    content: String::from_utf8_lossy(line.content()).to_string(),
+                });
+            }
+            if let Some((hunk_body, delta)) =
+                build_selected_hunk(&lines, selected_old, selected_new, base_start, shift, reverse)
+            {
+                body.push_str(&hunk_body);
+                shift += delta;
+            }
+        }
+    }
+    if body.is_empty() {
+        return Err("no stageable lines in the selection".to_string());
+    }
+
+    let text = format!("diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n{body}");
+    let parsed = git2::Diff::from_buffer(text.as_bytes()).map_err(err)?;
+    repo.apply(&parsed, git2::ApplyLocation::Index, None)
+        .map_err(err)?;
+    Ok(())
+}
+
+/// A commit message composed from the staged diff.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposedCommitMessage {
+    pub title: String,
+    pub body: String,
+}
+
+/// Composes a conventional-style commit message from the staged changes:
+/// the type comes from the touched paths (docs/tests/CI/additions), the
+/// subject lists the changed files, and the body groups the diffstats.
+/// Fully deterministic — no AI service involved.
+pub fn compose_commit_message(repo_path: &Path) -> Result<ComposedCommitMessage> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+    let mut diff = repo
+        .diff_tree_to_index(head_tree.as_ref(), None, None)
+        .map_err(err)?;
+    let _ = diff.find_similar(None);
+
+    struct FileChange {
+        path: String,
+        status: char,
+        additions: usize,
+        deletions: usize,
+        is_new: bool,
+    }
+    let mut files: Vec<FileChange> = Vec::new();
+    let mut total_add = 0usize;
+    let mut total_del = 0usize;
+    for idx in 0..diff.deltas().len() {
+        let delta = diff.get_delta(idx).ok_or_else(|| "missing delta".to_string())?;
+        let path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default();
+        if path.is_empty() {
+            continue;
+        }
+        let status = match delta.status() {
+            git2::Delta::Added => 'A',
+            git2::Delta::Deleted => 'D',
+            _ => 'M',
+        };
+        let (additions, deletions) = match git2::Patch::from_diff(&diff, idx) {
+            Ok(Some(patch)) => {
+                // (context, additions, deletions)
+                let (_, added, removed) = patch.line_stats().map_err(err)?;
+                (added, removed)
+            }
+            _ => (0, 0),
+        };
+        total_add += additions;
+        total_del += deletions;
+        files.push(FileChange {
+            is_new: status == 'A',
+            status,
+            additions,
+            deletions,
+            path,
+        });
+    }
+    if files.is_empty() {
+        return Err("nothing staged to compose a message from".to_string());
+    }
+
+    let is_docs = files.iter().all(|f| {
+        f.path.ends_with(".md") || f.path.starts_with("docs/") || f.path.starts_with("doc/")
+    });
+    let is_tests = files.iter().all(|f| {
+        let p = f.path.to_lowercase();
+        p.starts_with("tests/") || p.ends_with("_test.rs") || p.contains(".test.") || p.contains(".spec.")
+    });
+    let is_ci = files
+        .iter()
+        .all(|f| f.path.starts_with(".github/") || f.path.contains("ci") || f.path.contains("workflow"));
+    let has_new = files.iter().any(|f| f.is_new);
+    let only_deletions = files.iter().all(|f| f.status == 'D');
+    let deletion_dominant = total_del > total_add * 2 && !has_new;
+
+    let (kind, verb) = if only_deletions {
+        ("chore", "remove")
+    } else if is_docs {
+        ("docs", "update")
+    } else if is_tests {
+        ("test", "cover")
+    } else if is_ci {
+        ("ci", "update")
+    } else if deletion_dominant {
+        ("refactor", "rework")
+    } else if has_new {
+        ("feat", "add")
+    } else {
+        ("chore", "update")
+    };
+
+    // Scope: the deepest directory prefix shared by every file.
+    let dir_of = |p: &str| match p.rfind('/') {
+        Some(i) => p[..i].to_string(),
+        None => String::new(),
+    };
+    let scope = {
+        let first = dir_of(&files[0].path);
+        let common = files
+            .iter()
+            .all(|f| dir_of(&f.path) == first);
+        if common && !first.is_empty() {
+            first.rsplit('/').next().unwrap_or(&first).to_string()
+        } else {
+            String::new()
+        }
+    };
+
+    let basename = |p: &str| {
+        p.rsplit('/').next().unwrap_or(p).to_string()
+    };
+    let mut names: Vec<String> = Vec::new();
+    for f in files.iter().take(3) {
+        names.push(basename(&f.path));
+    }
+    let more = files.len().saturating_sub(3);
+    let mut subject = format!("{} {}", verb, names.join(", "));
+    if more > 0 {
+        subject.push_str(&format!(" (+{more} more)"));
+    }
+    let mut title = if scope.is_empty() {
+        format!("{kind}: {subject}")
+    } else {
+        format!("{kind}({scope}): {subject}")
+    };
+    if title.chars().count() > 72 {
+        let cut: String = title.chars().take(69).collect();
+        title = format!("{cut}...");
+    }
+
+    // Body: one bullet per file, grouped by directory.
+    let mut body = String::new();
+    let mut last_dir = String::new();
+    let shown = files.len().min(12);
+    for f in &files[..shown] {
+        let dir = dir_of(&f.path);
+        if dir != last_dir {
+            if !last_dir.is_empty() {
+                body.push('\n');
+            }
+            body.push_str(&format!("{dir}/\n"));
+            last_dir = dir;
+        }
+        body.push_str(&format!(
+            "- {} (+{}/−{})\n",
+            basename(&f.path),
+            f.additions,
+            f.deletions
+        ));
+    }
+    if files.len() > shown {
+        body.push_str(&format!("… and {} more\n", files.len() - shown));
+    }
+    let body = body.trim_end().to_string();
+    let _ = total_add;
+    let _ = total_del;
+
+    Ok(ComposedCommitMessage { title, body })
 }
 
 /// Un-stages hunk `hunk_index` of `path`: reverse-applies the staged hunk

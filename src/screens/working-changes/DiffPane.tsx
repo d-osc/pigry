@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import { FileCode2, RotateCcw, Plus } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
@@ -12,16 +12,88 @@ interface DiffPaneProps {
   selectedFileId: string;
 }
 
+interface LineRange {
+  start: number;
+  end: number;
+}
+
+/** One line of the unified (inline) diff view. */
+interface InlineEntry {
+  origin: 'old' | 'new' | 'ctx';
+  oldNo: number | null;
+  newNo: number | null;
+}
+
+type MonacoChange = {
+  originalStartLineNumber: number;
+  originalEndLineNumber: number;
+  modifiedStartLineNumber: number;
+  modifiedEndLineNumber: number;
+};
+
+/**
+ * Reconstructs the unified view's line layout from monaco's line changes:
+ * each change block renders original (deleted) lines first, then modified
+ * (added) lines, with shared context between blocks. Returns viewLine → entry.
+ */
+function buildInlineMap(changes: MonacoChange[]): Map<number, InlineEntry> {
+  const map = new Map<number, InlineEntry>();
+  let view = 1;
+  let o = 1;
+  let m = 1;
+  for (const change of changes) {
+    const origStart = Math.max(change.originalStartLineNumber, 1);
+    const modStart = Math.max(change.modifiedStartLineNumber, 1);
+    while (o < origStart && m < modStart) {
+      map.set(view++, { origin: 'ctx', oldNo: o, newNo: m });
+      o += 1;
+      m += 1;
+    }
+    const origEnd = change.originalEndLineNumber;
+    for (let n = o; n <= origEnd; n += 1) {
+      map.set(view++, { origin: 'old', oldNo: n, newNo: null });
+    }
+    o = Math.max(o, origEnd + 1);
+    const modEnd = change.modifiedEndLineNumber;
+    for (let n = m; n <= modEnd; n += 1) {
+      map.set(view++, { origin: 'new', oldNo: null, newNo: n });
+    }
+    m = Math.max(m, modEnd + 1);
+  }
+  return map;
+}
+
+/** Selected ranges stamped with the file they belong to (race guard). */
+interface LineSelection {
+  id: string;
+  oldSel: LineRange | null;
+  newSel: LineRange | null;
+}
+
+function rangeLineCount(range: LineRange | null): number {
+  return range ? range.end - range.start + 1 : 0;
+}
+
+function rangeToNumbers(range: LineRange | null): number[] {
+  if (!range) return [];
+  const out: number[] = [];
+  for (let n = range.start; n <= range.end; n += 1) out.push(n);
+  return out;
+}
+
 export function DiffPane({ selectedFileId }: DiffPaneProps) {
-  const { repository, stage, unstage, discard, busy } = useRepository();
+  const { repository, stage, unstage, discard, stageLines, busy } = useRepository();
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   const [unified, setUnified] = useState(true);
-  const [hunkReloadKey, setHunkReloadKey] = useState(0);
+  const [mutatedKey, setMutatedKey] = useState(0);
+  const [selection, setSelection] = useState<LineSelection | null>(null);
   const [entry, setEntry] = useState<{
     id: string;
     diff: FileDiffContent | null;
     failed: boolean;
   } | null>(null);
+  const diffEditorRef =
+    useRef<import('@monaco-editor/react').MonacoDiffEditor | null>(null);
 
   // selectedFileId = "<path>:staged|unstaged"
   const separator = selectedFileId.lastIndexOf(':');
@@ -42,12 +114,79 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
     return () => {
       cancelled = true;
     };
-  }, [selectedFileId, path, staged]);
+    // mutatedKey: the diff changes after hunk/line-level operations.
+  }, [selectedFileId, path, staged, mutatedKey]);
 
   // Ignore entries from a previously selected file while the new one loads.
   const current = entry?.id === selectedFileId ? entry : null;
   const diff = current?.diff ?? null;
   const loading = current === null;
+
+  const activeSelection = selection?.id === selectedFileId ? selection : null;
+  const selectedCount =
+    rangeLineCount(activeSelection?.oldSel ?? null) +
+    rangeLineCount(activeSelection?.newSel ?? null);
+
+  const handleDiffMount = useCallback(
+    (diffEditor: import('@monaco-editor/react').MonacoDiffEditor) => {
+      diffEditorRef.current = diffEditor;
+      // Last-active editor wins: a selection in one side clears the other.
+      const track = (
+        editor: { onDidChangeCursorSelection: (cb: (e: {
+          selection: { startLineNumber: number; endLineNumber: number };
+        }) => void) => void },
+        side: 'oldSel' | 'newSel',
+      ) => {
+        editor.onDidChangeCursorSelection((event) => {
+          const { startLineNumber, endLineNumber } = event.selection;
+          const hasText = endLineNumber >= startLineNumber;
+          setSelection((prev) => {
+            const base = prev?.id === selectedFileId ? prev : { id: selectedFileId, oldSel: null, newSel: null };
+            // Selection collapsed to nothing → clear this side only.
+            return {
+              ...base,
+              [side]: hasText
+                ? { start: startLineNumber, end: endLineNumber }
+                : null,
+            };
+          });
+        });
+      };
+      track(diffEditor.getOriginalEditor(), 'oldSel');
+      track(diffEditor.getModifiedEditor(), 'newSel');
+    },
+    [selectedFileId],
+  );
+
+  const handleStageLines = useCallback(() => {
+    const editor = diffEditorRef.current;
+    if (!editor || !activeSelection) return;
+    let selectedOld: number[] = [];
+    let selectedNew: number[] = [];
+    if (unified) {
+      // The inline view numbers lines across both sides — map view lines to
+      // their old/new file numbers via monaco's line changes.
+      const view = rangeToNumbers(activeSelection.newSel ?? activeSelection.oldSel);
+      const map = buildInlineMap((editor.getLineChanges() ?? []) as MonacoChange[]);
+      for (const viewLine of view) {
+        const mapped = map.get(viewLine);
+        if (!mapped) continue;
+        if (mapped.origin === 'old' && mapped.oldNo !== null) selectedOld.push(mapped.oldNo);
+        if (mapped.origin === 'new' && mapped.newNo !== null) selectedNew.push(mapped.newNo);
+      }
+    } else {
+      selectedOld = rangeToNumbers(activeSelection.oldSel);
+      selectedNew = rangeToNumbers(activeSelection.newSel);
+    }
+    if (selectedOld.length === 0 && selectedNew.length === 0) return;
+    void stageLines(
+      path,
+      staged ? 'staged' : 'unstaged',
+      selectedOld,
+      selectedNew,
+    );
+    setMutatedKey((k) => k + 1);
+  }, [activeSelection, unified, path, staged, stageLines]);
 
   const comparison = staged ? 'HEAD → Index' : 'Index → Working tree';
   const meta = diff ? `${languageLabel(diff.language)} · UTF-8 · LF` : '';
@@ -121,8 +260,8 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
 
       <HunkBar
         selectedFileId={selectedFileId}
-        reloadKey={hunkReloadKey}
-        onMutated={() => setHunkReloadKey((k) => k + 1)}
+        reloadKey={mutatedKey}
+        onMutated={() => setMutatedKey((k) => k + 1)}
       />
 
       <div className="diff-pane__editor">
@@ -140,11 +279,12 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
           </div>
         ) : (
           <DiffEditor
-            key={selectedFileId}
+            key={`${selectedFileId}:${mutatedKey}`}
             original={diff.original ?? ''}
             modified={diff.modified ?? ''}
             language={diff.language}
             theme="orbit-dark"
+            onMount={handleDiffMount}
             options={{
               readOnly: true,
               renderSideBySide: !unified,
@@ -172,7 +312,22 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
       </div>
 
       <footer className="diff-pane__footer">
-        <span className="diff-pane__hint">Select lines to stage part of this file</span>
+        {selectedCount > 0 ? (
+          <button
+            type="button"
+            className="diff-pane__stage-lines"
+            onClick={handleStageLines}
+            disabled={busy}
+            title={staged ? 'Remove the selected lines from the index' : 'Add the selected lines to the index'}
+          >
+            <Plus size={12} />
+            {staged ? 'Unstage' : 'Stage'} {selectedCount} selected line{selectedCount === 1 ? '' : 's'}
+          </button>
+        ) : (
+          <span className="diff-pane__hint">
+            Select lines in either side to stage part of this file
+          </span>
+        )}
         <span className="diff-pane__meta">{meta}</span>
       </footer>
     </section>

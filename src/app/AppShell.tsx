@@ -5,6 +5,7 @@ import { StatusBar } from './StatusBar';
 import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
+import { WorkspaceBar } from './WorkspaceBar';
 import { Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
@@ -160,6 +161,7 @@ function AppShellInner() {
   return (
     <div className="app-shell">
       <TitleBar onOpenPalette={() => setPaletteOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
+      <WorkspaceBar />
       {mode === 'browser' && <BrowserNotice />}
       {mode === 'tauri' && !repository.repository && <NoRepositoryScreen />}
       {showWorkspace && (

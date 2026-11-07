@@ -756,3 +756,31 @@ pub async fn abort_rebase(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+#[tauri::command]
+pub async fn stage_lines(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    side: String,
+    selected_old: Vec<u32>,
+    selected_new: Vec<u32>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::stage_lines(&repo_path, &path, &side, &selected_old, &selected_new)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn compose_commit_message(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<git_state::ComposedCommitMessage, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::compose_commit_message(&repo_path)
+}

@@ -35,6 +35,12 @@ export interface RepositoryContextValue {
   stageHunk: (path: string, hunkIndex: number) => Promise<void>;
   unstageHunk: (path: string, hunkIndex: number) => Promise<void>;
   discardHunk: (path: string, hunkIndex: number) => Promise<void>;
+  stageLines: (
+    path: string,
+    side: 'staged' | 'unstaged',
+    selectedOld: number[],
+    selectedNew: number[],
+  ) => Promise<void>;
   cloneRepo: (url: string, target: string) => Promise<void>;
   rebaseOnto: (base: string) => Promise<void>;
   interactiveRebase: (base: string, steps: RebaseStep[]) => Promise<void>;
@@ -163,6 +169,12 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       stageHunk: (path, hunkIndex) => run(() => client.stageHunk(path, hunkIndex), (p) => p, 'Hunk staged'),
       unstageHunk: (path, hunkIndex) => run(() => client.unstageHunk(path, hunkIndex), (p) => p, 'Hunk unstaged'),
       discardHunk: (path, hunkIndex) => run(() => client.discardHunk(path, hunkIndex), (p) => p, 'Hunk discarded'),
+      stageLines: (path, side, selectedOld, selectedNew) =>
+        run(
+          () => client.stageLines(path, side, selectedOld, selectedNew),
+          (p) => p,
+          side === 'staged' ? 'Selected lines unstaged' : 'Selected lines staged',
+        ),
       cloneRepo: (url, target) => run(() => client.cloneRepo(url, target), (p) => p, 'Repository cloned'),
       rebaseOnto: (base) => run(() => client.rebaseOnto(base), (p) => p, `Rebased onto ${base}`),
       interactiveRebase: (base, steps) =>

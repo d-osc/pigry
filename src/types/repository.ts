@@ -76,6 +76,11 @@ export interface RebaseStep {
   action: RebaseAction;
 }
 
+export interface ComposedCommitMessage {
+  title: string;
+  body: string;
+}
+
 export interface FileDiffContent {
   original: string | null;
   modified: string | null;

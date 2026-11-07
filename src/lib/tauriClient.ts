@@ -16,6 +16,7 @@ import type {
   GitUserInfo,
   RemoteEntry,
   RebaseStep,
+  ComposedCommitMessage,
   WorktreeFileContent,
 } from '../types/repository';
 
@@ -252,4 +253,17 @@ export async function interactiveRebase(
 
 export async function abortRebase(): Promise<AppStatePayload> {
   return invoke('abort_rebase');
+}
+
+export async function stageLines(
+  path: string,
+  side: 'staged' | 'unstaged',
+  selectedOld: number[],
+  selectedNew: number[],
+): Promise<AppStatePayload> {
+  return invoke('stage_lines', { path, side, selectedOld, selectedNew });
+}
+
+export async function composeCommitMessage(): Promise<ComposedCommitMessage> {
+  return invoke('compose_commit_message');
 }

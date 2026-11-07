@@ -1155,3 +1155,104 @@ fn line_changes_classifies_added_and_modified() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+// --- line-level staging ---
+
+#[test]
+fn stage_lines_stages_only_selected_additions() {
+    let dir = scratch_repo("stage-lines-add");
+    write(&dir, "a.txt", "one\ntwo\n");
+    commit_all(&dir, "base");
+    // Worktree adds alpha/beta/gamma after line 2 (new lines 3..5).
+    write(&dir, "a.txt", "one\ntwo\nalpha\nbeta\ngamma\n");
+
+    // Stage ONLY beta (new-file line 4).
+    stage_lines(&dir, "a.txt", "unstaged", &[], &[4]).unwrap();
+
+    let repo = Repository::open(&dir).unwrap();
+    let text = String::from_utf8_lossy(&index_blob(&repo, "a.txt").unwrap()).replace('\r', "");
+    assert_eq!(text, "one\ntwo\nbeta\n", "index gains only the selected line");
+
+    // alpha + gamma remain unstaged.
+    let state = build_state(&dir).unwrap();
+    let file = state.files.iter().find(|f| f.path == "a.txt").unwrap();
+    assert!(!file.staged);
+    assert_eq!(file.additions, 2, "alpha and gamma stay in the worktree only");
+}
+
+#[test]
+fn stage_lines_selected_deletion_others_stay() {
+    let dir = scratch_repo("stage-lines-del");
+    write(&dir, "a.txt", "one\ntwo\nthree\nfour\n");
+    commit_all(&dir, "base");
+    // Worktree deletes line 2 ("two") and line 4 ("four").
+    write(&dir, "a.txt", "one\nthree\n");
+
+    // Stage only the deletion of old line 2.
+    stage_lines(&dir, "a.txt", "unstaged", &[2], &[]).unwrap();
+
+    let repo = Repository::open(&dir).unwrap();
+    let text = String::from_utf8_lossy(&index_blob(&repo, "a.txt").unwrap()).replace('\r', "");
+    assert_eq!(text, "one\nthree\nfour\n", "index lost only 'two'");
+
+    let state = build_state(&dir).unwrap();
+    let file = state.files.iter().find(|f| f.path == "a.txt").unwrap();
+    assert!(!file.staged, "the deletion of 'four' is still unstaged");
+}
+
+#[test]
+fn stage_lines_unstages_selected_additions() {
+    let dir = scratch_repo("unstage-lines");
+    write(&dir, "a.txt", "one\ntwo\n");
+    commit_all(&dir, "base");
+    write(&dir, "a.txt", "one\nTWO\ntwo-half\nthree\n");
+    stage_paths(&dir, &["a.txt".to_string()]).unwrap();
+
+    // Staged diff (HEAD→index) adds TWO(2), two-half(3), three(4).
+    // Unstage only two-half (new-file line 3 in the staged diff).
+    stage_lines(&dir, "a.txt", "staged", &[], &[3]).unwrap();
+
+    let repo = Repository::open(&dir).unwrap();
+    let text = String::from_utf8_lossy(&index_blob(&repo, "a.txt").unwrap()).replace('\r', "");
+    assert_eq!(text, "one\nTWO\nthree\n", "two-half left the index");
+
+    let state = build_state(&dir).unwrap();
+    // collect_files emits separate rows per side for the same path.
+    let rows: Vec<_> = state.files.iter().filter(|f| f.path == "a.txt").collect();
+    let staged_row = rows.iter().find(|f| f.staged).expect("staged row exists");
+    let unstaged_row = rows.iter().find(|f| !f.staged).expect("unstaged row exists");
+    assert_eq!(staged_row.additions, 2, "TWO + three remain staged");
+    assert_eq!(unstaged_row.additions, 1, "only two-half is unstaged");
+}
+
+#[test]
+fn stage_lines_rejects_empty_and_foreign_selections() {
+    let dir = scratch_repo("stage-lines-empty");
+    write(&dir, "a.txt", "one\n");
+    commit_all(&dir, "base");
+    write(&dir, "a.txt", "one\ntwo\n");
+
+    assert!(stage_lines(&dir, "a.txt", "unstaged", &[], &[]).is_err());
+    // Selecting a line number that is not part of any hunk → nothing stageable.
+    assert!(stage_lines(&dir, "a.txt", "unstaged", &[], &[99]).is_err());
+}
+
+#[test]
+fn compose_commit_message_builds_conventional_title_and_body() {
+    let dir = scratch_repo("compose");
+    write(&dir, "src/app.ts", "old\n");
+    write(&dir, "src/util.ts", "helper\n");
+    commit_all(&dir, "base");
+    write(&dir, "src/app.ts", "old\nnew feature line\n");
+    write(&dir, "src/extra.ts", "brand new\n");
+    stage_paths(&dir, &["src/app.ts".to_string(), "src/extra.ts".to_string()]).unwrap();
+
+    let msg = compose_commit_message(&dir).unwrap();
+    assert!(msg.title.starts_with("feat(src): "), "got: {}", msg.title);
+    assert!(msg.title.contains("app.ts") && msg.title.contains("extra.ts"));
+    let body = msg.body.replace('\r', "");
+    assert!(body.contains("src/"));
+    assert!(body.contains("app.ts") && body.contains("extra.ts"));
+    assert!(body.contains("(+1/−0)") || body.contains("(+1/−1)") || body.contains("(+2/−0)"),
+        "body shows per-file diffstats: {body}");
+}
