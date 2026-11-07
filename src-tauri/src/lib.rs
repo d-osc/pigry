@@ -3,6 +3,7 @@ mod config;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
 pub mod net;
+pub mod ops;
 mod watcher;
 
 use std::sync::Mutex;
@@ -66,6 +67,9 @@ pub fn run() {
             commands::unstage_hunk,
             commands::discard_hunk,
             commands::get_file_blame,
+            commands::revert_commit,
+            commands::cherry_pick,
+            commands::merge_branch,
             commands::get_line_changes,
         ])
         .build(tauri::generate_context!())

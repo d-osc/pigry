@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 use crate::config::{self, AppConfig};
 use crate::FileWatcherHolder;
 use crate::git_state::{self, FileDiffContent, RepositoryState};
+use crate::ops;
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
 /// repositories) so we keep them synchronous inside async commands.
@@ -545,4 +546,50 @@ pub async fn get_line_changes(
         repo_path_str(&state)?.to_path_buf()
     };
     git_state::line_changes(&repo_path, &path)
+}
+
+
+#[tauri::command]
+pub async fn revert_commit(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::revert_commit(&repo_path, &oid)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn cherry_pick(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::cherry_pick(&repo_path, &oid)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn merge_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    branch: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_branch(&repo_path, &branch)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
 }
