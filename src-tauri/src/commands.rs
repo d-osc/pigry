@@ -259,3 +259,28 @@ pub async fn write_worktree_file(
     };
     git_state::write_worktree_file(&repo_path, &path, &content)
 }
+
+#[tauri::command]
+pub async fn get_file_history(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<Vec<git_state::FileCommitEntry>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::build_file_history(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn read_file_at_commit(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    oid: String,
+) -> Result<git_state::WorktreeFileContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_file_at_commit(&repo_path, &path, &oid)
+}

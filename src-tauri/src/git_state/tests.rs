@@ -456,3 +456,55 @@ fn worktree_read_flags_binary() {
     assert_eq!(content.content, "");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn file_history_lists_only_changing_commits() {
+    let dir = scratch_repo("file-history");
+    write(&dir, "target.txt", "v1\n");
+    write(&dir, "other.txt", "x\n");
+    commit_all(&dir, "touch both");
+    write(&dir, "other.txt", "x2\n");
+    commit_all(&dir, "other only");
+    write(&dir, "target.txt", "v2\n");
+    commit_all(&dir, "target again");
+    write(&dir, "target.txt", "v2\n"); // saved identical — new commit, same blob
+    commit_all(&dir, "no actual change to target");
+
+    let history = build_file_history(&dir, "target.txt").unwrap();
+    let summaries: Vec<&str> = history.iter().map(|e| e.summary.as_str()).collect();
+    assert_eq!(summaries, vec!["target again", "touch both"],
+        "only commits that changed target.txt's blob, newest first: {summaries:?}");
+
+    let entries = build_file_history(&dir, "missing.txt").unwrap();
+    assert!(entries.is_empty(), "unknown path yields empty history");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_file_at_commit_returns_historical_blob() {
+    let dir = scratch_repo("blob-at");
+    write(&dir, "doc.md", "old content\n");
+    commit_all(&dir, "first");
+    write(&dir, "doc.md", "new content\n");
+    commit_all(&dir, "second");
+
+    let repo = Repository::open(&dir).unwrap();
+    let head_oid = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+    let parent_oid = repo.head()
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .parent(0)
+        .unwrap()
+        .id()
+        .to_string();
+    drop(repo);
+
+    assert_eq!(read_file_at_commit(&dir, "doc.md", &head_oid).unwrap().content, "new content\n");
+    assert_eq!(read_file_at_commit(&dir, "doc.md", &parent_oid).unwrap().content, "old content\n");
+    assert!(read_file_at_commit(&dir, "missing.md", &head_oid).is_err());
+    assert!(read_file_at_commit(&dir, "doc.md", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef").is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}

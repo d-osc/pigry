@@ -1,0 +1,127 @@
+.file-history {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+}
+
+.file-history__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.file-history__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-history__count {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-history__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-history__empty {
+  display: grid;
+  place-items: center;
+  padding: 24px 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.file-history__row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.file-history__row:hover {
+  background: var(--bg-card);
+}
+
+.file-history__row--selected {
+  background: var(--accent-tint-1);
+}
+
+.file-history__row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-history__sha {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+}
+
+.file-history__row--selected .file-history__sha {
+  color: var(--accent);
+}
+
+.file-history__latest {
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-tint-2);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
+.file-history__time {
+  margin-left: auto;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.file-history__summary {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-history__author {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.file-history__avatar {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-tint-3), var(--purple-tint));
+  font-size: 7px;
+  font-weight: 600;
+  color: var(--text-primary);
+}

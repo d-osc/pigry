@@ -4,6 +4,7 @@ import type {
   AppStatePayload,
   CommitHistory,
   CommitOutcome,
+  FileCommitEntry,
   FileDiffContent,
   FileTree,
   WorktreeFileContent,
@@ -78,4 +79,15 @@ export async function readWorktreeFile(path: string): Promise<WorktreeFileConten
 
 export async function writeWorktreeFile(path: string, content: string): Promise<void> {
   return invoke('write_worktree_file', { path, content });
+}
+
+export async function getFileHistory(path: string): Promise<FileCommitEntry[]> {
+  return invoke('get_file_history', { path });
+}
+
+export async function readFileAtCommit(
+  path: string,
+  oid: string,
+): Promise<WorktreeFileContent> {
+  return invoke('read_file_at_commit', { path, oid });
 }

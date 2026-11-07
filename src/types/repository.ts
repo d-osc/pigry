@@ -118,3 +118,12 @@ export interface WorktreeFileContent {
   tooLarge: boolean;
   language: string;
 }
+
+export interface FileCommitEntry {
+  oid: string;
+  shortOid: string;
+  summary: string;
+  authorName: string;
+  authorInitials: string;
+  timeSeconds: number;
+}

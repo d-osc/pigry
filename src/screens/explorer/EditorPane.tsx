@@ -9,9 +9,22 @@ import './EditorPane.css';
 
 interface EditorPaneProps {
   path: string;
+  historyOn: boolean;
+  compareOn: boolean;
+  onToggleHistory: () => void;
+  onToggleCompare: () => void;
+  /** Reports the current buffer so the compare panel can diff against it. */
+  onBufferChange: (buffer: { content: string; language: string } | null) => void;
 }
 
-export function EditorPane({ path }: EditorPaneProps) {
+export function EditorPane({
+  path,
+  historyOn,
+  compareOn,
+  onToggleHistory,
+  onToggleCompare,
+  onBufferChange,
+}: EditorPaneProps) {
   const { refresh, busy } = useRepository();
   const [entry, setEntry] = useState<{
     path: string;
@@ -28,11 +41,16 @@ export function EditorPane({ path }: EditorPaneProps) {
 
   useEffect(() => {
     let cancelled = false;
+    onBufferChange(null);
     readWorktreeFile(path)
       .then((content) => {
         if (!cancelled) {
           setEntry({ path, content });
           setDraft(content.content);
+          onBufferChange({
+            content: content.content,
+            language: content.language,
+          });
         }
       })
       .catch(() => {
@@ -41,7 +59,16 @@ export function EditorPane({ path }: EditorPaneProps) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path]);
+
+  const handleDraftChange = (value: string | undefined) => {
+    const next = value ?? '';
+    setDraft(next);
+    if (entry) {
+      onBufferChange({ content: next, language: entry.content.language });
+    }
+  };
 
   const save = useCallback(async () => {
     if (saving || busy) return;
@@ -73,25 +100,45 @@ export function EditorPane({ path }: EditorPaneProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [save]);
 
-  if (!entry || entry.path !== path) {
-    return <div className="editor-pane__notice">Loading…</div>;
-  }
-  const { content } = entry;
-  if (content.binary) {
-    return <div className="editor-pane__notice">Binary file — cannot edit</div>;
-  }
-  if (content.tooLarge) {
-    return <div className="editor-pane__notice">File is too large to edit (over 1 MB)</div>;
-  }
-
-  const dirty = draft !== content.content;
+  const segments = path.split('/');
+  const dirty = entry?.path === path && draft !== entry.content.content;
 
   return (
     <div className="editor-pane">
       <header className="editor-pane__bar">
-        <span className="editor-pane__path">{path}</span>
+        <nav className="editor-pane__breadcrumb" aria-label="File path">
+          {segments.map((segment, index) => (
+            <span
+              key={`${segment}-${index}`}
+              className={
+                index === segments.length - 1 ? 'editor-pane__crumb--last' : undefined
+              }
+            >
+              {segment}
+              {index < segments.length - 1 && (
+                <span className="editor-pane__crumb-sep">/</span>
+              )}
+            </span>
+          ))}
+        </nav>
         {dirty && <span className="editor-pane__dirty">Unsaved changes</span>}
         {savedFlash && !dirty && <span className="editor-pane__saved">Saved</span>}
+        <div className="editor-pane__toggles">
+          <button
+            type="button"
+            className={`toggle-pill${historyOn ? ' toggle-pill--on' : ''}`}
+            onClick={onToggleHistory}
+          >
+            File history <span>{historyOn ? 'ON' : 'OFF'}</span>
+          </button>
+          <button
+            type="button"
+            className={`toggle-pill${compareOn ? ' toggle-pill--on' : ''}`}
+            onClick={onToggleCompare}
+          >
+            Compare code <span>{compareOn ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
         <button
           type="button"
           className="outline-button"
@@ -101,32 +148,42 @@ export function EditorPane({ path }: EditorPaneProps) {
           <Save size={12} />
           {saving ? 'Saving…' : 'Save'}
         </button>
-        <kbd className="editor-pane__kbd">Ctrl S</kbd>
+        <kbd className="editor-pane__kbd">⌘ S</kbd>
       </header>
       <div className="editor-pane__editor">
-        <Editor
-          key={path}
-          value={draft}
-          language={content.language}
-          theme="orbit-dark"
-          onChange={(value) => setDraft(value ?? '')}
-          options={{
-            fontSize: 12,
-            lineHeight: 19,
-            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-            minimap: { enabled: true, scale: 1 },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            renderWhitespace: 'selection',
-            padding: { top: 10, bottom: 10 },
-            scrollbar: {
-              verticalScrollbarSize: 10,
-              horizontalScrollbarSize: 10,
-              useShadows: false,
-            },
-            stickyScroll: { enabled: false },
-          }}
-        />
+        {!entry || entry.path !== path ? (
+          <div className="editor-pane__notice">Loading…</div>
+        ) : entry.content.binary ? (
+          <div className="editor-pane__notice">Binary file — cannot edit</div>
+        ) : entry.content.tooLarge ? (
+          <div className="editor-pane__notice">
+            File is too large to edit (over 1 MB)
+          </div>
+        ) : (
+          <Editor
+            key={path}
+            value={draft}
+            language={entry.content.language}
+            theme="orbit-dark"
+            onChange={handleDraftChange}
+            options={{
+              fontSize: 12,
+              lineHeight: 19,
+              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              minimap: { enabled: true, scale: 1 },
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              renderWhitespace: 'selection',
+              padding: { top: 10, bottom: 10 },
+              scrollbar: {
+                verticalScrollbarSize: 10,
+                horizontalScrollbarSize: 10,
+                useShadows: false,
+              },
+              stickyScroll: { enabled: false },
+            }}
+          />
+        )}
       </div>
     </div>
   );

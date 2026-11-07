@@ -1116,3 +1116,108 @@ pub fn write_worktree_file(repo_path: &Path, path: &str, content: &str) -> Resul
     std::fs::write(&full, content).map_err(|e| format!("failed to write {path}: {e}"))?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Explorer: per-file history + blob at commit
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileCommitEntry {
+    pub oid: String,
+    pub short_oid: String,
+    pub summary: String,
+    pub author_name: String,
+    pub author_initials: String,
+    pub time_seconds: i64,
+}
+
+/// Commits that changed `path`, newest first (like `git log -- <path>`,
+/// without rename following).
+pub fn build_file_history(repo_path: &Path, path: &str) -> Result<Vec<FileCommitEntry>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut revwalk = repo.revwalk().map_err(err)?;
+    revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    revwalk.push_head().map_err(err)?;
+
+    const MAX_WALKED: usize = 2000;
+    const MAX_RESULTS: usize = 50;
+
+    let mut entries = Vec::new();
+    let mut walked = 0usize;
+    for oid in revwalk {
+        if walked >= MAX_WALKED || entries.len() >= MAX_RESULTS {
+            break;
+        }
+        walked += 1;
+        let oid = oid.map_err(err)?;
+        let commit = repo.find_commit(oid).map_err(err)?;
+        let tree = commit.tree().map_err(err)?;
+
+        let entry = match tree.get_path(Path::new(path)) {
+            Ok(entry) => entry,
+            Err(_) => continue, // path not present in this commit
+        };
+        // Only include commits where the blob differs from the first parent
+        // (or the path is new relative to it).
+        let changed = match commit.parent(0) {
+            Ok(parent) => match parent.tree() {
+                Ok(parent_tree) => match parent_tree.get_path(Path::new(path)) {
+                    Ok(parent_entry) => parent_entry.id() != entry.id(),
+                    Err(_) => true, // newly added in this commit
+                },
+                Err(_) => true,
+            },
+            Err(_) => true, // root commit
+        };
+        if !changed {
+            continue;
+        }
+
+        let author = commit.author();
+        entries.push(FileCommitEntry {
+            oid: oid.to_string(),
+            short_oid: oid.to_string()[..7].to_string(),
+            summary: commit.summary().unwrap_or_default().to_string(),
+            author_name: author.name().unwrap_or("Unknown").to_string(),
+            author_initials: initials_for(author.name().unwrap_or("")),
+            time_seconds: commit.time().seconds() as i64,
+        });
+    }
+    Ok(entries)
+}
+
+/// Blob content of `path` as stored in commit `oid`.
+pub fn read_file_at_commit(
+    repo_path: &Path,
+    path: &str,
+    oid: &str,
+) -> Result<WorktreeFileContent> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let commit_oid = git2::Oid::from_str(oid).map_err(|e| format!("invalid commit id: {e}"))?;
+    let commit = repo.find_commit(commit_oid).map_err(err)?;
+    let tree = commit.tree().map_err(err)?;
+    let entry = tree
+        .get_path(Path::new(path))
+        .map_err(|_| format!("{path} not present in commit {oid}"))?;
+    let blob = repo
+        .find_object(entry.id(), Some(ObjectType::Blob))
+        .map_err(err)?
+        .peel_to_blob()
+        .map_err(err)?;
+    let bytes = blob.content();
+
+    let language = language_for(path);
+    if bytes.len() > MAX_DIFF_BYTES {
+        return Ok(WorktreeFileContent { content: String::new(), binary: false, too_large: true, language });
+    }
+    if is_binary(bytes) {
+        return Ok(WorktreeFileContent { content: String::new(), binary: true, too_large: false, language });
+    }
+    Ok(WorktreeFileContent {
+        content: String::from_utf8_lossy(bytes).into_owned(),
+        binary: false,
+        too_large: false,
+        language,
+    })
+}

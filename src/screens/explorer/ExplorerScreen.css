@@ -42,6 +42,27 @@
   flex-shrink: 0;
 }
 
+.explorer-screen__subtitle {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.explorer-screen__panels {
+  width: 280px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.explorer-screen__compare {
+  width: 460px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
 .explorer-screen__placeholder {
   flex: 1;
   display: grid;

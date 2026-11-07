@@ -17,6 +17,56 @@
   flex-shrink: 0;
 }
 
+.editor-pane__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.editor-pane__crumb--last {
+  color: var(--text-primary);
+}
+
+.editor-pane__crumb-sep {
+  margin: 0 4px;
+  color: var(--border-strong);
+}
+
+.editor-pane__toggles {
+  display: flex;
+  gap: 6px;
+  margin-left: 10px;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.toggle-pill span {
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.toggle-pill--on {
+  border-color: var(--accent-tint-3);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+}
+
 .editor-pane__path {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -40,6 +90,10 @@
   margin-left: auto;
   height: 26px;
   font-size: var(--fs-xs);
+}
+
+.editor-pane__bar .editor-pane__toggles + .outline-button {
+  margin-left: 0;
 }
 
 .editor-pane__bar .outline-button:disabled {
