@@ -1097,3 +1097,26 @@ fn discard_hunk_on_untracked_file_deletes_it() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn file_blame_attributes_lines_to_commits() {
+    let dir = scratch_repo("blame");
+    write(&dir, "doc.txt", "alpha\nbeta\n");
+    commit_all(&dir, "first commit");
+    write(&dir, "doc.txt", "alpha\ngamma\n");
+    commit_all(&dir, "second commit");
+
+    let blame = file_blame(&dir, "doc.txt").unwrap();
+    assert_eq!(blame.len(), 2);
+    assert_eq!(blame[0].line, 1);
+    assert_eq!(blame[1].line, 2);
+    assert_eq!(blame[0].summary, "first commit");
+    assert_eq!(blame[1].summary, "second commit");
+    assert!(!blame[0].uncommitted);
+    assert_eq!(blame[0].short_oid.len(), 7);
+
+    // Nonexistent file errors clearly.
+    assert!(file_blame(&dir, "missing.txt").is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}

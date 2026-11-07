@@ -521,3 +521,15 @@ pub async fn discard_hunk(
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }
+
+#[tauri::command]
+pub async fn get_file_blame(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<Vec<git_state::BlameLine>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::file_blame(&repo_path, &path)
+}

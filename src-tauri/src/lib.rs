@@ -48,6 +48,7 @@ pub fn run() {
             commands::stage_hunk,
             commands::unstage_hunk,
             commands::discard_hunk,
+            commands::get_file_blame,
             commands::create_branch,
             commands::checkout_branch,
             commands::delete_branch,

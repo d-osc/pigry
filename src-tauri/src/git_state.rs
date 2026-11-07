@@ -2014,3 +2014,78 @@ pub fn discard_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<(
         .map_err(|e| format!("failed to write {path}: {e}"))?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Blame annotations — per-line commit attribution
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlameLine {
+    /// 1-based line number in the worktree file.
+    pub line: u32,
+    pub short_oid: String,
+    pub author_name: String,
+    pub author_initials: String,
+    pub time_seconds: i64,
+    pub summary: String,
+    /// True when the line has uncommitted worktree changes.
+    pub uncommitted: bool,
+}
+
+/// Per-line blame for a file in the working directory. Uncommitted lines
+/// carry `uncommitted: true` with placeholder identity.
+pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut opts = git2::BlameOptions::new();
+    opts.track_copies_same_file(true);
+    let blame = repo
+        .blame_file(Path::new(path), Some(&mut opts))
+        .map_err(|e| format!("blame failed for {path}: {e}"))?;
+
+    let mut lines = Vec::new();
+    for i in 0..blame.len() {
+        let Some(hunk) = blame.get_index(i) else { continue; };
+        let start = hunk.final_start_line() as u32;
+        let count = hunk.lines_in_hunk() as u32;
+        let commit_id = hunk.final_commit_id();
+
+        if commit_id.is_zero() {
+            // Uncommitted worktree changes.
+            for offset in 0..count {
+                lines.push(BlameLine {
+                    line: start + offset,
+                    short_oid: "———".to_string(),
+                    author_name: "Uncommitted".to_string(),
+                    author_initials: "—".to_string(),
+                    time_seconds: 0,
+                    summary: String::new(),
+                    uncommitted: true,
+                });
+            }
+            continue;
+        }
+
+        let commit = repo.find_commit(commit_id).map_err(err)?;
+        let author = commit.author();
+        let author_name = author.name().unwrap_or("Unknown").to_string();
+        let summary = commit.summary().unwrap_or_default().to_string();
+        let short_oid = commit_id.to_string()[..7].to_string();
+        let time_seconds = commit.time().seconds() as i64;
+        let initials = initials_for(&author_name);
+
+        for offset in 0..count {
+            lines.push(BlameLine {
+                line: start + offset,
+                short_oid: short_oid.clone(),
+                author_name: author_name.clone(),
+                author_initials: initials.clone(),
+                time_seconds,
+                summary: summary.clone(),
+                uncommitted: false,
+            });
+        }
+    }
+    lines.sort_by_key(|line| line.line);
+    Ok(lines)
+}
