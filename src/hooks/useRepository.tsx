@@ -32,6 +32,8 @@ export interface RepositoryContextValue {
   stageHunk: (path: string, hunkIndex: number) => Promise<void>;
   unstageHunk: (path: string, hunkIndex: number) => Promise<void>;
   discardHunk: (path: string, hunkIndex: number) => Promise<void>;
+  cloneRepo: (url: string, target: string) => Promise<void>;
+  rebaseOnto: (base: string) => Promise<void>;
   revertCommit: (oid: string) => Promise<void>;
   cherryPick: (oid: string) => Promise<void>;
   mergeBranch: (branch: string) => Promise<void>;
@@ -141,6 +143,8 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       stageHunk: (path, hunkIndex) => run(() => client.stageHunk(path, hunkIndex), (p) => p),
       unstageHunk: (path, hunkIndex) => run(() => client.unstageHunk(path, hunkIndex), (p) => p),
       discardHunk: (path, hunkIndex) => run(() => client.discardHunk(path, hunkIndex), (p) => p),
+      cloneRepo: (url, target) => run(() => client.cloneRepo(url, target), (p) => p),
+      rebaseOnto: (base) => run(() => client.rebaseOnto(base), (p) => p),
       revertCommit: (oid) => run(() => client.revertCommit(oid), (p) => p),
       cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p),
       mergeBranch: (branch) => run(() => client.mergeBranch(branch), (p) => p),

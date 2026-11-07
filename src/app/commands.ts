@@ -179,6 +179,30 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     run: () => void repository.stashPop(stash.index),
   }));
 
+  const cloneCommand: Command = {
+    id: 'repo:clone',
+    title: 'Clone repository from URL…',
+    section: 'Repository' as const,
+    icon: FolderOpen,
+    enabled: true,
+    run: () => {
+      const url = window.prompt('Repository URL');
+      const target = url ? window.prompt('Target directory') : null;
+      if (url && target && target.trim()) void repository.cloneRepo(url, target.trim());
+    },
+  };
+
+  const rebaseCommands: Command[] = (repo?.branches ?? [])
+    .filter((branch) => !branch.isHead)
+    .map((branch) => ({
+      id: `branch:rebase:${branch.name}`,
+      title: `Rebase onto ${branch.name}`,
+      section: 'Repository' as const,
+      icon: FolderTree,
+      enabled: true,
+      run: () => void repository.rebaseOnto(branch.name),
+    }));
+
   const opCommands: Command[] = (repo?.branches ?? [])
     .filter((branch) => !branch.isHead)
     .map((branch) => ({
@@ -240,5 +264,5 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   ];
 
-  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...stashCommands, ...opCommands, ...syncCommands];
+  return [...navigation, ...repoCommands, createCommand, cloneCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...stashCommands, ...rebaseCommands, ...opCommands, ...syncCommands];
 }

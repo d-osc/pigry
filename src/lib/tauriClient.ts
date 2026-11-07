@@ -198,3 +198,11 @@ export async function cherryPick(oid: string): Promise<AppStatePayload> {
 export async function mergeBranch(branch: string): Promise<AppStatePayload> {
   return invoke('merge_branch', { branch });
 }
+
+export async function cloneRepo(url: string, target: string): Promise<AppStatePayload> {
+  return invoke('clone_repo', { url, target });
+}
+
+export async function rebaseOnto(base: string): Promise<AppStatePayload> {
+  return invoke('rebase_onto', { base });
+}

@@ -90,3 +90,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.no-repo__clone {
+  width: 100%;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.no-repo__clone-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.no-repo__clone-input::placeholder {
+  color: var(--text-muted);
+}
+
+.no-repo__clone-input:focus {
+  border-color: var(--accent-tint-3);
+}

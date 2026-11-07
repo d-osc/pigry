@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { FolderOpen, History } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import './NoRepositoryScreen.css';
 
 export function NoRepositoryScreen() {
-  const { state, pickRepository, openRepository, busy, error, refresh } = useRepository();
+  const [cloneUrl, setCloneUrl] = useState('');
+  const [cloneTarget, setCloneTarget] = useState('');
+  const { state, pickRepository, openRepository, cloneRepo, busy, error, refresh } = useRepository();
 
   return (
     <div className="no-repo">
@@ -29,6 +32,35 @@ export function NoRepositoryScreen() {
           <FolderOpen size={13} />
           Open repository…
         </button>
+
+        <div className="no-repo__clone">
+          <input
+            className="no-repo__clone-input"
+            placeholder="Repository URL…"
+            value={cloneUrl}
+            onChange={(e) => setCloneUrl(e.target.value)}
+            spellCheck={false}
+          />
+          <input
+            className="no-repo__clone-input"
+            placeholder="Target directory…"
+            value={cloneTarget}
+            onChange={(e) => setCloneTarget(e.target.value)}
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            className="outline-button"
+            onClick={() => {
+              if (cloneUrl && cloneTarget) {
+                void cloneRepo(cloneUrl, cloneTarget);
+              }
+            }}
+            disabled={busy || !cloneUrl || !cloneTarget}
+          >
+            Clone
+          </button>
+        </div>
 
         {state && state.recent.length > 0 && (
           <div className="no-repo__recent">
