@@ -44,6 +44,8 @@ pub fn run() {
             commands::git_push,
             commands::get_commit_detail,
             commands::get_commit_file_diff,
+            commands::get_file_hunks,
+            commands::stage_hunk,
             commands::create_branch,
             commands::checkout_branch,
             commands::delete_branch,

@@ -5,6 +5,7 @@ import { useRepository } from '../../hooks/useRepository';
 import { getFileDiff } from '../../lib/tauriClient';
 import type { FileDiffContent } from '../../types/repository';
 import '../../editor/monacoSetup';
+import { HunkBar } from './HunkBar';
 import './DiffPane.css';
 
 interface DiffPaneProps {
@@ -15,6 +16,7 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
   const { repository, stage, unstage, discard, busy } = useRepository();
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(false);
   const [unified, setUnified] = useState(true);
+  const [hunkReloadKey, setHunkReloadKey] = useState(0);
   const [entry, setEntry] = useState<{
     id: string;
     diff: FileDiffContent | null;
@@ -116,6 +118,14 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
           </div>
         </div>
       </div>
+
+      {!staged && (
+        <HunkBar
+          selectedFileId={selectedFileId}
+          reloadKey={hunkReloadKey}
+          onStaged={() => setHunkReloadKey((k) => k + 1)}
+        />
+      )}
 
       <div className="diff-pane__editor">
         {loading ? (

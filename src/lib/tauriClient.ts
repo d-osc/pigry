@@ -8,6 +8,7 @@ import type {
   FileCommitEntry,
   FileDiffContent,
   FileTree,
+  HunkInfo,
   NetResult,
   WorktreeFileContent,
 } from '../types/repository';
@@ -149,4 +150,12 @@ export async function stashPop(index: number): Promise<AppStatePayload> {
 
 export async function stashDrop(index: number): Promise<AppStatePayload> {
   return invoke("stash_drop", { index });
+}
+
+export async function getFileHunks(path: string): Promise<HunkInfo[]> {
+  return invoke('get_file_hunks', { path });
+}
+
+export async function stageHunk(path: string, hunkIndex: number): Promise<AppStatePayload> {
+  return invoke('stage_hunk', { path, hunkIndex });
 }

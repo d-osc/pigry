@@ -886,3 +886,83 @@ fn stash_pop_conflicts_report_clean_error() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn hunk_listing_and_partial_staging() {
+    let dir = scratch_repo("hunks");
+    // One file, two well-separated regions → two hunks after both change.
+    // 20 lines so two edits are farther apart than the 3-line diff context.
+    let base: Vec<String> = (1..=20).map(|i| format!("line{i}")).collect();
+    write(&dir, "code.txt", &(base.join("\n") + "\n"));
+    commit_all(&dir, "base");
+    let mut edited = base.clone();
+    edited[0] = "line1 EDITED".to_string();
+    edited[19] = "line20 EDITED".to_string();
+    write(&dir, "code.txt", &(edited.join("\n") + "\n"));
+
+    let hunks = file_hunks(&dir, "code.txt").unwrap();
+    assert_eq!(hunks.len(), 2, "two separated edits → two hunks");
+    assert_eq!(hunks[0].old_start, 1);
+    assert!(hunks[1].old_start >= 14, "second edit near line 20 minus context");
+
+    // Stage only the first hunk.
+    stage_hunk(&dir, "code.txt", 0).unwrap();
+    let index_content = {
+        let repo = Repository::open(&dir).unwrap();
+        let index = repo.index().unwrap();
+        let entry = index.get_path(Path::new("code.txt"), 0).unwrap();
+        let blob = repo
+            .find_object(entry.id, Some(ObjectType::Blob))
+            .unwrap()
+            .peel_to_blob()
+            .unwrap();
+        String::from_utf8_lossy(blob.content()).to_string()
+    };
+    assert!(
+        index_content.contains("line1 EDITED"),
+        "hunk 1 staged: {index_content}"
+    );
+    assert!(
+        !index_content.contains("line20 EDITED"),
+        "hunk 2 must remain unstaged: {index_content}"
+    );
+
+    // Stage the second hunk too — now the index matches the worktree.
+    stage_hunk(&dir, "code.txt", 0).unwrap(); // after the first staging, remaining hunk is index 0
+    let index_content = {
+        let repo = Repository::open(&dir).unwrap();
+        let index = repo.index().unwrap();
+        let entry = index.get_path(Path::new("code.txt"), 0).unwrap();
+        let blob = repo
+            .find_object(entry.id, Some(ObjectType::Blob))
+            .unwrap()
+            .peel_to_blob()
+            .unwrap();
+        String::from_utf8_lossy(blob.content()).to_string()
+    };
+    assert!(
+        index_content.contains("line20 EDITED"),
+        "second hunk staged: {index_content}"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn stage_hunk_untracked_file_stages_content() {
+    let dir = scratch_repo("hunk-untracked");
+    write(&dir, "brand-new.ts", "export const a = 1;\n");
+
+    let hunks = file_hunks(&dir, "brand-new.ts").unwrap();
+    assert_eq!(hunks.len(), 1, "untracked file = one hunk");
+
+    stage_hunk(&dir, "brand-new.ts", 0).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let index = repo.index().unwrap();
+    assert!(
+        index.get_path(Path::new("brand-new.ts"), 0).is_some(),
+        "file staged after staging its single hunk"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}

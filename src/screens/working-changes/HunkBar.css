@@ -1,0 +1,67 @@
+.hunk-bar {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.hunk-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 0 20px;
+  font-size: var(--fs-xs);
+}
+
+.hunk-bar__row:hover {
+  background: var(--bg-panel);
+}
+
+.hunk-bar__header {
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+
+.hunk-bar__context {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hunk-bar__preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.hunk-bar__stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.hunk-bar__stage:hover:not(:disabled) {
+  background: var(--accent-tint-2);
+}
+
+.hunk-bar__stage:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

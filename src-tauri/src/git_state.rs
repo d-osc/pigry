@@ -1627,3 +1627,180 @@ pub fn stash_drop(repo_path: &Path, index: usize) -> Result<()> {
     repo.stash_drop(index).map_err(err)?;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Hunk-level staging
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HunkInfo {
+    /// Position of this hunk within the file's unstaged diff (0-based).
+    pub index: usize,
+    /// "@@ -a,b +c,d @@" numbers.
+    pub old_start: u32,
+    pub old_lines: u32,
+    pub new_start: u32,
+    pub new_lines: u32,
+    /// Trailing function context from the hunk header (may be empty).
+    pub context: String,
+    /// Single-line preview of the first changed line, for the UI.
+    pub preview: String,
+}
+
+/// Lists the unstaged hunks for a file (index → workdir), including
+/// untracked files whose whole content is one hunk.
+pub fn file_hunks(repo_path: &Path, path: &str) -> Result<Vec<HunkInfo>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path)
+        .include_untracked(true)
+        .show_untracked_content(true)
+        .recurse_untracked_dirs(true);
+    let mut diff = repo.diff_index_to_workdir(None, Some(&mut opts)).map_err(err)?;
+    let _ = diff.find_similar(None);
+
+    let mut hunks = Vec::new();
+    for idx in 0..diff.deltas().len() {
+        let Ok(Some(patch)) = git2::Patch::from_diff(&diff, idx) else {
+            continue; // binary or undiffable
+        };
+        for h in 0..patch.num_hunks() {
+            let Ok((hunk, _line_count)) = patch.hunk(h) else {
+                continue;
+            };
+            let header = hunk.header();
+            // Parse "@@ -a,b +c,d @@ context"
+            let (old_start, old_lines, new_start, new_lines, context) = parse_hunk_header(header);
+            let mut preview = String::new();
+            for l in 0.._line_count {
+                let Ok(line) = patch.line_in_hunk(h, l) else { continue };
+                if line.origin() == '+' || line.origin() == '-' {
+                    let text = String::from_utf8_lossy(line.content()).trim().to_string();
+                    if !text.is_empty() {
+                        preview = format!("{}{}", line.origin(), text);
+                        break;
+                    }
+                }
+            }
+            hunks.push(HunkInfo {
+                index: h,
+                old_start,
+                old_lines,
+                new_start,
+                new_lines,
+                context: context.trim().to_string(),
+                preview,
+            });
+        }
+    }
+    Ok(hunks)
+}
+
+fn parse_hunk_header(header: &[u8]) -> (u32, u32, u32, u32, String) {
+    let text = String::from_utf8_lossy(header);
+    // Expected form: @@ -a[,b] +c[,d] @@ [context]
+    let mut old_start = 1u32;
+    let mut old_lines = 1u32;
+    let mut new_start = 1u32;
+    let mut new_lines = 1u32;
+    let mut context = String::new();
+    let parts: Vec<&str> = text.splitn(3, " @@").collect();
+    if parts.len() >= 2 {
+        let ranges = parts[0].trim_start_matches("@@");
+        for (position, range) in ranges.split_whitespace().take(2).enumerate() {
+            let range = range.trim_start_matches('-').trim_start_matches('+');
+            let mut segs = range.split(',');
+            let start: u32 = segs.next().and_then(|v| v.parse().ok()).unwrap_or(1);
+            let lines: u32 = segs.next().and_then(|v| v.parse().ok()).unwrap_or(1);
+            if position == 0 {
+                old_start = start;
+                old_lines = lines;
+            } else {
+                new_start = start;
+                new_lines = lines;
+            }
+        }
+        if let Some(trailing) = parts.get(2) {
+            context = trailing.trim_start_matches("@@").trim().to_string();
+        }
+    }
+    (old_start, old_lines, new_start, new_lines, context)
+}
+
+/// Stages only hunk `hunk_index` of `path` by applying that hunk's line
+/// operations onto the index blob and writing the result back.
+pub fn stage_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path)
+        .include_untracked(true)
+        .show_untracked_content(true)
+        .recurse_untracked_dirs(true);
+    let mut diff = repo
+        .diff_index_to_workdir(None, Some(&mut opts))
+        .map_err(err)?;
+    diff.find_similar(None).map_err(err)?;
+    let patch = git2::Patch::from_diff(&diff, 0)
+        .map_err(|e| format!("no diff for {path}: {e}"))?
+        .ok_or_else(|| format!("no diff for {path}"))?;
+    if hunk_index >= patch.num_hunks() {
+        return Err(format!("hunk #{hunk_index} does not exist for {path}"));
+    }
+    let (hunk, line_count) = patch.hunk(hunk_index).map_err(err)?;
+
+    // Old content: index blob (empty for untracked files).
+    let old_bytes = index_blob(&repo, path).unwrap_or_default();
+    let old_text = String::from_utf8_lossy(&old_bytes);
+    let old_lines: Vec<&str> = if old_text.is_empty() {
+        Vec::new()
+    } else {
+        old_text.split('\n').collect()
+    };
+    let header = hunk.header();
+    let (old_start, old_lines_count, _, _, _) = parse_hunk_header(header);
+    // 1-based old_start → 0-based slice end.
+    let prefix_end = (old_start as usize).saturating_sub(1).min(old_lines.len());
+    let suffix_start = (prefix_end + old_lines_count as usize).min(old_lines.len());
+
+    let mut new_content = String::new();
+    for line in &old_lines[..prefix_end] {
+        new_content.push_str(line);
+        new_content.push('\n');
+    }
+    for l in 0..line_count {
+        let line = patch.line_in_hunk(hunk_index, l).map_err(err)?;
+        match line.origin() {
+            ' ' => {
+                new_content.push_str(&String::from_utf8_lossy(line.content()));
+            }
+            '+' => {
+                new_content.push_str(&String::from_utf8_lossy(line.content()));
+            }
+            '-' => {} // removed — skip
+            _ => {}
+        }
+    }
+    for line in &old_lines[suffix_start..] {
+        new_content.push_str(line);
+        new_content.push('\n');
+    }
+
+    let mut index = repo.index().map_err(err)?;
+    match index.get_path(Path::new(path), 0) {
+        Some(entry) => {
+            // Tracked: rewrite the entry blob with the patched content.
+            index
+                .add_frombuffer(&entry, new_content.as_bytes())
+                .map_err(|e| format!("failed to stage hunk: {e}"))?;
+        }
+        None => {
+            // Untracked: the whole file is one hunk — stage it directly.
+            index
+                .add_path(Path::new(path))
+                .map_err(|e| format!("failed to stage file: {e}"))?;
+        }
+    }
+    index.write().map_err(err)?;
+    Ok(())
+}

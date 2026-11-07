@@ -134,6 +134,16 @@ export interface FileCommitEntry {
   timeSeconds: number;
 }
 
+export interface HunkInfo {
+  index: number;
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  context: string;
+  preview: string;
+}
+
 export interface NetResult {
   summary: string;
 }
