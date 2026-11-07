@@ -8,10 +8,16 @@ import { FileHistoryPanel } from './FileHistoryPanel';
 import { ComparePanel } from './ComparePanel';
 import './ExplorerScreen.css';
 
-export function ExplorerScreen() {
+interface ExplorerScreenProps {
+  /** Path requested by the palette (⌘P) — opens it when it changes. */
+  openPath?: string | null;
+}
+
+export function ExplorerScreen({ openPath }: ExplorerScreenProps) {
   const { repository } = useRepository();
   const [tree, setTree] = useState<FileTreeData | null>(null);
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // Remounted by AppShell on openPath change (key), so the initializer runs.
+  const [selectedPath, setSelectedPath] = useState<string | null>(openPath ?? null);
   const [historyOn, setHistoryOn] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
   const [baseOid, setBaseOid] = useState<string | null>(null);
@@ -40,6 +46,7 @@ export function ExplorerScreen() {
       cancelled = true;
     };
   }, [changeFingerprint]);
+
 
   // Keep a valid selection as files come and go.
   const effectiveSelection =
