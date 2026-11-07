@@ -7,10 +7,16 @@ import { CommitGraphColumn } from './CommitGraphColumn';
 import './CommitGraphScreen.css';
 
 export function CommitGraphScreen() {
-  const { repository } = useRepository();
+  const { repository, fetchRemote, busy } = useRepository();
   const [includeRemotes, setIncludeRemotes] = useState(false);
   const [query, setQuery] = useState('');
-  const { history, error, loading } = useCommitHistory(includeRemotes);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { history, error, loading } = useCommitHistory(includeRemotes, reloadKey);
+
+  const handleFetch = async () => {
+    const ok = await fetchRemote();
+    if (ok) setReloadKey((key) => key + 1);
+  };
 
   const rows = useMemo(() => {
     if (!history) return [];
@@ -43,11 +49,16 @@ export function CommitGraphScreen() {
           <button
             type="button"
             className="outline-button"
-            disabled
-            title="Network operations arrive in a later milestone"
+            onClick={() => void handleFetch()}
+            disabled={busy || !repository?.remotes.length}
+            title={
+              repository?.remotes.length
+                ? 'Fetch from remote (auth via your credential manager)'
+                : 'No remote configured'
+            }
           >
             <CloudDownload size={12} />
-            Fetch origin
+            {busy ? 'Fetching…' : 'Fetch origin'}
           </button>
           <button
             type="button"

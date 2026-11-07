@@ -284,3 +284,33 @@ pub async fn read_file_at_commit(
     };
     git_state::read_file_at_commit(&repo_path, &path, &oid)
 }
+
+#[tauri::command]
+pub async fn git_fetch(state: State<'_, Mutex<AppState>>) -> Result<crate::net::NetResult, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    crate::net::fetch(&repo_path)
+}
+
+#[tauri::command]
+pub async fn git_pull(state: State<'_, Mutex<AppState>>) -> Result<crate::net::NetResult, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    crate::net::pull(&repo_path)
+}
+
+#[tauri::command]
+pub async fn git_push(state: State<'_, Mutex<AppState>>) -> Result<crate::net::NetResult, String> {
+    let (repo_path, branch, has_upstream) = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        let path = repo_path_str(&state)?.to_path_buf();
+        let repo_state = git_state::build_state(&path).map_err(|e| e)?;
+        let branch = repo_state.current_branch.clone();
+        (path, branch, repo_state.upstream.is_some())
+    };
+    crate::net::push(&repo_path, &branch, has_upstream)
+}

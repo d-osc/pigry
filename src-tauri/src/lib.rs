@@ -2,6 +2,7 @@ mod commands;
 mod config;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
+pub mod net;
 
 use std::sync::Mutex;
 
@@ -38,6 +39,9 @@ pub fn run() {
             commands::write_worktree_file,
             commands::get_file_history,
             commands::read_file_at_commit,
+            commands::git_fetch,
+            commands::git_pull,
+            commands::git_push,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

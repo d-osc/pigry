@@ -127,3 +127,7 @@ export interface FileCommitEntry {
   authorInitials: string;
   timeSeconds: number;
 }
+
+export interface NetResult {
+  summary: string;
+}

@@ -18,6 +18,7 @@ interface RepositoryContextValue {
   state: AppStatePayload | null;
   busy: boolean;
   error: string | null;
+  netSummary: string | null;
   repository: NonNullable<AppStatePayload['repository']> | null;
   openRepository: (path: string) => Promise<void>;
   pickRepository: () => Promise<void>;
@@ -27,6 +28,9 @@ interface RepositoryContextValue {
   discard: (path: string) => Promise<void>;
   commit: (title: string, body: string, amend: boolean) => Promise<void>;
   stash: (message?: string) => Promise<void>;
+  fetchRemote: () => Promise<boolean>;
+  pullRemote: () => Promise<boolean>;
+  pushRemote: () => Promise<boolean>;
 }
 
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
@@ -38,6 +42,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppStatePayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [netSummary, setNetSummary] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode !== 'tauri') return;
@@ -64,12 +69,34 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const runNet = useCallback(
+    async (action: () => Promise<client.NetResultLike>) => {
+      setBusy(true);
+      setError(null);
+      let ok = false;
+      try {
+        const result = await action();
+        setNetSummary(result.summary);
+        ok = true;
+        const payload = await client.refresh();
+        setState(payload);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+      return ok;
+    },
+    [],
+  );
+
   const value = useMemo<RepositoryContextValue>(
     () => ({
       mode,
       state,
       busy,
       error,
+      netSummary,
       repository: state?.repository ?? null,
       openRepository: (path) => run(() => client.openRepository(path), (p) => p),
       pickRepository: async () => {
@@ -84,8 +111,11 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         await run(() => client.commitChanges(title, body, amend), (outcome) => outcome.state);
       },
       stash: (message) => run(() => client.stashChanges(message), (p) => p),
+      fetchRemote: () => runNet(() => client.gitFetch()),
+      pullRemote: () => runNet(() => client.gitPull()),
+      pushRemote: () => runNet(() => client.gitPush()),
     }),
-    [mode, state, busy, error, run],
+    [mode, state, busy, error, netSummary, run, runNet],
   );
 
   return <RepositoryContext.Provider value={value}>{children}</RepositoryContext.Provider>;

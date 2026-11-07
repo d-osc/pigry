@@ -508,3 +508,95 @@ fn read_file_at_commit_returns_historical_blob() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn network_push_pull_flow_with_local_bare_remote() {
+    let base = std::env::temp_dir().join(format!("orbit-net-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).unwrap();
+    let origin = base.join("origin.git");
+    let alice = base.join("alice");
+    let bob = base.join("bob");
+
+    // Bare origin + two clones.
+    Repository::init_bare(&origin).unwrap();
+    Repository::init(&alice).unwrap();
+    let alice_repo = Repository::open(&alice).unwrap();
+    alice_repo.remote("origin", origin.to_str().unwrap()).unwrap();
+    drop(alice_repo);
+    write(&alice, "readme.md", "hello\n");
+    commit_all(&alice, "initial");
+    // Seed the bare remote via a direct push from alice.
+    let alice_repo = Repository::open(&alice).unwrap();
+    let sig = Signature::now("Alice", "alice@test.dev").unwrap();
+    drop(alice_repo);
+    let _ = run_cli(&alice, &["push", "--set-upstream", "origin", "master"]);
+
+    Repository::clone(origin.to_str().unwrap(), &bob).unwrap();
+
+    // Alice writes a new commit and pushes through our net::push.
+    write(&alice, "readme.md", "hello\nfrom alice\n");
+    commit_all(&alice, "second");
+    crate::net::push(&alice, "master", true).unwrap();
+
+    // Bob is one behind after our net::fetch, level after net::pull.
+    crate::net::fetch(&bob).unwrap();
+    let bob_state = build_state(&bob).unwrap();
+    assert_eq!(bob_state.upstream.as_ref().unwrap().behind, 1);
+    assert_eq!(bob_state.upstream.as_ref().unwrap().ahead, 0);
+
+    crate::net::pull(&bob).unwrap();
+    let bob_state = build_state(&bob).unwrap();
+    assert_eq!(bob_state.upstream.as_ref().unwrap().behind, 0);
+    let bob_repo = Repository::open(&bob).unwrap();
+    let summary = bob_repo
+        .head()
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .summary()
+        .unwrap_or_default()
+        .to_string();
+    drop(bob_repo);
+    assert_eq!(summary, "second");
+
+    let _ = fs::remove_dir_all(&base);
+}
+
+/// Small helper: run git CLI in `dir` (test-side plumbing only).
+fn run_cli(dir: &PathBuf, args: &[&str]) -> std::process::Output {
+    std::process::Command::new("git")
+        .arg("-C").arg(dir)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("git CLI available")
+}
+
+#[test]
+fn network_push_sets_upstream_on_first_push() {
+    let base = std::env::temp_dir().join(format!("orbit-net-up-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(&base).unwrap();
+    let origin = base.join("origin.git");
+    let work = base.join("work");
+
+    Repository::init_bare(&origin).unwrap();
+    Repository::init(&work).unwrap();
+    let repo = Repository::open(&work).unwrap();
+    repo.remote("origin", origin.to_str().unwrap()).unwrap();
+    drop(repo);
+    write(&work, "note.txt", "n1\n");
+    commit_all(&work, "first");
+
+    // No upstream yet; our push() must set it.
+    let before = build_state(&work).unwrap();
+    assert!(before.upstream.is_none());
+    crate::net::push(&work, &before.current_branch, false).unwrap();
+
+    let after = build_state(&work).unwrap();
+    assert!(after.upstream.is_some(), "upstream configured after first push");
+    assert_eq!(after.upstream.as_ref().unwrap().ahead, 0);
+
+    let _ = fs::remove_dir_all(&base);
+}

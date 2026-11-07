@@ -1,4 +1,4 @@
-/** Loads commit history from the backend; reloads when the remote toggle flips. */
+/** Loads commit history from the backend; reloads on toggle or reloadKey change. */
 import { useEffect, useState } from 'react';
 import { getCommitHistory } from '../lib/tauriClient';
 import type { CommitHistory } from '../types/repository';
@@ -9,7 +9,7 @@ interface HistoryEntry {
   error: null;
 }
 
-export function useCommitHistory(includeRemotes: boolean) {
+export function useCommitHistory(includeRemotes: boolean, reloadKey = 0) {
   const [entry, setEntry] = useState<HistoryEntry | null>(null);
   const [failed, setFailed] = useState<{ includeRemotes: boolean; error: string } | null>(
     null,
@@ -32,7 +32,7 @@ export function useCommitHistory(includeRemotes: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [includeRemotes]);
+  }, [includeRemotes, reloadKey]);
 
   const isCurrent = (key: { includeRemotes: boolean }) =>
     key.includeRemotes === includeRemotes;

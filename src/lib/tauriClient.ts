@@ -7,6 +7,7 @@ import type {
   FileCommitEntry,
   FileDiffContent,
   FileTree,
+  NetResult,
   WorktreeFileContent,
 } from '../types/repository';
 
@@ -90,4 +91,18 @@ export async function readFileAtCommit(
   oid: string,
 ): Promise<WorktreeFileContent> {
   return invoke('read_file_at_commit', { path, oid });
+}
+
+export type NetResultLike = NetResult;
+
+export async function gitFetch(): Promise<NetResult> {
+  return invoke('git_fetch');
+}
+
+export async function gitPull(): Promise<NetResult> {
+  return invoke('git_pull');
+}
+
+export async function gitPush(): Promise<NetResult> {
+  return invoke('git_push');
 }

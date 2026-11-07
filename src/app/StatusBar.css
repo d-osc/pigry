@@ -40,6 +40,38 @@
   cursor: default;
 }
 
+.status-bar__net {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.status-bar__net-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  font-family: var(--font-mono);
+}
+
+.status-bar__net-button:hover:not(:disabled) {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.status-bar__net-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.status-bar__net-button--attention {
+  color: var(--accent);
+}
+
 .status-bar__path {
   font-family: var(--font-mono);
 }
