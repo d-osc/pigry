@@ -131,3 +131,12 @@
   opacity: 0.7;
   pointer-events: none;
 }
+.gutter-added {
+  margin-left: 3px;
+  border-left: 3px solid var(--green);
+}
+
+.gutter-modified {
+  margin-left: 3px;
+  border-left: 3px solid var(--cyan);
+}

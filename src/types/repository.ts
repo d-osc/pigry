@@ -154,6 +154,11 @@ export interface BlameLine {
   uncommitted: boolean;
 }
 
+export interface LineChange {
+  line: number;
+  change: string;
+}
+
 export interface NetResult {
   summary: string;
 }

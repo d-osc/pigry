@@ -10,6 +10,7 @@ import type {
   FileTree,
   BlameLine,
   HunkInfo,
+  LineChange,
   NetResult,
   WorktreeFileContent,
 } from '../types/repository';
@@ -180,4 +181,8 @@ export async function discardHunk(
 
 export async function getFileBlame(path: string): Promise<BlameLine[]> {
   return invoke('get_file_blame', { path });
+}
+
+export async function getLineChanges(path: string): Promise<LineChange[]> {
+  return invoke('get_line_changes', { path });
 }

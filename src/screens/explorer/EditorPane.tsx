@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
 import { Save } from 'lucide-react';
 import { readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
 import { useFileBlame } from '../../hooks/useFileBlame';
+import { useLineChanges } from '../../hooks/useLineChanges';
 import { relativeTime } from '../../lib/relativeTime';
 import type { WorktreeFileContent } from '../../types/repository';
 import '../../editor/monacoSetup';
@@ -44,6 +45,14 @@ export function EditorPane({
   const draftRef = useRef(draft);
 
   const { lines: blameLines } = useFileBlame(path, blameOn);
+  const { repository } = useRepository();
+  // Gutter reload key — derived from the repository's change fingerprint so
+  // gutter decorations recompute after saves, commits and staging.
+  const gutterReloadKey = useMemo(
+    () => repository?.files.map((file) => file.path).join('|') ?? '',
+    [repository],
+  );
+  const { changes: lineChangesData } = useLineChanges(path, gutterReloadKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,6 +150,30 @@ export function EditorPane({
       });
     decorationsRef.current = editorInstance.createDecorationsCollection(decorations);
   }, [blameOn, blameLines, editorInstance, path]);
+
+  // Gutter decorations: mark added/modified lines vs HEAD.
+  const gutterDecorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
+  useEffect(() => {
+    const editor = editorInstance;
+    if (!editor || !lineChangesData) {
+      gutterDecorationsRef.current?.clear();
+      return;
+    }
+    const model = editor.getModel();
+    const monaco = monacoRef.current;
+    if (!model || !monaco) return;
+    const decorations = lineChangesData
+      .filter((change) => change.line <= model.getLineCount())
+      .map((change) => ({
+        range: new monaco.Range(change.line, 1, change.line, 1),
+        options: {
+          isWholeLine: true,
+          linesDecorationsClassName:
+            change.change === 'added' ? 'gutter-added' : 'gutter-modified',
+        },
+      }));
+    gutterDecorationsRef.current = editor.createDecorationsCollection(decorations);
+  }, [lineChangesData, editorInstance, path]);
 
   return (
     <div className="editor-pane">
