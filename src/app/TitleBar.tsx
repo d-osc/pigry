@@ -2,7 +2,11 @@ import { PanelRight, Search } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import './TitleBar.css';
 
-export function TitleBar() {
+interface TitleBarProps {
+  onOpenPalette: () => void;
+}
+
+export function TitleBar({ onOpenPalette }: TitleBarProps) {
   const { repository } = useRepository();
 
   return (
@@ -30,16 +34,16 @@ export function TitleBar() {
       )}
 
       <div className="title-bar__actions">
-        <div className="command-search">
+        <button
+          type="button"
+          className="command-search"
+          onClick={onOpenPalette}
+          aria-label="Open command palette"
+        >
           <Search size={13} className="command-search__icon" />
-          <input
-            className="command-search__input"
-            placeholder="Search or jump to…"
-            readOnly
-            tabIndex={-1}
-          />
+          <span className="command-search__input">Search or jump to…</span>
           <kbd className="command-search__kbd">⌘ K</kbd>
-        </div>
+        </button>
         <button className="icon-button" type="button" aria-label="Toggle secondary panel">
           <PanelRight size={13} />
         </button>

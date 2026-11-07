@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar } from './StatusBar';
 import type { NavId } from './navigation';
-import { useRepository, RepositoryProvider } from '../hooks/useRepository';
+import { buildCommands } from './commands';
+import { CommandPalette } from './commandPalette/CommandPalette';
+import {
+  useRepository,
+  RepositoryProvider,
+  type RepositoryContextValue,
+} from '../hooks/useRepository';
 import { WorkingChangesScreen } from '../screens/working-changes/WorkingChangesScreen';
 import { CommitGraphScreen } from '../screens/commit-graph/CommitGraphScreen';
 import { ExplorerScreen } from '../screens/explorer/ExplorerScreen';
@@ -47,15 +53,43 @@ function renderScreen(screen: NavId) {
 
 function AppShellInner() {
   const [screen, setScreen] = useState<NavId>('working-changes');
-  const { mode, repository } = useRepository();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const repository = useRepository();
+  const { mode } = repository;
 
-  const showWorkspace = mode === 'tauri' && repository !== null;
+  const navigate = useCallback((next: NavId) => {
+    setScreen(next);
+  }, []);
+
+  // Ctrl/Cmd+K toggles the palette from anywhere.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const commands = useMemo(
+    () =>
+      buildCommands({
+        navigate,
+        activeScreen: screen,
+        repository: repository as RepositoryContextValue,
+      }),
+    [navigate, screen, repository],
+  );
+
+  const showWorkspace = mode === 'tauri' && repository.repository !== null;
 
   return (
     <div className="app-shell">
-      <TitleBar />
+      <TitleBar onOpenPalette={() => setPaletteOpen(true)} />
       {mode === 'browser' && <BrowserNotice />}
-      {mode === 'tauri' && !repository && <NoRepositoryScreen />}
+      {mode === 'tauri' && !repository.repository && <NoRepositoryScreen />}
       {showWorkspace && (
         <>
           <div className="app-shell__body">
@@ -67,6 +101,9 @@ function AppShellInner() {
           </div>
           <StatusBar />
         </>
+      )}
+      {paletteOpen && (
+        <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />
       )}
     </div>
   );

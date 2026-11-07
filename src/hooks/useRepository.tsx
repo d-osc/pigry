@@ -13,7 +13,7 @@ import type { AppStatePayload } from '../types/repository';
 
 export type BackendMode = 'tauri' | 'browser';
 
-interface RepositoryContextValue {
+export interface RepositoryContextValue {
   mode: BackendMode;
   state: AppStatePayload | null;
   busy: boolean;
