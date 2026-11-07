@@ -93,7 +93,7 @@ pub struct RepositoryState {
     pub files: Vec<ChangedFile>,
     pub branches: Vec<BranchInfo>,
     pub remotes: Vec<RemoteGroup>,
-    pub tags: Vec<String>,
+    pub tags: Vec<TagInfo>,
     pub tag_total: usize,
     pub stashes: Vec<StashInfo>,
 }
@@ -505,8 +505,17 @@ fn remote_branches(repo: &Repository) -> Result<Vec<RemoteGroup>> {
         .collect())
 }
 
-fn tags(repo: &Repository) -> Result<(Vec<String>, usize)> {
-    let mut names = Vec::new();
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TagInfo {
+    pub name: String,
+    /// Commit the tag resolves to; None when dangling.
+    pub commit_oid: Option<String>,
+    pub time_seconds: Option<i64>,
+}
+
+fn tags(repo: &Repository) -> Result<(Vec<TagInfo>, usize)> {
+    let mut infos = Vec::new();
     for reference in repo.references().map_err(err)? {
         let Ok(reference) = reference else {
             continue;
@@ -514,17 +523,23 @@ fn tags(repo: &Repository) -> Result<(Vec<String>, usize)> {
         let Some(full) = reference.name() else {
             continue;
         };
-        if let Some(name) = full.strip_prefix("refs/tags/") {
-            names.push(name.to_string());
-        }
+        let Some(name) = full.strip_prefix("refs/tags/") else {
+            continue;
+        };
+        // Resolve to the commit the tag (annotated or lightweight) points at.
+        let target = reference.peel_to_commit().ok();
+        infos.push(TagInfo {
+            name: name.to_string(),
+            commit_oid: target.as_ref().map(|c| c.id().to_string()),
+            time_seconds: target.map(|c| c.time().seconds() as i64),
+        });
     }
-    names.sort();
-    names.reverse();
-    let total = names.len();
-    if names.len() > MAX_TAGS_SHOWN {
-        names.truncate(MAX_TAGS_SHOWN);
+    infos.sort_by(|a, b| b.name.cmp(&a.name));
+    let total = infos.len();
+    if infos.len() > MAX_TAGS_SHOWN {
+        infos.truncate(MAX_TAGS_SHOWN);
     }
-    Ok((names, total))
+    Ok((infos, total))
 }
 
 fn stash_list(repo: &mut Repository) -> Result<Vec<StashInfo>> {
@@ -1501,5 +1516,60 @@ pub fn delete_branch(repo_path: &Path, name: &str) -> Result<()> {
         ));
     }
     branch.delete().map_err(err)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tag operations: create / delete
+// ---------------------------------------------------------------------------
+
+/// Creates a lightweight tag at HEAD (or an explicit oid).
+pub fn create_tag(repo_path: &Path, name: &str) -> Result<()> {
+    validate_tag_name(name)?;
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    if repo
+        .find_reference(&format!("refs/tags/{name}"))
+        .is_ok()
+    {
+        return Err(format!("tag '{name}' already exists"));
+    }
+    let target = repo
+        .head()
+        .map_err(err)?
+        .peel_to_commit()
+        .map_err(err)?;
+    repo.reference(
+        &format!("refs/tags/{name}"),
+        target.id(),
+        false,
+        "orbit: create tag",
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+/// Deletes a tag by name. Unknown tags produce a clear error.
+pub fn delete_tag(repo_path: &Path, name: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut reference = repo
+        .find_reference(&format!("refs/tags/{name}"))
+        .map_err(|_| format!("tag '{name}' not found"))?;
+    reference.delete().map_err(err)?;;
+    Ok(())
+}
+
+fn validate_tag_name(name: &str) -> Result<()> {
+    if name.is_empty()
+        || name.starts_with('-')
+        || name.starts_with('/')
+        || name.ends_with('/')
+        || name.ends_with('.')
+        || name.contains("..")
+        || name.contains(' ')
+        || name.ends_with(".lock")
+        || name.chars().any(|c| c.is_control() || "?*[]:\\".contains(c))
+    {
+        return Err(format!("invalid tag name: '{name}'"));
+    }
     Ok(())
 }

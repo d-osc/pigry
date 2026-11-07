@@ -130,3 +130,11 @@ export async function checkoutBranch(name: string): Promise<AppStatePayload> {
 export async function deleteBranch(name: string): Promise<AppStatePayload> {
   return invoke('delete_branch', { name });
 }
+
+export async function createTag(name: string): Promise<AppStatePayload> {
+  return invoke('create_tag', { name });
+}
+
+export async function deleteTag(name: string): Promise<AppStatePayload> {
+  return invoke('delete_tag', { name });
+}

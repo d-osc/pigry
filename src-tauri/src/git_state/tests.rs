@@ -744,3 +744,65 @@ fn branch_delete_guards() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn tag_create_list_and_delete() {
+    let dir = scratch_repo("tags");
+    write(&dir, "a.txt", "1\n");
+    commit_all(&dir, "base");
+    write(&dir, "a.txt", "2\n");
+    commit_all(&dir, "second");
+
+    create_tag(&dir, "v0.1.0").unwrap();
+    create_tag(&dir, "v0.2.0").unwrap();
+    // Duplicate refused.
+    assert!(create_tag(&dir, "v0.1.0").is_err());
+    // Invalid names refused.
+    assert!(create_tag(&dir, "bad name").is_err());
+    assert!(create_tag(&dir, "-x").is_err());
+
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.tag_total, 2);
+    // Newest-name-first ordering (v0.2.0 before v0.1.0).
+    assert_eq!(state.tags[0].name, "v0.2.0");
+    assert_eq!(state.tags[1].name, "v0.1.0");
+    // Both point at HEAD (same commit).
+    assert_eq!(state.tags[0].commit_oid, state.tags[1].commit_oid);
+    assert!(state.tags[0].time_seconds.is_some());
+
+    delete_tag(&dir, "v0.2.0").unwrap();
+    // Unknown tag errors clearly.
+    assert!(delete_tag(&dir, "ghost").is_err());
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.tag_total, 1);
+    assert_eq!(state.tags[0].name, "v0.1.0");
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn annotated_tag_resolves_to_commit() {
+    let dir = scratch_repo("tag-annotated");
+    write(&dir, "a.txt", "x\n");
+    commit_all(&dir, "base");
+
+    let repo = Repository::open(&dir).unwrap();
+    let sig = Signature::now("T", "t@t.dev").unwrap();
+    {
+        let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
+        let head_obj = head_commit.as_object().clone();
+        repo.tag("rel-1", &head_obj, &sig, "release one", false)
+            .unwrap();
+    }
+    drop(repo);
+
+    let state = build_state(&dir).unwrap();
+    let tag = state.tags.iter().find(|t| t.name == "rel-1").unwrap();
+    assert!(tag.commit_oid.is_some(), "annotated tag must resolve to a commit");
+    let repo = Repository::open(&dir).unwrap();
+    let head_oid = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
+    drop(repo);
+    assert_eq!(tag.commit_oid.as_deref(), Some(head_oid.as_str()));
+
+    let _ = fs::remove_dir_all(&dir);
+}

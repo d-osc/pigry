@@ -7,6 +7,7 @@ import {
   Settings,
   Tag as TagIcon,
   Archive,
+  Plus,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import { workspaceNav, type NavId } from './navigation';
@@ -45,8 +46,10 @@ function Section({
 }
 
 export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
-  const { repository, checkoutBranch, createBranch, deleteBranch, busy } = useRepository();
+  const { repository, checkoutBranch, createBranch, deleteBranch, createTag, deleteTag, busy } = useRepository();
   const [creating, setCreating] = useState(false);
+  const [tagCreating, setTagCreating] = useState(false);
+  const [newTagName, setNewTagName] = useState("");
   const [newName, setNewName] = useState('');
   if (!repository) return null;
 
@@ -55,6 +58,13 @@ export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
     setCreating(false);
     setNewName('');
     if (name) void createBranch(name, true);
+  };
+
+  const submitNewTag = () => {
+    const name = newTagName.trim();
+    setTagCreating(false);
+    setNewTagName("");
+    if (name) void createTag(name);
   };
 
   const handleBranchClick = (event: React.MouseEvent, branch: string) => {
@@ -173,16 +183,56 @@ export function NavSidebar({ activeScreen, onNavigate }: NavSidebarProps) {
           </Section>
         )}
 
-        {repository.tags.length > 0 && (
-          <Section title="Tags" count={repository.tagTotal}>
+        <Section
+          title="Tags"
+          count={repository.tagTotal}
+            action={
+              <button
+                type="button"
+                className="nav-section__add"
+                aria-label="Create tag"
+                onClick={() => setTagCreating(true)}
+              >
+                <Plus size={11} />
+              </button>
+            }
+          >
+            {tagCreating && (
+              <div className="nav-branch-create">
+                <input
+                  autoFocus
+                  className="nav-branch-create__input"
+                  placeholder="tag name…"
+                  value={newTagName}
+                  onChange={(event) => setNewTagName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submitNewTag();
+                    if (event.key === "Escape") {
+                      setTagCreating(false);
+                      setNewTagName("");
+                    }
+                  }}
+                  onBlur={submitNewTag}
+                  aria-label="New tag name"
+                  spellCheck={false}
+                />
+              </div>
+            )}
             {repository.tags.map((tag) => (
-              <button key={tag} type="button" className="nav-branch">
+              <button
+                key={tag.name}
+                type="button"
+                className="nav-branch"
+                onClick={() => {
+                  if (!busy) void deleteTag(tag.name);
+                }}
+                title={`Tag on ${tag.commitOid ? tag.commitOid.slice(0, 7) : "?"} — click to delete`}
+              >
                 <TagIcon size={12} className="nav-branch__icon" />
-                <span className="nav-branch__name">{tag}</span>
+                <span className="nav-branch__name">{tag.name}</span>
               </button>
             ))}
-          </Section>
-        )}
+        </Section>
 
         {repository.stashes.length > 0 && (
           <Section title="Stashes" count={repository.stashes.length}>

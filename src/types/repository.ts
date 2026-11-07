@@ -42,6 +42,12 @@ export interface ChangedFile {
   untracked: boolean;
 }
 
+export interface TagInfo {
+  name: string;
+  commitOid: string | null;
+  timeSeconds: number | null;
+}
+
 export interface RepositoryState {
   organization: string;
   name: string;
@@ -54,7 +60,7 @@ export interface RepositoryState {
   files: ChangedFile[];
   branches: BranchInfo[];
   remotes: RemoteGroup[];
-  tags: string[];
+  tags: TagInfo[];
   tagTotal: number;
   stashes: StashInfo[];
 }

@@ -145,6 +145,29 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   };
 
+  const tagCommands: Command[] = [
+    {
+      id: "tag:create",
+      title: "Create tag at HEAD…",
+      section: "Repository" as const,
+      icon: FolderTree,
+      hint: repo?.currentBranch,
+      enabled: true,
+      run: () => {
+        const name = window.prompt("Tag name");
+        if (name && name.trim()) void repository.createTag(name.trim());
+      },
+    },
+    ...(repo?.tags ?? []).map((tag) => ({
+      id: `tag:delete:${tag.name}`,
+      title: `Delete tag ${tag.name}`,
+      section: "Repository" as const,
+      icon: ListMinus,
+      enabled: true,
+      run: () => void repository.deleteTag(tag.name),
+    })),
+  ];
+
   const syncCommands: Command[] = [
     {
       id: 'sync:fetch',
@@ -195,5 +218,5 @@ export function buildCommands({ navigate, activeScreen, repository }: CommandDep
     },
   ];
 
-  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...syncCommands];
+  return [...navigation, ...repoCommands, createCommand, ...branchCommands, ...deleteCommands, ...tagCommands, ...syncCommands];
 }
