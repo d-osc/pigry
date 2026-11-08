@@ -1,0 +1,203 @@
+//! AI chat proxy — forwards OpenAI-compatible chat completion requests to the
+//! provider endpoint configured in Settings (z.ai GLM, OpenAI, Ollama, custom).
+//! Uses curl so CORS can never block the webview, and streams the request body
+//! through stdin (image attachments can be megabytes of base64).
+
+use serde::Serialize;
+use std::io::Write;
+use std::os::windows::process::CommandExt;
+use std::path::Path;
+use std::process::{Command, Stdio};
+
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiChatResult {
+    pub ok: bool,
+    pub status: u16,
+    pub body: String,
+    pub error: String,
+}
+
+/// POST `body_json` to `url` with a Bearer key; returns the raw response body.
+pub fn ai_chat(url: &str, api_key: &str, body_json: &str) -> Result<AiChatResult, String> {
+    if url.is_empty() {
+        return Err("provider endpoint URL is empty".to_string());
+    }
+    let mut cmd = Command::new("curl");
+    cmd.args([
+        "-s",
+        "-X",
+        "POST",
+        "--max-time",
+        "180",
+        "-H",
+        "Content-Type: application/json",
+    ]);
+    if !api_key.is_empty() {
+        cmd.args(["-H", &format!("Authorization: Bearer {api_key}")]);
+    }
+    cmd.args(["--data-binary", "@-"]);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("curl not available: {e}"))?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        stdin
+            .write_all(body_json.as_bytes())
+            .map_err(|e| format!("failed to write request body: {e}"))?;
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("ai request failed: {e}"))?;
+
+    let body = String::from_utf8_lossy(&output.stdout).to_string();
+    let status = output.status.code().unwrap_or(0) as u16;
+    if body.is_empty() && !output.stderr.is_empty() {
+        return Ok(AiChatResult {
+            ok: false,
+            status,
+            body: String::new(),
+            error: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        });
+    }
+    Ok(AiChatResult { ok: true, status, body, error: String::new() })
+}
+
+// ---------------------------------------------------------------------------
+// ZCode (desktop) credential bridge — reads the encrypted api-key entries from
+// ~/.zcode/v2/credentials.json and returns the raw parts for the frontend to
+// decrypt with WebCrypto (key = sha256 of the machine-derived secret).
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZcodeEntry {
+    pub key: String,
+    pub iv: String,
+    pub tag: String,
+    pub ct: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZcodeCreds {
+    pub secret: String,
+    pub entries: Vec<ZcodeEntry>,
+    pub exe_found: bool,
+}
+
+pub fn zcode_creds() -> Result<ZcodeCreds, String> {
+    let home = std::env::var("USERPROFILE").map_err(|_| "USERPROFILE missing".to_string())?;
+    let sep = std::path::MAIN_SEPARATOR;
+    let path = format!(
+        "{}{}zcode{}v2{}credentials.json",
+        home.trim_end_matches(sep),
+        sep,
+        sep,
+        sep
+    );
+    let text = std::fs::read_to_string(&path)
+        .map_err(|_| "credentials.json not found (ZCode not installed?)".to_string())?;
+    let map: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let map = map.as_object().ok_or("credentials.json: not an object")?;
+
+    let username = std::env::var("USERNAME").unwrap_or_else(|_| "unknown".to_string());
+    let secret = format!(
+        "zcode-credential-fallback:win32:{}:{}",
+        home.trim_end_matches(std::path::MAIN_SEPARATOR),
+        username
+    );
+
+    let mut entries = Vec::new();
+    for (key, value) in map {
+        if !key.contains(":api-key") {
+            continue;
+        }
+        let raw = value.as_str().unwrap_or("");
+        let Some(rest) = raw.strip_prefix("enc:v1:") else { continue };
+        let parts: Vec<&str> = rest.split('.').collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        entries.push(ZcodeEntry {
+            key: key.to_string(),
+            iv: parts[0].to_string(),
+            tag: parts[1].to_string(),
+            ct: parts[2].to_string(),
+        });
+    }
+
+    let exe_found = std::path::Path::new(r"C:\Program Files\ZCode\ZCode.exe").exists();
+    Ok(ZcodeCreds { secret, entries, exe_found })
+}
+
+// ---------------------------------------------------------------------------
+// CLI coding agents — Claude Code & Codex (installed CLIs, own subscriptions).
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliDetectResult {
+    pub claude: bool,
+    pub codex: bool,
+    pub claude_version: String,
+    pub codex_version: String,
+}
+
+fn cli_version(exe: &str) -> String {
+    let output = Command::new("cmd")
+        .args(["/C", exe, "--version"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    match output {
+        Ok(out) if out.status.success() => {
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        }
+        _ => String::new(),
+    }
+}
+
+pub fn cli_detect() -> CliDetectResult {
+    let claude_version = cli_version("claude");
+    let codex_version = cli_version("codex");
+    CliDetectResult {
+        claude: !claude_version.is_empty(),
+        codex: !codex_version.is_empty(),
+        claude_version,
+        codex_version,
+    }
+}
+
+/// Runs a prompt through an installed CLI coding agent (blocking; these take
+/// up to a few minutes — the frontend shows a Thinking state while waiting).
+pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, String> {
+    // npm-installed CLIs are .cmd shims — spawn through cmd /C so PATH resolution works.
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/C").arg(cli);
+    match cli {
+        "claude" => {
+            cmd.args(["-p", prompt, "--output-format", "text"]);
+        }
+        "codex" => {
+            cmd.args(["exec", prompt]);
+        }
+        other => return Err(format!("unknown CLI agent: {other}")),
+    }
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.current_dir(Path::new(cwd));
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let output = cmd
+        .output()
+        .map_err(|e| format!("{cli} not available: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    if !output.status.success() && stdout.trim().is_empty() {
+        return Err(format!("{cli} failed: {}", stderr.trim()));
+    }
+    Ok(stdout.trim().to_string())
+}

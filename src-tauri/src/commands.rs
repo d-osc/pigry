@@ -11,13 +11,192 @@ use crate::config::{self, AppConfig};
 use crate::FileWatcherHolder;
 use crate::git_state::{self, FileDiffContent, RepositoryState};
 use crate::ops;
+use crate::ai;
+use crate::gh;
 use crate::settings;
+use crate::gh_insights;
+use crate::insights;
+use crate::wiki;
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
 /// repositories) so we keep them synchronous inside async commands.
 pub struct AppState {
     pub config: AppConfig,
     pub repo_path: Option<PathBuf>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub code: i32,
+    /// Working directory after the command (for the next prompt).
+    pub cwd: String,
+}
+
+/// Run one command in the integrated terminal, inside the repository
+/// (or the directory a previous `cd` moved to). `cls`/`clear` are handled
+/// client-side; `cd` persists in the session.
+#[tauri::command]
+pub async fn terminal_run(
+    state: State<'_, Mutex<AppState>>,
+    command: String,
+    cwd: Option<String>,
+) -> Result<TerminalOutput, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err("empty command".into());
+    }
+
+    // The frontend tracks each terminal tab's cwd; fall back to the repo root.
+    let current = cwd
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(|| repo_path.clone());
+
+    // `cd` — resolve and hand the new directory back to the frontend.
+    if trimmed == "cd" {
+        let shown = current.to_string_lossy().to_string();
+        return Ok(TerminalOutput {
+            stdout: shown.clone(),
+            stderr: String::new(),
+            code: 0,
+            cwd: shown,
+        });
+    }
+    if let Some(rest) = trimmed.strip_prefix("cd ") {
+        let target = PathBuf::from(rest.trim().trim_matches('"'));
+        let resolved = if target.is_absolute() {
+            target
+        } else {
+            current.join(target)
+        };
+        let resolved = resolved
+            .canonicalize()
+            .map_err(|e| format!("cd: {e}"))?;
+        if !resolved.is_dir() {
+            return Err(format!("cd: not a directory: {}", resolved.display()));
+        }
+        let shown = resolved.to_string_lossy().to_string();
+        return Ok(TerminalOutput {
+            stdout: shown.clone(),
+            stderr: String::new(),
+            code: 0,
+            cwd: shown,
+        });
+    }
+
+    // BusyBox-style built-ins first (ls, cat, grep, wc, find, …) — they run
+    // directly on the worktree. Unknown commands fall through to the shell.
+    let tokens: Vec<String> = trimmed
+        .split_whitespace()
+        .map(|t| t.to_string())
+        .collect();
+    if let Some(first) = tokens.first() {
+        let rest = tokens[1..].to_vec();
+        let cwd1 = current.clone();
+        let repo1 = repo_path.clone();
+        let first1 = first.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            crate::busybox::run(&cwd1, &repo1, &first1, &rest)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        if result.code != 127 {
+            return Ok(TerminalOutput {
+                stdout: result.stdout,
+                stderr: result.stderr,
+                code: result.code,
+                cwd: current.to_string_lossy().to_string(),
+            });
+        }
+        // Unknown to busybox → try the second batch (sort/uniq/cut/…).
+        let rest2 = tokens[1..].to_vec();
+        let cwd2 = current.clone();
+        let repo2 = repo_path.clone();
+        let first2 = first.clone();
+        let extra = tauri::async_runtime::spawn_blocking(move || {
+            crate::busybox_extra::run(&cwd2, &repo2, &first2, &rest2)
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+        let Some(extra) = extra else {
+            // Unknown to batch 2 → try the third batch (hashes/expr/tar).
+            let rest3 = tokens[1..].to_vec();
+            let cwd3 = current.clone();
+            let repo3 = repo_path.clone();
+            let first3 = first.clone();
+            let third = tauri::async_runtime::spawn_blocking(move || {
+                crate::busybox3::run(&cwd3, &repo3, &first3, &rest3)
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            let Some(third) = third else {
+                // Unknown to all batches — fall through to the shell below.
+                return Ok(TerminalOutput {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    code: 127,
+                    cwd: current.to_string_lossy().to_string(),
+                });
+            };
+            return Ok(TerminalOutput {
+                stdout: third.stdout,
+                stderr: third.stderr,
+                code: third.code,
+                cwd: current.to_string_lossy().to_string(),
+            });
+        };
+        if extra.code != 127 {
+            return Ok(TerminalOutput {
+                stdout: extra.stdout,
+                stderr: extra.stderr,
+                code: extra.code,
+                cwd: current.to_string_lossy().to_string(),
+            });
+        }
+    }
+
+    // Run through the platform shell so pipes/redirection work.
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", trimmed]);
+        c
+    };
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", trimmed]);
+        c
+    };
+    cmd.current_dir(&current);
+
+    let output = tauri::async_runtime::spawn_blocking(move || cmd.output())
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+
+    const MAX: usize = 400_000;
+    let mut stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    if stdout.len() > MAX {
+        stdout.truncate(MAX);
+        stdout.push_str("
+… output truncated …");
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    Ok(TerminalOutput {
+        stdout,
+        stderr,
+        code: output.status.code().unwrap_or(-1),
+        cwd: current.to_string_lossy().to_string(),
+    })
 }
 
 #[derive(Serialize)]
@@ -40,6 +219,17 @@ fn repo_path_str(state: &AppState) -> Result<&Path, String> {
         .repo_path
         .as_deref()
         .ok_or_else(|| "no repository open".to_string())
+}
+
+/// Auth-level gh commands (login status, accounts, device flow) work without
+/// an open repository -- gh auth is machine-level, so they fall back to the
+/// home directory as the gh subprocess working dir.
+fn gh_auth_dir(state: &AppState) -> PathBuf {
+    state.repo_path.clone().unwrap_or_else(|| {
+        std::env::var("USERPROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("."))
+    })
 }
 
 fn build_payload(state: &AppState) -> AppStatePayload {
@@ -228,6 +418,708 @@ pub async fn get_commit_history(
 }
 
 #[tauri::command]
+pub async fn search_code(
+    state: State<'_, Mutex<AppState>>,
+    query: String,
+) -> Result<Vec<git_state::CodeSearchHit>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::search_worktree_code(&repo_path, &query, 200)
+}
+
+#[tauri::command]
+pub async fn gh_auth_status(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<gh::GhAuthStatus, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::auth_status(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_pr_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhPullRequest>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_issue_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhIssue>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_issue_view(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<gh::GhIssueDetail, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_detail(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_issue_comment(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+    body: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_comment(&repo_path, number, &body)
+}
+
+#[tauri::command]
+pub async fn gh_issue_create(
+    state: State<'_, Mutex<AppState>>,
+    title: String,
+    body: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_create(&repo_path, &title, &body)
+}
+
+#[tauri::command]
+pub async fn gh_issue_close(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_close(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_issue_reopen(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::issue_reopen(&repo_path, number)
+}
+
+/// Wiki clones live under the OS app-config dir — outside the watched
+/// worktree so the file watcher never sees them.
+fn wiki_cache_root(app: &tauri::AppHandle) -> PathBuf {
+    use tauri::Manager;
+    app.path()
+        .app_config_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("wiki-cache")
+}
+
+#[tauri::command]
+pub async fn wiki_check(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<wiki::WikiStatus, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    wiki::check(&repo_path, &wiki_cache_root(&app))
+}
+
+#[tauri::command]
+pub async fn wiki_sync(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let root = wiki_cache_root(&app);
+    let status = wiki::check(&repo_path, &root)?;
+    if !status.supported {
+        return Err("this repository has no github.com origin".to_string());
+    }
+    if !status.has_wiki {
+        return Err("the wiki does not exist on GitHub yet".to_string());
+    }
+    wiki::sync(&root, &status.url)
+}
+
+#[tauri::command]
+pub async fn wiki_list(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<wiki::WikiPage>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let root = wiki_cache_root(&app);
+    let url = wiki::url_for(&repo_path)?;
+    wiki::list(&root, &url)
+}
+
+#[tauri::command]
+pub async fn wiki_read(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    file: String,
+) -> Result<wiki::WikiPageContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let url = wiki::url_for(&repo_path)?;
+    wiki::read(&wiki_cache_root(&app), &url, &file)
+}
+
+#[tauri::command]
+pub async fn wiki_page_history(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    file: String,
+) -> Result<Vec<wiki::WikiCommit>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let url = wiki::url_for(&repo_path)?;
+    wiki::history(&wiki_cache_root(&app), &url, &file)
+}
+
+#[tauri::command]
+pub async fn wiki_save(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    file: String,
+    content: String,
+    message: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let url = wiki::url_for(&repo_path)?;
+    wiki::save(&wiki_cache_root(&app), &url, &file, &content, &message)
+}
+
+#[tauri::command]
+pub async fn wiki_create(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    file: String,
+    content: String,
+    message: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let root = wiki_cache_root(&app);
+    let status = wiki::check(&repo_path, &root)?;
+    if !status.supported || status.url.is_empty() {
+        return Err("wiki requires a github.com origin".to_string());
+    }
+    wiki::create(&root, &status.url, &file, &content, &message)
+}
+
+#[tauri::command]
+pub async fn gh_release_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhRelease>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::release_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_project_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhProject>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::project_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_project_item_list(
+    state: State<'_, Mutex<AppState>>,
+    project_number: u64,
+) -> Result<Vec<gh::GhProjectItem>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::project_item_list(&repo_path, project_number)
+}
+
+#[tauri::command]
+pub async fn gh_code_scanning_alerts(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhCodeAlert>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::code_scanning_alerts(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_code_alert_dismiss(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+    reason: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::code_alert_dismiss(&repo_path, number, &reason)
+}
+
+#[tauri::command]
+pub async fn gh_dependabot_alerts(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhDependabotAlert>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::dependabot_alerts(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_secret_scanning_alerts(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhSecretAlert>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::secret_scanning_alerts(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_branch_check_runs(
+    state: State<'_, Mutex<AppState>>,
+    branch: String,
+) -> Result<Vec<gh::GhCheckRun>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::branch_check_runs(&repo_path, &branch)
+}
+
+#[tauri::command]
+pub async fn gh_account_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhAccount>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::account_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_switch_account(
+    state: State<'_, Mutex<AppState>>,
+    account: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::switch_account(&repo_path, &account)
+}
+
+#[tauri::command]
+pub async fn gh_login_with_token(
+    state: State<'_, Mutex<AppState>>,
+    token: String,
+) -> Result<gh::GhAuthStatus, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::login_with_token(&repo_path, &token)
+}
+
+#[tauri::command]
+pub async fn gh_logout(
+    state: State<'_, Mutex<AppState>>,
+    account: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::logout(&repo_path, &account)
+}
+
+#[tauri::command]
+pub async fn get_commit_oid_set(
+    state: State<'_, Mutex<AppState>>,
+    ref_name: Option<String>,
+    path: Option<String>,
+    exclude: Option<String>,
+) -> Result<Vec<String>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::commit_oid_set(
+        &repo_path,
+        ref_name.as_deref(),
+        path.as_deref(),
+        exclude.as_deref(),
+        3000,
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn gh_release_view(
+    state: State<'_, Mutex<AppState>>,
+    tag: String,
+) -> Result<gh::GhReleaseDetail, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::release_view(&repo_path, &tag)
+}
+
+#[tauri::command]
+pub async fn gh_release_create(
+    state: State<'_, Mutex<AppState>>,
+    tag: String,
+    title: String,
+    notes: String,
+    target: Option<String>,
+    draft: bool,
+    prerelease: bool,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::release_create(
+        &repo_path,
+        &tag,
+        &title,
+        &notes,
+        target.as_deref(),
+        draft,
+        prerelease,
+    )
+}
+
+#[tauri::command]
+pub async fn gh_release_edit(
+    state: State<'_, Mutex<AppState>>,
+    tag: String,
+    title: String,
+    notes: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::release_edit(&repo_path, &tag, &title, &notes)
+}
+
+#[tauri::command]
+pub async fn gh_release_delete(
+    state: State<'_, Mutex<AppState>>,
+    tag: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::release_delete(&repo_path, &tag)
+}
+
+#[tauri::command]
+pub async fn gh_install(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::install(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_pr_detail(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<gh::GhPrDetail, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_detail(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_pr_diff(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_diff(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_pr_comment(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+    body: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_comment(&repo_path, number, &body)
+}
+
+#[tauri::command]
+pub async fn gh_pr_review(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+    event: String,
+    body: Option<String>,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_review(&repo_path, number, &event, body.as_deref())
+}
+
+#[tauri::command]
+pub async fn gh_pr_checkout(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_checkout(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_pr_create(
+    state: State<'_, Mutex<AppState>>,
+    title: String,
+    body: String,
+    head: String,
+    base: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_create(&repo_path, &title, &body, &head, &base)
+}
+
+#[tauri::command]
+pub async fn gh_pr_close(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_close(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_device_flow_start(
+    state: State<'_, Mutex<AppState>>,
+    scopes: Vec<String>,
+) -> Result<gh::GhDeviceStart, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::device_flow_start(&repo_path, &scopes)
+}
+
+#[tauri::command]
+pub async fn gh_device_flow_poll(
+    state: State<'_, Mutex<AppState>>,
+    device_code: String,
+) -> Result<gh::GhDevicePoll, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::device_flow_poll(&repo_path, &device_code)
+}
+
+#[tauri::command]
+pub async fn gh_token_scopes(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<gh::GhScopes, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        gh_auth_dir(&state)
+    };
+    gh::token_scopes(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_open_url(url: String) -> Result<(), String> {
+    gh::open_url(&url)
+}
+
+#[tauri::command]
+pub async fn gh_workflow_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::GhWorkflow>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::workflow_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn gh_run_list(
+    state: State<'_, Mutex<AppState>>,
+    limit: Option<u32>,
+) -> Result<gh::GhRunPage, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_list(&repo_path, limit.unwrap_or(50))
+}
+
+#[tauri::command]
+pub async fn gh_run_view(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+) -> Result<gh::GhRunDetail, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_view(&repo_path, run_id)
+}
+
+#[tauri::command]
+pub async fn gh_run_logs(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+    job_id: Option<u64>,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_logs(&repo_path, run_id, job_id)
+}
+
+#[tauri::command]
+pub async fn gh_run_rerun(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+    failed_only: bool,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_rerun(&repo_path, run_id, failed_only)
+}
+
+#[tauri::command]
+pub async fn gh_run_cancel(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_cancel(&repo_path, run_id)
+}
+
+#[tauri::command]
+pub async fn gh_workflow_dispatch(
+    state: State<'_, Mutex<AppState>>,
+    workflow_path: String,
+    ref_name: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::workflow_dispatch(&repo_path, &workflow_path, &ref_name)
+}
+
+#[tauri::command]
+pub async fn gh_run_artifacts(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+) -> Result<Vec<gh::GhRunArtifact>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_artifacts(&repo_path, run_id)
+}
+
+#[tauri::command]
+pub async fn gh_run_download_artifact(
+    state: State<'_, Mutex<AppState>>,
+    run_id: u64,
+    name: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::run_download_artifact(&repo_path, run_id, &name)
+}
+
+#[tauri::command]
 pub async fn get_file_tree(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<git_state::FileTree, String> {
@@ -264,15 +1156,99 @@ pub async fn write_worktree_file(
 }
 
 #[tauri::command]
+pub async fn delete_worktree_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::delete_worktree_file(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn delete_worktree_folder(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::delete_worktree_folder(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn rename_worktree_folder(
+    state: State<'_, Mutex<AppState>>,
+    oldPath: String,
+    newPath: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::rename_worktree_folder(&repo_path, &oldPath, &newPath)
+}
+
+#[tauri::command]
+pub async fn rename_worktree_file(
+    state: State<'_, Mutex<AppState>>,
+    oldPath: String,
+    newPath: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::rename_worktree_file(&repo_path, &oldPath, &newPath)
+}
+
+#[tauri::command]
+pub async fn cli_detect() -> Result<ai::CliDetectResult, String> {
+    Ok(ai::cli_detect())
+}
+
+#[tauri::command]
+pub async fn cli_agent_run(
+    state: State<'_, Mutex<AppState>>,
+    cli: String,
+    prompt: String,
+) -> Result<String, String> {
+    let cwd = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ai::cli_agent_run(&cli, &prompt, &cwd.to_string_lossy().as_ref())
+}
+
+#[tauri::command]
+pub async fn zcode_credentials(
+) -> Result<ai::ZcodeCreds, String> {
+    ai::zcode_creds()
+}
+
+#[tauri::command]
+pub async fn ai_chat(
+    url: String,
+    api_key: String,
+    body: String,
+) -> Result<ai::AiChatResult, String> {
+    ai::ai_chat(&url, &api_key, &body).map_err(|e| e)
+}
+
+#[tauri::command]
 pub async fn get_file_history(
     state: State<'_, Mutex<AppState>>,
     path: String,
+    ref_name: Option<String>,
 ) -> Result<Vec<git_state::FileCommitEntry>, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::build_file_history(&repo_path, &path)
+    git_state::build_file_history(&repo_path, &path, ref_name.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -529,12 +1505,17 @@ pub async fn discard_hunk(
 pub async fn get_file_blame(
     state: State<'_, Mutex<AppState>>,
     path: String,
+    ref_name: Option<String>,
 ) -> Result<Vec<git_state::BlameLine>, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::file_blame(&repo_path, &path)
+    if let Some(name) = ref_name.as_deref().filter(|r| !r.trim().is_empty()) {
+        git_state::blame_at(&repo_path, &path, name).map_err(|e| e)
+    } else {
+        git_state::file_blame(&repo_path, &path).map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -783,4 +1764,39 @@ pub async fn compose_commit_message(
         repo_path_str(&state)?.to_path_buf()
     };
     git_state::compose_commit_message(&repo_path)
+}
+
+#[tauri::command]
+pub async fn get_insights(
+    state: State<'_, Mutex<AppState>>,
+    days: Option<u32>,
+) -> Result<insights::InsightsData, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    insights::build_insights(&repo_path, days.unwrap_or(28))
+}
+
+#[tauri::command]
+pub async fn gh_delivery_stats(
+    state: State<'_, Mutex<AppState>>,
+    days: Option<u32>,
+) -> Result<gh_insights::GhDeliveryStats, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh_insights::delivery_stats(&repo_path, days.unwrap_or(28))
+}
+
+#[tauri::command]
+pub async fn gh_traffic(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<gh_insights::GhTraffic, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh_insights::traffic(&repo_path)
 }

@@ -7,10 +7,17 @@ interface FileHistoryPanelProps {
   path: string;
   selectedOid: string | null;
   onSelect: (oid: string) => void;
+  /** Walk history from this ref instead of HEAD (e.g. a PR head branch). */
+  refName?: string | null;
 }
 
-export function FileHistoryPanel({ path, selectedOid, onSelect }: FileHistoryPanelProps) {
-  const { commits, loading } = useFileHistory(path);
+export function FileHistoryPanel({
+  path,
+  selectedOid,
+  onSelect,
+  refName,
+}: FileHistoryPanelProps) {
+  const { commits, loading } = useFileHistory(path, refName ?? null);
   const fileName = path.split('/').pop() ?? path;
 
   return (

@@ -1,0 +1,228 @@
+.home {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background:
+    radial-gradient(1200px 500px at 70% -10%, var(--accent-tint-1), transparent 70%),
+    var(--bg-workspace);
+}
+
+.home__wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 48px 24px;
+}
+
+.home__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.home__brand-mark {
+  display: grid;
+  place-items: center;
+}
+
+.home__brand-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home__brand-chip {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.home__brand-sub {
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.home__back {
+  margin-top: 8px;
+}
+
+.home__card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 92vw);
+  padding: 22px 24px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.home__actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.home__actions .primary-button,
+.home__actions .outline-button {
+  justify-content: center;
+}
+
+.home__clone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.home__clone-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  outline: none;
+}
+
+.home__clone-input::placeholder {
+  color: var(--text-muted);
+}
+
+.home__clone-input:focus {
+  border-color: var(--accent-tint-3);
+}
+
+.home__clone-hint {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.home__error {
+  max-width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #5d3944;
+  border-radius: var(--radius-sm);
+  background: #3b2530;
+  color: var(--red);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.home__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.home__recent-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 6px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.home__recent-empty {
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.home__recent-item {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  text-align: left;
+}
+
+.home__recent-item:hover {
+  background: var(--bg-card);
+}
+
+.home__recent-item:hover .home__recent-go {
+  color: var(--accent);
+}
+
+.home__recent-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+}
+
+.home__recent-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.home__recent-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.home__recent-chip {
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--accent-tint-3);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-family: var(--font-sans, inherit);
+  font-style: normal;
+  font-size: var(--fs-2xs);
+  font-weight: 500;
+}
+
+.home__recent-path {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home__recent-go {
+  color: var(--text-muted);
+}

@@ -7,12 +7,13 @@
   background: var(--bg-code);
 }
 
-.editor-pane__bar {
+/* ---- Breadcrumb row ---- */
+.editor-pane__crumbrow {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 40px;
-  padding: 0 16px 0 20px;
+  height: 34px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -24,27 +25,47 @@
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
 
-.editor-pane__crumb--last {
+.editor-pane__crumb:last-of-type {
   color: var(--text-primary);
 }
 
 .editor-pane__crumb-sep {
-  margin: 0 4px;
+  margin: 0 5px;
   color: var(--border-strong);
+}
+
+.editor-pane__symbol {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+}
+
+.editor-pane__dirty {
+  color: var(--orange);
+  font-size: var(--fs-2xs);
+  flex-shrink: 0;
+}
+
+.editor-pane__saved {
+  color: var(--green);
+  font-size: var(--fs-2xs);
+  flex-shrink: 0;
 }
 
 .editor-pane__toggles {
   display: flex;
   gap: 6px;
-  margin-left: 10px;
+  margin-left: auto;
 }
 
-.toggle-pill {
+.editor-toggle {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -56,63 +77,40 @@
   font-size: var(--fs-2xs);
 }
 
-.toggle-pill span {
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-.toggle-pill--on {
+.editor-toggle--on {
   border-color: var(--accent-tint-3);
   background: var(--accent-tint-1);
   color: var(--accent);
 }
 
-.editor-pane__path {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  color: var(--text-primary);
+/* ---- Inline history block ---- */
+.editor-pane__history {
+  flex-shrink: 0;
+  max-height: 190px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
 }
 
-.editor-pane__dirty {
-  color: var(--orange);
-  font-size: var(--fs-2xs);
+.editor-pane__history .file-history {
+  border-left: none;
+  background: none;
 }
 
-.editor-pane__saved {
-  color: var(--green);
-  font-size: var(--fs-2xs);
+.editor-pane__history .file-history__head {
+  height: 30px;
+  padding: 0 16px;
 }
 
-.editor-pane__bar .outline-button {
-  margin-left: auto;
-  height: 26px;
-  font-size: var(--fs-xs);
+.editor-pane__history .file-history__list {
+  overflow: visible;
+  padding: 0 12px 8px;
 }
 
-.editor-pane__bar .editor-pane__toggles + .outline-button {
-  margin-left: 0;
-}
-
-.editor-pane__bar .outline-button:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.editor-pane__kbd {
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  color: var(--text-muted);
-}
-
+/* ---- Editor ---- */
 .editor-pane__editor {
   flex: 1;
-  min-height: 0;
+  min-height: 120px;
 }
 
 .editor-pane__notice {
@@ -123,6 +121,61 @@
   font-size: var(--fs-sm);
 }
 
+/* ---- Inline compare block ---- */
+.editor-pane__compare {
+  flex-shrink: 0;
+  height: 280px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-code);
+}
+
+.editor-pane__compare .compare-panel {
+  border-left: none;
+  height: 100%;
+}
+
+/* ---- Status footer ---- */
+.editor-pane__status {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px 0 16px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.editor-pane__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+}
+
+.editor-pane__branch i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.editor-pane__status-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.editor-pane__terminal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+}
+
+/* ---- Monaco decorations ---- */
 .blame-annotation {
   color: var(--text-muted);
   font-size: 10px;
@@ -139,4 +192,10 @@
 .gutter-modified {
   margin-left: 3px;
   border-left: 3px solid var(--cyan);
+}
+
+/* Code-search hit line (VS Code-style peek highlight) */
+.search-hit-line {
+  background: rgba(139, 157, 255, 0.16);
+  outline: 1px solid rgba(139, 157, 255, 0.35);
 }

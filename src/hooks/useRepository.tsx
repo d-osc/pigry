@@ -11,9 +11,19 @@ import {
 import { listen } from '@tauri-apps/api/event';
 import * as client from '../lib/tauriClient';
 import { useToasts, type Toast } from '../app/Toast';
+
+let notificationSeq = 0;
 import type { AppStatePayload, RebaseStep } from '../types/repository';
 
 export type BackendMode = 'tauri' | 'browser';
+
+/** One entry of the status-bar notification log (kept after toasts dismiss). */
+export interface NotificationItem {
+  id: number;
+  message: string;
+  type: Toast['type'];
+  time: number;
+}
 
 export interface RepositoryContextValue {
   mode: BackendMode;
@@ -23,6 +33,9 @@ export interface RepositoryContextValue {
   netSummary: string | null;
   toasts: Toast[];
   notify: (message: string, type?: Toast['type']) => void;
+  /** Toast history for the status-bar bell (newest first, max 20). */
+  notifications: NotificationItem[];
+  clearNotifications: () => void;
   repository: NonNullable<AppStatePayload['repository']> | null;
   openRepository: (path: string) => Promise<void>;
   pickRepository: () => Promise<void>;
@@ -72,9 +85,18 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [netSummary, setNetSummary] = useState<string | null>(null);
   const { toasts, push } = useToasts();
+  // Toasts vanish after 3.5s — keep a log for the status-bar bell.
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const notifyAndLog = useCallback((message: string, type: Toast['type'] = 'success') => {
+    push(message, type);
+    setNotifications((prev) =>
+      [{ id: ++notificationSeq, message, type, time: Date.now() }, ...prev].slice(0, 20),
+    );
+  }, []);
+  const clearNotifications = useCallback(() => setNotifications([]), []);
 
   useEffect(() => {
-    if (mode !== 'tauri') return;
+    // In a plain browser getAppState resolves with the design demo fixture.
     client
       .getAppState()
       .then(setState)
@@ -101,16 +123,16 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         const result = await action();
         const payload = extract(result);
         if (payload) setState(payload);
-        if (successMsg) push(successMsg, 'success');
+        if (successMsg) notifyAndLog(successMsg, 'success');
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
-        push(message, 'error');
+        notifyAndLog(message, 'error');
       } finally {
         setBusy(false);
       }
     },
-    [push],
+    [notifyAndLog],
   );
 
   const runNet = useCallback(
@@ -121,20 +143,20 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       try {
         const result = await action();
         setNetSummary(result.summary);
-        push(result.summary, 'success');
+        notifyAndLog(result.summary, 'success');
         ok = true;
         const payload = await client.refresh();
         setState(payload);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
-        push(message, 'error');
+        notifyAndLog(message, 'error');
       } finally {
         setBusy(false);
       }
       return ok;
     },
-    [push],
+    [notifyAndLog],
   );
 
   const value = useMemo<RepositoryContextValue>(
@@ -145,7 +167,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       error,
       netSummary,
       toasts,
-      notify: push,
+      notify: notifyAndLog,
+      notifications,
+      clearNotifications,
       repository: state?.repository ?? null,
       openRepository: (path) => run(() => client.openRepository(path), (p) => p, 'Repository opened'),
       pickRepository: async () => {
@@ -204,7 +228,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       pullRemote: () => runNet(() => client.gitPull()),
       pushRemote: () => runNet(() => client.gitPush()),
     }),
-    [mode, state, busy, error, netSummary, toasts, push, run, runNet],
+    [mode, state, busy, error, netSummary, toasts, push, run, runNet, notifyAndLog, notifications, clearNotifications],
   );
 
   return <RepositoryContext.Provider value={value}>{children}</RepositoryContext.Provider>;

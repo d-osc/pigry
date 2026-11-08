@@ -1,31 +1,73 @@
+/* File tree — compact rows per user reference crops */
 .file-tree {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 6px 8px;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding: 0 8px;
 }
 
-.file-tree__empty {
-  flex: 1;
-  display: grid;
-  place-items: center;
+/* Repository root row — filled chip with branch badge */
+.tree-root {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.tree-root__name {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.tree-root__branch {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
-  font-size: var(--fs-sm);
 }
 
+/* Folder rows — caps section labels */
+.tree-row--folder {
+  height: 24px;
+  padding: 0 4px 0 4px !important;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: none;
+}
+
+.tree-row--folder:hover {
+  background: none;
+  color: var(--text-primary);
+}
+
+/* File rows — filled rows */
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding-right: 8px;
+  gap: 7px;
+  height: 24px;
+  padding: 0 8px;
   border-radius: var(--radius-sm);
+  background: var(--bg-panel);
   color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
   text-align: left;
-  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
 .tree-row:hover {
@@ -33,14 +75,11 @@
   color: var(--text-primary);
 }
 
-.tree-row--selected {
+.tree-row--selected,
+.tree-row--selected:hover {
   background: var(--accent-tint-1);
-  color: var(--accent);
-}
-
-.tree-row__spacer {
-  width: 12px;
-  flex-shrink: 0;
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text-primary);
 }
 
 .tree-row__name {
@@ -49,13 +88,52 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--fs-xs);
 }
 
-.tree-row__changed {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--orange);
+/* Indent guide for nested files */
+.tree-row__guide {
+  width: 8px;
   flex-shrink: 0;
+  align-self: stretch;
+  border-left: 1px solid var(--border-subtle);
+  margin-left: -3px;
+}
+
+/* Material icon (15px SVG) */
+.tree-row__fileicon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* Modified badge */
+.tree-row__modified {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--orange);
+}
+
+/* Inline rename input */
+.tree-row__rename {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-tint-3);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  outline: none;
+}
+
+.file-tree__empty {
+  display: grid;
+  place-items: center;
+  padding: 24px 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
 }

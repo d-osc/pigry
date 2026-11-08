@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react';
 import { getFileHistory } from '../lib/tauriClient';
 import type { FileCommitEntry } from '../types/repository';
 
-export function useFileHistory(path: string) {
+export function useFileHistory(path: string, refName?: string | null) {
   const [entry, setEntry] = useState<{ path: string; commits: FileCommitEntry[] } | null>(
     null,
   );
 
   useEffect(() => {
     let cancelled = false;
-    getFileHistory(path)
+    getFileHistory(path, refName ?? null)
       .then((commits) => {
         if (!cancelled) setEntry({ path, commits });
       })
@@ -20,7 +20,7 @@ export function useFileHistory(path: string) {
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path, refName]);
 
   const commits = entry?.path === path ? entry.commits : null;
   return { commits, loading: commits === null };

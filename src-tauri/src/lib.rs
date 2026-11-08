@@ -1,3 +1,8 @@
+mod ai;
+mod busybox;
+mod gh;
+mod busybox3;
+mod busybox_extra;
 mod commands;
 mod config;
 // Probe/debug tooling reaches into git_state directly.
@@ -5,7 +10,10 @@ pub mod git_state;
 pub mod net;
 pub mod ops;
 pub mod settings;
+mod gh_insights;
+mod insights;
 mod watcher;
+mod wiki;
 
 use std::sync::Mutex;
 
@@ -21,7 +29,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let config = config::load(app.handle());
-            let repo_path = config.active.clone().map(std::path::PathBuf::from);
+            // The app always lands on the repository picker (Home screen) —
+            // the last active repo stays in the config for the recent list
+            // but is not auto-opened at startup.
+            let repo_path = None;
+            let _ = &config.active;
             app.manage(Mutex::new(AppState { config, repo_path }));
 
             // File watcher: watches the active repo and emits `repo-changed`.
@@ -48,8 +60,74 @@ pub fn run() {
             commands::get_commit_detail,
             commands::get_commit_file_diff,
             commands::get_file_tree,
+            commands::terminal_run,
+            commands::gh_install,
+            commands::gh_open_url,
+            commands::gh_token_scopes,
+            commands::gh_pr_checkout,
+            commands::gh_pr_close,
+            commands::gh_pr_comment,
+            commands::gh_pr_create,
+            commands::gh_pr_detail,
+            commands::gh_pr_diff,
+            commands::gh_pr_review,
+            commands::gh_release_create,
+            commands::gh_release_delete,
+            commands::gh_release_edit,
+            commands::gh_release_view,
+            commands::gh_device_flow_poll,
+            commands::gh_device_flow_start,
+            commands::gh_account_list,
+            commands::gh_login_with_token,
+            commands::gh_logout,
+            commands::gh_switch_account,
+            commands::gh_auth_status,
+            commands::gh_issue_list,
+            commands::gh_issue_view,
+            commands::gh_issue_comment,
+            commands::gh_issue_create,
+            commands::gh_issue_close,
+            commands::gh_issue_reopen,
+            commands::wiki_check,
+            commands::wiki_sync,
+            commands::wiki_list,
+            commands::wiki_read,
+            commands::wiki_page_history,
+            commands::wiki_save,
+            commands::wiki_create,
+            commands::gh_pr_list,
+            commands::gh_release_list,
+            commands::gh_project_list,
+            commands::gh_project_item_list,
+            commands::gh_code_scanning_alerts,
+            commands::gh_code_alert_dismiss,
+            commands::gh_dependabot_alerts,
+            commands::gh_secret_scanning_alerts,
+            commands::gh_branch_check_runs,
+            commands::gh_workflow_list,
+            commands::gh_run_list,
+            commands::gh_run_view,
+            commands::gh_run_logs,
+            commands::gh_run_rerun,
+            commands::gh_run_cancel,
+            commands::gh_workflow_dispatch,
+            commands::gh_run_artifacts,
+            commands::gh_run_download_artifact,
+            commands::get_insights,
+            commands::gh_delivery_stats,
+            commands::gh_traffic,
+            commands::get_commit_oid_set,
+            commands::zcode_credentials,
+            commands::cli_agent_run,
+            commands::cli_detect,
+            commands::ai_chat,
+            commands::search_code,
             commands::read_worktree_file,
             commands::write_worktree_file,
+            commands::delete_worktree_file,
+            commands::rename_worktree_file,
+            commands::delete_worktree_folder,
+            commands::rename_worktree_folder,
             commands::get_file_history,
             commands::read_file_at_commit,
             commands::create_branch,

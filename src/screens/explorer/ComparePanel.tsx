@@ -14,6 +14,8 @@ interface ComparePanelProps {
   workingContent: string;
   language: string;
   baseOid: string | null;
+  /** History walks this ref instead of HEAD (e.g. a PR head branch). */
+  refName?: string | null;
 }
 
 interface BaseEntry {
@@ -26,9 +28,12 @@ export function ComparePanel({
   workingContent,
   language,
   baseOid,
+  refName,
 }: ComparePanelProps) {
-  const { commits } = useFileHistory(path);
+  const { commits } = useFileHistory(path, refName ?? null);
   const [base, setBase] = useState<BaseEntry | null>(null);
+  // Inline (unified) by default; Split renders side-by-side like the editor.
+  const [split, setSplit] = useState(false);
   const fileName = path.split('/').pop() ?? path;
 
   const baseCommit: FileCommitEntry | undefined = baseOid
@@ -78,6 +83,22 @@ export function ComparePanel({
         <span className="compare-panel__title">Compare code</span>
         <span className="compare-panel__file">{fileName}</span>
         <span className="compare-panel__mode">Inline comparison</span>
+        <div className="compare-panel__layout" role="group" aria-label="Compare layout">
+          <button
+            type="button"
+            className={`compare-panel__layout-btn${!split ? ' is-active' : ''}`}
+            onClick={() => setSplit(false)}
+          >
+            Unified
+          </button>
+          <button
+            type="button"
+            className={`compare-panel__layout-btn${split ? ' is-active' : ''}`}
+            onClick={() => setSplit(true)}
+          >
+            Split
+          </button>
+        </div>
       </header>
       <div className="compare-panel__meta">
         <div className="compare-panel__side">
@@ -107,10 +128,11 @@ export function ComparePanel({
             theme="orbit-dark"
             options={{
               readOnly: true,
-              renderSideBySide: false,
+              renderSideBySide: split,
               fontSize: 11,
               lineHeight: 18,
-              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              fontFamily: "'Fira Code', 'JetBrains Mono', ui-monospace, monospace",
+              fontLigatures: true,
               minimap: { enabled: false },
               scrollBeyondLastLine: false,
               automaticLayout: true,

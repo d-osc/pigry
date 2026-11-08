@@ -867,6 +867,132 @@ pub struct CommitHistory {
     pub commits: Vec<CommitRow>,
 }
 
+/// Oids reachable from a ref (or HEAD), optionally limited to changes that
+/// touch `path` — the commit graph's branch & path filters use this set.
+pub fn commit_oid_set(
+    repo_path: &Path,
+    ref_name: Option<&str>,
+    path: Option<&str>,
+    exclude: Option<&str>,
+    max: usize,
+) -> Result<Vec<String>> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let mut revwalk = repo.revwalk().map_err(err)?;
+    revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    match ref_name {
+        Some(name) => {
+            let candidates = [
+                format!("refs/heads/{}", name),
+                format!("refs/remotes/origin/{}", name),
+                name.to_string(),
+            ];
+            let mut pushed = false;
+            for candidate in &candidates {
+                if revwalk.push_ref(candidate).is_ok() {
+                    pushed = true;
+                    break;
+                }
+            }
+            if !pushed {
+                return Err(format!("unknown ref: {}", name).into());
+            }
+        }
+        None => {
+            let head = repo.head().map_err(err)?;
+            revwalk.push(head.peel_to_commit().map_err(err)?.id()).map_err(err)?;
+        }
+    }
+    // Range support: hide everything reachable from the excluded ref
+    // (e.g. the previous release tag) so only newer commits remain.
+    if let Some(exclude) = exclude.map(str::trim).filter(|p| !p.is_empty()) {
+        let candidates = [
+            format!("refs/tags/{}", exclude),
+            format!("refs/heads/{}", exclude),
+            format!("refs/remotes/origin/{}", exclude),
+            exclude.to_string(),
+        ];
+        for candidate in &candidates {
+            let peeled = repo.revparse_single(candidate).ok().and_then(|obj| obj.peel_to_commit().ok());
+            if let Some(commit) = peeled {
+                if revwalk.hide(commit.id()).is_ok() {
+                    break;
+                }
+            }
+        }
+    }
+    let path = path.map(str::trim).filter(|p| !p.is_empty());
+    if let Some(path) = path {
+        // git2 has no revwalk path filter — check each commit's diff.
+        let mut out: Vec<String> = Vec::new();
+        let mut walked = 0usize;
+        for oid in revwalk {
+            let oid = oid.map_err(err)?;
+            walked += 1;
+            if walked > 20000 {
+                break;
+            }
+            let commit = repo.find_commit(oid).map_err(err)?;
+            let touches = if commit.parent_count() == 0 {
+                let mut diff = repo
+                    .diff_tree_to_tree(None, Some(&commit.tree().map_err(err)?), None)
+                    .map_err(err)?;
+                diff_touches_path(&mut diff, path)?
+            } else {
+                let parent = commit.parent(0).map_err(err)?;
+                let mut diff = repo
+                    .diff_tree_to_tree(
+                        parent.tree().ok().as_ref(),
+                        commit.tree().ok().as_ref(),
+                        None,
+                    )
+                    .map_err(err)?;
+                diff_touches_path(&mut diff, path)?
+            };
+            if touches {
+                out.push(oid.to_string());
+                if out.len() >= max {
+                    break;
+                }
+            }
+        }
+        return Ok(out);
+    }
+    let mut out = Vec::new();
+    for oid in revwalk {
+        out.push(oid.map_err(err)?.to_string());
+        if out.len() >= max {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// True when the diff touches  (file or anything under that directory).
+fn diff_touches_path(diff: &mut git2::Diff, path: &str) -> Result<bool> {
+    let mut touches = false;
+    let path_owned = path.to_string();
+    diff.foreach(
+        &mut |delta, _| {
+            let check = |p: Option<&str>| -> bool {
+                p.map(|p| p.starts_with(path_owned.as_str()) || path_owned.starts_with(p))
+                    .unwrap_or(false)
+            };
+            if check(delta.old_file().path().and_then(|p| p.to_str()))
+                || check(delta.new_file().path().and_then(|p| p.to_str()))
+            {
+                touches = true;
+                return false; // matched — stop walking deltas
+            }
+            true
+        },
+        None,
+        None,
+        None,
+    )
+    .map_err(err)?;
+    Ok(touches)
+}
+
 pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<CommitHistory> {
     let repo = Repository::discover(repo_path).map_err(err)?;
 
@@ -1166,6 +1292,64 @@ pub fn write_worktree_file(repo_path: &Path, path: &str, content: &str) -> Resul
     Ok(())
 }
 
+/// Remove a file from the worktree (the deletion shows up in git status).
+pub fn delete_worktree_file(repo_path: &Path, path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, false)?;
+    if !full.is_file() {
+        return Err(format!("{path} is not a file"));
+    }
+    std::fs::remove_file(&full).map_err(|e| format!("failed to delete {path}: {e}"))?;
+    Ok(())
+}
+
+/// Remove a folder (and everything inside it) from the worktree.
+pub fn delete_worktree_folder(repo_path: &Path, path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    if !full.is_dir() {
+        return Err(format!("{path} is not a folder"));
+    }
+    std::fs::remove_dir_all(&full).map_err(|e| format!("failed to delete {path}: {e}"))?;
+    Ok(())
+}
+
+/// Move a worktree folder to a new path inside the repository.
+pub fn rename_worktree_folder(repo_path: &Path, old_path: &str, new_path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let from = safe_worktree_path(&repo, old_path, true)?;
+    let to = safe_worktree_path(&repo, new_path, true)?;
+    if !from.is_dir() {
+        return Err(format!("{old_path} is not a folder"));
+    }
+    if to.exists() {
+        return Err(format!("{new_path} already exists"));
+    }
+    if let Some(parent) = to.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::rename(&from, &to).map_err(|e| format!("failed to rename {old_path}: {e}"))?;
+    Ok(())
+}
+
+/// Move a worktree file to a new path inside the repository.
+pub fn rename_worktree_file(repo_path: &Path, old_path: &str, new_path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let from = safe_worktree_path(&repo, old_path, false)?;
+    let to = safe_worktree_path(&repo, new_path, false)?;
+    if !from.is_file() {
+        return Err(format!("{old_path} is not a file"));
+    }
+    if to.exists() {
+        return Err(format!("{new_path} already exists"));
+    }
+    if let Some(parent) = to.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::rename(&from, &to).map_err(|e| format!("failed to rename {old_path}: {e}"))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Explorer: per-file history + blob at commit
 // ---------------------------------------------------------------------------
@@ -1183,11 +1367,37 @@ pub struct FileCommitEntry {
 
 /// Commits that changed `path`, newest first (like `git log -- <path>`,
 /// without rename following).
-pub fn build_file_history(repo_path: &Path, path: &str) -> Result<Vec<FileCommitEntry>> {
+pub fn build_file_history(
+    repo_path: &Path,
+    path: &str,
+    ref_name: Option<&str>,
+) -> Result<Vec<FileCommitEntry>> {
     let repo = Repository::discover(repo_path).map_err(err)?;
     let mut revwalk = repo.revwalk().map_err(err)?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
-    revwalk.push_head().map_err(err)?;
+    match ref_name.filter(|r| !r.trim().is_empty()) {
+        Some(name) => {
+            // Walk from the requested ref (PR head branch, tag, …) instead of HEAD.
+            let candidates = [
+                format!("refs/heads/{}", name),
+                format!("refs/remotes/origin/{}", name),
+                name.to_string(),
+            ];
+            let mut pushed = false;
+            for candidate in &candidates {
+                if revwalk.push_ref(candidate).is_ok() {
+                    pushed = true;
+                    break;
+                }
+            }
+            if !pushed {
+                revwalk.push_head().map_err(err)?;
+            }
+        }
+        None => {
+            revwalk.push_head().map_err(err)?;
+        }
+    }
 
     const MAX_WALKED: usize = 2000;
     const MAX_RESULTS: usize = 50;
@@ -1299,6 +1509,8 @@ pub struct CommitDetail {
     pub author_initials: String,
     pub time_seconds: i64,
     pub is_merge: bool,
+    /// Short oids of the parent commits (first parent first).
+    pub parents: Vec<String>,
     pub files: Vec<CommitFileEntry>,
 }
 
@@ -1363,6 +1575,10 @@ pub fn build_commit_detail(repo_path: &Path, oid: &str) -> Result<CommitDetail> 
     let author = commit.author();
     let summary = commit.summary().unwrap_or_default().to_string();
     let message = commit.message().unwrap_or_default().trim_end().to_string();
+    let parents = commit
+        .parent_ids()
+        .map(|id| id.to_string()[..7].to_string())
+        .collect::<Vec<_>>();
 
     Ok(CommitDetail {
         oid: commit_oid.to_string(),
@@ -1373,6 +1589,7 @@ pub fn build_commit_detail(repo_path: &Path, oid: &str) -> Result<CommitDetail> 
         author_initials: initials_for(author.name().unwrap_or("")),
         time_seconds: commit.time().seconds() as i64,
         is_merge: commit.parent_count() > 1,
+        parents,
         files,
     })
 }
@@ -2500,6 +2717,89 @@ pub fn discard_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<(
     Ok(())
 }
 
+
+// ---------------------------------------------------------------------------
+// Full-text code search across the worktree (VS Code-style)
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeSearchHit {
+    pub path: String,
+    /// 1-based line number of the match.
+    pub line: u32,
+    /// 1-based column of the match.
+    pub column: u32,
+    /// The matched line's text, trimmed for display.
+    pub text: String,
+}
+
+/// Case-insensitive substring search over every text file in the worktree.
+/// Binary and oversized files are skipped; results are capped.
+pub fn search_worktree_code(
+    repo_path: &Path,
+    query: &str,
+    max_hits: usize,
+) -> Result<Vec<CodeSearchHit>> {
+    let query = query.to_lowercase();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let tree = list_tree(repo_path)?;
+    let workdir = {
+        let repo = Repository::discover(repo_path).map_err(err)?;
+        repo.workdir().ok_or("bare repository")?.to_path_buf()
+    };
+
+    let mut hits = Vec::new();
+    const MAX_FILE_BYTES: u64 = 1_000_000;
+    const MAX_LINE_LEN: usize = 300;
+    for path in &tree.entries {
+        if hits.len() >= max_hits {
+            break;
+        }
+        let full = workdir.join(path);
+        let Ok(meta) = std::fs::metadata(&full) else { continue };
+        if !meta.is_file() || meta.len() > MAX_FILE_BYTES {
+            continue;
+        }
+        let Ok(bytes) = std::fs::read(&full) else { continue };
+        if bytes.contains(&0) {
+            continue; // binary
+        }
+        let content = String::from_utf8_lossy(&bytes);
+        let mut per_file = 0usize;
+        for (index, line) in content.lines().enumerate() {
+            if hits.len() >= max_hits || per_file >= 10 {
+                break;
+            }
+            let lower = line.to_lowercase();
+            if let Some(at) = lower.find(&query) {
+                let display = line.trim();
+                let display = if display.len() > MAX_LINE_LEN {
+                    // UTF-8-safe truncation: never split a multi-byte char.
+                    let mut end = MAX_LINE_LEN;
+                    while end > 0 && !display.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    format!("{}…", &display[..end])
+                } else {
+                    display.to_string()
+                };
+                let leading = line.len() - line.trim_start().len();
+                hits.push(CodeSearchHit {
+                    path: path.clone(),
+                    line: index as u32 + 1,
+                    column: (leading + at) as u32 + 1,
+                    text: display,
+                });
+                per_file += 1;
+            }
+        }
+    }
+    Ok(hits)
+}
+
 // ---------------------------------------------------------------------------
 // Blame annotations — per-line commit attribution
 // ---------------------------------------------------------------------------
@@ -2513,15 +2813,89 @@ pub struct BlameLine {
     /// Full commit oid, for jump-to-commit from the blame popup.
     pub oid: String,
     pub author_name: String,
+    pub author_email: String,
     pub author_initials: String,
     pub time_seconds: i64,
     pub summary: String,
+    /// Full commit message (summary + body).
+    pub message: String,
     /// True when the line has uncommitted worktree changes.
     pub uncommitted: bool,
 }
 
 /// Per-line blame for a file in the working directory. Uncommitted lines
 /// carry `uncommitted: true` with placeholder identity.
+/// Per-line blame of `path` as it exists at `ref_name` — no checkout needed.
+/// Uses `git blame --porcelain <ref> -- <path>` and parses the porcelain stream.
+pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<BlameLine>> {
+    use std::process::Command;
+
+    let output = Command::new("git")
+        .args(["blame", "--porcelain", ref_name, "--", path])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("git not available: {e}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let text = String::from_utf8_lossy(&output.stdout).to_string();
+
+    let mut out: Vec<BlameLine> = Vec::new();
+    let mut oid = String::new();
+    let mut author_name = String::new();
+    let mut author_email = String::new();
+    let mut time_seconds: i64 = 0;
+    let mut summary = String::new();
+    let mut hunk_start: u64 = 0;
+    let mut in_hunk_index: u64 = 0;
+
+    for line in text.lines() {
+        if let Some(content) = line.strip_prefix('\t') {
+            in_hunk_index += 1;
+            let initials: String = author_name.chars().take(2).collect::<String>().to_uppercase();
+            out.push(BlameLine {
+                line: (hunk_start + in_hunk_index) as u32,
+                short_oid: oid.chars().take(7).collect(),
+                oid: oid.clone(),
+                author_name: author_name.clone(),
+                author_email: author_email.clone(),
+                author_initials: initials,
+                time_seconds,
+                summary: summary.clone(),
+                message: summary.clone(),
+                uncommitted: false,
+            });
+            continue;
+        }
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        if tokens.len() >= 3
+            && tokens[0].len() >= 8
+            && tokens[0].chars().all(|c| c.is_ascii_hexdigit())
+            && tokens[1].chars().all(|c| c.is_ascii_hexdigit())
+            && tokens[2].chars().all(|c| c.is_ascii_hexdigit())
+        {
+            oid = tokens[0].to_string();
+            hunk_start = tokens[2].parse::<u64>().unwrap_or(0);
+            in_hunk_index = 0;
+            author_name.clear();
+            author_email.clear();
+            summary.clear();
+            time_seconds = 0;
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("author ") {
+            author_name = rest.to_string();
+        } else if let Some(rest) = line.strip_prefix("author-mail ") {
+            author_email = rest.trim_start_matches('<').trim_end_matches('>').to_string();
+        } else if let Some(rest) = line.strip_prefix("author-time ") {
+            time_seconds = rest.parse::<i64>().unwrap_or(0);
+        } else if let Some(rest) = line.strip_prefix("summary ") {
+            summary = rest.to_string();
+        }
+    }
+    Ok(out)
+}
+
 pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
     let repo = Repository::discover(repo_path).map_err(err)?;
     let mut opts = git2::BlameOptions::new();
@@ -2545,9 +2919,11 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
                     short_oid: "———".to_string(),
                     oid: String::new(),
                     author_name: "Uncommitted".to_string(),
+                    author_email: String::new(),
                     author_initials: "—".to_string(),
                     time_seconds: 0,
                     summary: String::new(),
+                    message: String::new(),
                     uncommitted: true,
                 });
             }
@@ -2557,7 +2933,9 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
         let commit = repo.find_commit(commit_id).map_err(err)?;
         let author = commit.author();
         let author_name = author.name().unwrap_or("Unknown").to_string();
+        let author_email = author.email().unwrap_or("").to_string();
         let summary = commit.summary().unwrap_or_default().to_string();
+        let message = commit.message().unwrap_or_default().trim_end().to_string();
         let short_oid = commit_id.to_string()[..7].to_string();
         let time_seconds = commit.time().seconds() as i64;
         let initials = initials_for(&author_name);
@@ -2568,9 +2946,11 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
                 short_oid: short_oid.clone(),
                 oid: commit_id.to_string(),
                 author_name: author_name.clone(),
+                author_email: author_email.clone(),
                 author_initials: initials.clone(),
                 time_seconds,
                 summary: summary.clone(),
+                message: message.clone(),
                 uncommitted: false,
             });
         }

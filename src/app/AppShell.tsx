@@ -1,43 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar } from './StatusBar';
 import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
-import { WorkspaceBar } from './WorkspaceBar';
 import { ShortcutSheet } from './ShortcutSheet';
-import { Undo2 } from 'lucide-react';
+import { ChevronsRight, Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
-import { getFileTree } from '../lib/tauriClient';
+import { getFileTree, readWorktreeFile } from '../lib/tauriClient';
 import {
   useRepository,
   RepositoryProvider,
   type RepositoryContextValue,
 } from '../hooks/useRepository';
 import { WorkingChangesScreen } from '../screens/working-changes/WorkingChangesScreen';
+import { AppSettingsScreen } from '../screens/settings/AppSettingsScreen';
 import { CommitGraphScreen } from '../screens/commit-graph/CommitGraphScreen';
 import { ExplorerScreen } from '../screens/explorer/ExplorerScreen';
-import { PlaceholderScreen } from '../screens/PlaceholderScreen';
-import { NoRepositoryScreen } from '../screens/NoRepositoryScreen';
+import { ProjectsScreen } from '../screens/projects/ProjectsScreen';
+import { PullRequestsScreen } from '../screens/pull-requests/PullRequestsScreen';
+import { AiAgentScreen } from '../screens/ai-agent/AiAgentScreen';
+import { ReleasesScreen } from '../screens/releases/ReleasesScreen';
+import { IssuesScreen } from '../screens/issues/IssuesScreen';
+import { ActionsScreen } from '../screens/actions/ActionsScreen';
+import { InsightsScreen } from '../screens/insights/InsightsScreen';
+import { WikiScreen } from '../screens/wiki/WikiScreen';
+import { SecurityScreen } from '../screens/security/SecurityScreen';
+import { HomeScreen } from '../screens/home/HomeScreen';
 import './AppShell.css';
-
-function BrowserNotice() {
-  return (
-    <div className="no-repo">
-      <div className="no-repo__card">
-        <h1 className="no-repo__title">Desktop mode required</h1>
-        <p className="no-repo__subtitle">
-          orbit needs the Tauri desktop shell to read repositories.
-          <br />
-          Run <code>npm run tauri dev</code> to launch the app.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function ErrorBanner() {
   const { error } = useRepository();
@@ -68,6 +61,9 @@ function renderScreen(
   startRebase: (oid: string) => void,
   focusCommit: string | null,
   jumpToCommit: (oid: string) => void,
+  openFilePalette: () => void,
+  terminalOpen: boolean,
+  onToggleTerminal: () => void,
 ) {
   switch (screen) {
     case 'working-changes':
@@ -80,16 +76,51 @@ function renderScreen(
           key={explorerOpenPath ?? 'explorer'}
           openPath={explorerOpenPath}
           onJumpToCommit={jumpToCommit}
+          onOpenFilePalette={openFilePalette}
+          terminalOpen={terminalOpen}
+          onToggleTerminal={onToggleTerminal}
         />
       );
+    case 'projects':
+      return <ProjectsScreen />;
+    case 'pull-requests':
+      return <PullRequestsScreen />;
+    case 'ai-agent':
+      return <AiAgentScreen />;
+    case 'releases':
+      return <ReleasesScreen />;
+    case 'issues':
+      return <IssuesScreen />;
+    case 'actions':
+      return <ActionsScreen />;
+    case 'insights':
+      return <InsightsScreen />;
+    case 'wiki':
+      return <WikiScreen />;
+    case 'security':
+      return <SecurityScreen />;
     default:
-      return <PlaceholderScreen screen={screen} />;
+      return null;
   }
 }
 
 function AppShellInner() {
-  const [screen, setScreen] = useState<NavId>('working-changes');
+  const [screen, setScreen] = useState<NavId>(() => {
+    try {
+      const stored = localStorage.getItem('orbit:default-screen');
+      if (stored === 'explorer' || stored === 'commit-graph' || stored === 'working-changes') {
+        return stored;
+      }
+    } catch {
+      // storage unavailable — default
+    }
+    return 'explorer';
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Section the settings page should open on (null = default). Set by
+  // TitleBar account actions like "Add account" so users land on the
+  // Accounts section instead of the Appearance section.
+  const [settingsSection, setSettingsSection] = useState<'accounts' | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('commands');
@@ -99,18 +130,97 @@ function AppShellInner() {
   } | null>(null);
   const [filesRequestId, setFilesRequestId] = useState(0);
   const [explorerOpenPath, setExplorerOpenPath] = useState<string | null>(null);
+  const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
+  const [paletteSeed, setPaletteSeed] = useState('');
+  // Left side bar folds away — default open, remembered across restarts.
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      return localStorage.getItem('orbit:sidebar-collapsed') !== '1';
+    } catch {
+      return true;
+    }
+  });
+  const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [focusCommit, setFocusCommit] = useState<string | null>(null);
   const [rebaseBase, setRebaseBase] = useState<string | null>(null);
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const repository = useRepository();
   const { mode } = repository;
+  // The landing screen (repository picker) shows at startup; "Go home"
+  // re-opens it mid-session while the workspace stays loaded behind it.
+  const [showHome, setShowHome] = useState(() => mode === 'tauri');
+  // Active path at the moment Home was entered; opening a *different*
+  // repository from the picker dismisses it (cancel and watcher refreshes
+  // keep the same path, so they don't).
+  const homePathRef = useRef<string | null>(repository.state?.activePath ?? null);
+
+  useEffect(() => {
+    if (!showHome) return;
+    homePathRef.current = repository.state?.activePath ?? null;
+    // Snapshot only when Home is entered — activePath at that moment is the
+    // baseline the dismissal effect compares against.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHome]);
+
+  useEffect(() => {
+    if (!showHome) return;
+    const path = repository.state?.activePath ?? null;
+    if (path !== null && path !== homePathRef.current) setShowHome(false);
+  }, [repository.state, showHome]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('orbit:sidebar-collapsed', sidebarOpen ? '0' : '1');
+    } catch {
+      // storage unavailable — session-only state
+    }
+  }, [sidebarOpen]);
 
   const jumpToCommit = useCallback((oid: string) => {
     setFocusCommit(oid);
     setScreen('commit-graph');
   }, []);
 
+  // App Settings (gh sign-in) can pop the integrated terminal open.
+  useEffect(() => {
+    const onToggle = () => setTerminalOpen((open) => !open);
+    window.addEventListener('orbit:toggle-terminal', onToggle);
+    return () => window.removeEventListener('orbit:toggle-terminal', onToggle);
+  }, []);
+
+  // Editor reports its active file so the palette's '@' symbol search knows
+  // which file to scan.
+  useEffect(() => {
+    const onActiveEditor = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string | null }>).detail;
+      setActiveEditorPath(detail?.path ?? null);
+    };
+    window.addEventListener('orbit:active-editor', onActiveEditor);
+    return () => window.removeEventListener('orbit:active-editor', onActiveEditor);
+  }, []);
+
+  const readFileForPalette = useCallback(
+    (path: string) =>
+      readWorktreeFile(path)
+        .then((content) => (content.binary || content.tooLarge ? '' : content.content))
+        .catch(() => ''),
+    [],
+  );
+
   const navigate = useCallback((next: NavId) => {
     setScreen(next);
+  }, []);
+
+  // Integrated terminal lives inside the Explorer editor layout.
+  const toggleTerminal = useCallback(() => {
+    setTerminalOpen((open) => !open);
+    setScreen((current) => {
+      if (current !== 'explorer') {
+        setTerminalOpen(true);
+        return 'explorer' as NavId;
+      }
+      return current;
+    });
   }, []);
 
   // Ctrl/Cmd+K toggles the command palette; Ctrl/Cmd+P opens file search;
@@ -123,10 +233,12 @@ function AppShellInner() {
       const key = event.key.toLowerCase();
       if (key === 'k') {
         event.preventDefault();
-        setPaletteMode('commands');
+        setPaletteSeed('');
+        setPaletteMode('quick');
         setPaletteOpen((open) => !open);
       } else if (key === 'p') {
         event.preventDefault();
+        setPaletteSeed('');
         setPaletteMode('files');
         setFilesRequestId((id) => id + 1);
         setPaletteOpen(true);
@@ -136,6 +248,39 @@ function AppShellInner() {
       } else if (key === '/') {
         event.preventDefault();
         setShortcutsOpen((open) => !open);
+      } else if (key === 'g' && !event.shiftKey) {
+        // VS Code-style Go to Line/Column.
+        event.preventDefault();
+        setPaletteSeed(':');
+        setPaletteMode('quick');
+        setPaletteOpen(true);
+      } else if (event.shiftKey && key === 'f') {
+        // VS Code-style Search for Text.
+        event.preventDefault();
+        setScreen('explorer');
+        setPaletteSeed('');
+        setPaletteMode('quick');
+        setPaletteOpen(false);
+        window.setTimeout(
+          () => window.dispatchEvent(new CustomEvent('orbit:focus-file-search')),
+          150,
+        );
+      } else if (event.shiftKey && key === 'o') {
+        // VS Code-style Go to Symbol in Editor.
+        event.preventDefault();
+        setPaletteSeed('@');
+        setPaletteMode('quick');
+        setPaletteOpen(true);
+      } else if (key === 't') {
+        // VS Code-style Go to Symbol in Workspace.
+        event.preventDefault();
+        setPaletteSeed('#');
+        setPaletteMode('quick');
+        setPaletteOpen(true);
+      } else if (key === 'b') {
+        // VS Code-style toggle of the primary side bar.
+        event.preventDefault();
+        setSidebarOpen((open) => !open);
       } else if (key === '1') {
         event.preventDefault();
         setScreen('working-changes');
@@ -154,7 +299,7 @@ function AppShellInner() {
   // Files are (re)loaded each time file-search mode is entered; the request
   // id marks which load is current.
   useEffect(() => {
-    if (paletteMode !== 'files' || !paletteOpen) return;
+    if ((paletteMode !== 'files' && paletteMode !== 'quick') || !paletteOpen) return;
     let cancelled = false;
     getFileTree()
       .then((tree) => {
@@ -172,6 +317,10 @@ function AppShellInner() {
     (path: string) => {
       setScreen('explorer');
       setExplorerOpenPath(path);
+      setRecentlyOpened((recent) => [
+        path,
+        ...recent.filter((item) => item !== path),
+      ].slice(0, 8));
     },
     [],
   );
@@ -179,6 +328,12 @@ function AppShellInner() {
   const handleSwitchToFiles = useCallback(() => {
     setPaletteMode('files');
     setFilesRequestId((id) => id + 1);
+  }, []);
+
+  const handleOpenFilePalette = useCallback(() => {
+    setPaletteMode('files');
+    setFilesRequestId((id) => id + 1);
+    setPaletteOpen(true);
   }, []);
 
   const commands = useMemo(
@@ -193,25 +348,81 @@ function AppShellInner() {
     [navigate, screen, repository],
   );
 
-  const showWorkspace = mode === 'tauri' && repository.repository !== null;
+  const showWorkspace = repository.repository !== null;
+  // The app settings page replaces the whole body — remember where to go back.
+  const [prevScreen, setPrevScreen] = useState<NavId>('explorer');
+  useEffect(() => {
+    if (screen === 'app-settings') return;
+    const t = window.setTimeout(() => setPrevScreen(screen), 0);
+    return () => window.clearTimeout(t);
+  }, [screen]);
 
   return (
     <div className="app-shell">
-      <TitleBar onOpenPalette={() => setPaletteOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
-      <WorkspaceBar />
-      {mode === 'browser' && <BrowserNotice />}
-      {mode === 'tauri' && !repository.repository && <NoRepositoryScreen />}
-      {showWorkspace && (
+      <TitleBar
+        onGoHome={() => setShowHome(true)}
+        onOpenSettings={(section) => {
+          setSettingsSection(section ?? null);
+          setScreen('app-settings');
+        }}
+        onOpenPalette={() => {
+          setPaletteSeed('');
+          setPaletteMode('quick');
+          setPaletteOpen(true);
+        }}
+      />
+      {screen === 'app-settings' ? (
+        // The app settings page is repo-agnostic — it takes over the whole
+        // body from wherever it was opened (workspace or Home picker).
+        <main className="app-shell__workspace app-shell__workspace--full">
+          <AppSettingsScreen
+            key={settingsSection ?? 'default'}
+            initialSection={settingsSection ?? undefined}
+            onBack={() => {
+              setSettingsSection(null);
+              setScreen(prevScreen);
+            }}
+          />
+        </main>
+      ) : (
         <>
-          <div className="app-shell__body">
-            <NavSidebar activeScreen={screen} onNavigate={setScreen} onOpenSettings={() => setSettingsOpen(true)} />
-            <main className="app-shell__workspace">
-              <RebaseBanner onAbort={() => void repository.abortRebase()} />
-              <ErrorBanner />
-              {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit)}
-            </main>
-          </div>
-          <StatusBar />
+          {mode === 'tauri' && (showHome || !repository.repository) && (
+            <HomeScreen
+              onBackToWorkspace={
+                repository.repository ? () => setShowHome(false) : undefined
+              }
+            />
+          )}
+          {!showHome && showWorkspace && (
+            <>
+              <div className="app-shell__body">
+                {sidebarOpen ? (
+                  <NavSidebar
+                    activeScreen={screen}
+                    onNavigate={setScreen}
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onCollapse={() => setSidebarOpen(false)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="sidebar-strip"
+                    aria-label="Show side bar"
+                    title="Show side bar (Ctrl+B)"
+                    onClick={() => setSidebarOpen(true)}
+                  >
+                    <ChevronsRight size={14} strokeWidth={1.5} />
+                  </button>
+                )}
+                <main className="app-shell__workspace">
+                  <RebaseBanner onAbort={() => void repository.abortRebase()} />
+                  <ErrorBanner />
+                  {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
+                </main>
+              </div>
+              <StatusBar />
+            </>
+          )}
         </>
       )}
       {paletteOpen && (
@@ -224,10 +435,23 @@ function AppShellInner() {
               : []
           }
           filesLoading={
-            paletteFilesRequest?.id !== filesRequestId && paletteMode === 'files'
+            paletteFilesRequest?.id !== filesRequestId &&
+            (paletteMode === 'files' || paletteMode === 'quick')
           }
           onOpenFile={handleOpenFile}
           onSwitchToFiles={handleSwitchToFiles}
+          onSwitchToCommands={() => setPaletteMode('commands')}
+          recentlyOpened={recentlyOpened}
+          activeEditorPath={activeEditorPath}
+          readFile={readFileForPalette}
+          onSearchText={(searchQuery) => {
+            setScreen('explorer');
+            window.setTimeout(
+              () => window.dispatchEvent(new CustomEvent('orbit:focus-file-search', { detail: { query: searchQuery } })),
+              150,
+            );
+          }}
+          initialQuery={paletteSeed}
           onClose={() => setPaletteOpen(false)}
         />
       )}

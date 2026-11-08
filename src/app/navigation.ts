@@ -26,7 +26,8 @@ export type NavId =
   | 'projects'
   | 'wiki'
   | 'security'
-  | 'insights';
+  | 'insights'
+  | 'app-settings';
 
 export interface NavItem {
   id: NavId;

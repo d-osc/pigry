@@ -3,6 +3,8 @@
  * See .figma-analysis/DESIGN-SUMMARY.md for provenance.
  */
 :root {
+  color-scheme: dark;
+
   /* ---- Layered backgrounds (darkest → raised) ---- */
   --bg-statusbar: #0e1014;
   --bg-sidebar: #111317;
@@ -18,6 +20,7 @@
   --border: #2a2e37;
   --border-strong: #343a46;
   --border-hover: #3d4450;
+  --border-subtle: #20242b; /* faint separators inside raised panels */
 
   /* ---- Text ---- */
   --text-primary: #e9ebf0;
@@ -43,7 +46,7 @@
   --purple-tint: #3b3049;
 
   /* ---- Typography ---- */
-  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-ui: 'Noto Sans Thai', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
 
   --fs-2xs: 9px;  /* micro labels, badge text */
@@ -62,11 +65,74 @@
   --radius-pill: 999px;
 
   /* ---- Layout constants ---- */
-  --titlebar-height: 40px;
+  --titlebar-height: 56px;
   --sidebar-width: 224px;
   --statusbar-height: 28px;
   --file-list-width: 360px;
 
+  /* ---- Sidebar accents (per-branch lane colors, cycled) ---- */
+  --lane-1: #8b9dff; /* accent indigo */
+  --lane-2: #b59aff; /* purple */
+  --lane-3: #62cee7; /* cyan */
+  --lane-4: #edb675; /* orange */
+  --nav-active-bg: #1d242f;
+
   /* ---- Motion ---- */
   --transition-fast: 120ms ease;
+}
+
+/*
+ * Light theme — applied via `data-theme="light"` on <html> (src/lib/theme.ts).
+ * The default (dark) palette above stays on :root, so an absent attribute is
+ * equivalent to data-theme="dark".
+ */
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* ---- Layered backgrounds (lightest → raised) ---- */
+  --bg-statusbar: #e9edf2;
+  --bg-sidebar: #f1f3f6;
+  --bg-titlebar: #f4f6f8;
+  --bg-panel: #ffffff;
+  --bg-workspace: #f8f9fb;
+  --bg-card: #ffffff;
+  --bg-input: #f4f6f8;
+  --bg-code: #f4f6f8;
+  --bg-code-alt: #f6f8fa;
+
+  /* ---- Surfaces ---- */
+  --border: #d8dde3;
+  --border-strong: #c3cad2;
+  --border-hover: #adb6c1;
+  --border-subtle: #e6e9ee;
+
+  /* ---- Text ---- */
+  --text-primary: #1d2530;
+  --text-secondary: #56606c;
+  --text-muted: #8a93a0;
+  --text-mid: #3d4652;
+
+  /* ---- Accent (indigo, darkened for contrast on light) ---- */
+  --accent: #4f66e0;
+  --accent-tint-1: #e7ebfb;
+  --accent-tint-2: #d6ddf8;
+  --accent-tint-3: #bcc9f3;
+
+  /* ---- Semantic (darkened for contrast on light) ---- */
+  --green: #157f56;
+  --green-tint: #e0f3ea;
+  --red: #c5485a;
+  --orange: #a4660e;
+  --orange-tint: #f9ecd9;
+  --cyan: #0e7fa0;
+  --purple: #7451d4;
+  --purple-bright: #6a4fd0;
+  --purple-tint: #ece7fb;
+
+  /* ---- Sidebar accents ---- */
+  --lane-1: #4f66e0;
+  --lane-2: #7451d4;
+  --lane-3: #0e7fa0;
+  --lane-4: #a4660e;
+  --nav-active-bg: #e7ebfb;
 }

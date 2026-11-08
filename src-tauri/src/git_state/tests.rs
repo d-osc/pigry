@@ -470,12 +470,12 @@ fn file_history_lists_only_changing_commits() {
     write(&dir, "target.txt", "v2\n"); // saved identical — new commit, same blob
     commit_all(&dir, "no actual change to target");
 
-    let history = build_file_history(&dir, "target.txt").unwrap();
+    let history = build_file_history(&dir, "target.txt", None).unwrap();
     let summaries: Vec<&str> = history.iter().map(|e| e.summary.as_str()).collect();
     assert_eq!(summaries, vec!["target again", "touch both"],
         "only commits that changed target.txt's blob, newest first: {summaries:?}");
 
-    let entries = build_file_history(&dir, "missing.txt").unwrap();
+    let entries = build_file_history(&dir, "missing.txt", None).unwrap();
     assert!(entries.is_empty(), "unknown path yields empty history");
 
     let _ = fs::remove_dir_all(&dir);

@@ -1,0 +1,220 @@
+/* Fullscreen compare dialog (editor-style diff, like the Working changes view) */
+.pr-diff-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+}
+
+.pr-diff-dialog__inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border-strong);
+  min-width: 0;
+}
+
+.pr-diff-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.pr-diff-dialog__head strong {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+  font-family: 'Fira Code', ui-monospace, monospace;
+}
+
+.pr-diff-dialog__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pr-diff-dialog__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* Two-pane body: changed-file list (left) + compare editor (right) */
+.pr-diff-dialog__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.pr-diff-dialog__files {
+  min-width: 220px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 10px 8px;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pr-diff-dialog__files-label {
+  margin: 2px 8px 8px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pr-diff-dialog__file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.pr-diff-dialog__file:hover {
+  background: var(--accent-tint-1);
+  color: var(--text-primary);
+}
+
+.pr-diff-dialog__file--active,
+.pr-diff-dialog__file--active:hover {
+  background: var(--accent-tint-2);
+  color: var(--text-primary);
+}
+
+.pr-diff-dialog__file-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-diff-dialog__file-stat {
+  font-size: var(--fs-xs);
+}
+
+.pr-diff-dialog__compare {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pr-diff-dialog__controls {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.pr-diff-dialog__editor {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.pr-diff-dialog__foot {
+  flex-shrink: 0;
+}
+/* Monaco measures 0 when mounted inside a freshly-opened dialog — force it
+   to fill the sized container and let the ResizeObserver re-layout. */
+.pr-diff-dialog__editor .monaco-diff-editor,
+.pr-diff-dialog__editor .monaco-editor {
+  width: 100% !important;
+  height: 100% !important;
+}
+.pr-diff-dialog__editor > div {
+  height: 100%;
+}
+
+/* Panel wrap: History (FileHistoryPanel) / Compare (ComparePanel) / Blame editor */
+.pr-diff-dialog__panelwrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pr-diff-dialog__panelhint {
+  margin: 0;
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.pr-diff-dialog__panelwrap .file-history {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pr-diff-dialog__panelwrap .compare-panel {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.pr-diff-dialog__panelwrap .compare-panel__editor {
+  flex: 1;
+  min-height: 240px;
+}
+
+.pr-diff-dialog__panelwrap .pr-diff-dialog__editor {
+  flex: 1;
+  min-height: 0;
+}
+.pr-diff-dialog__comparewrap {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+
+.pr-diff-dialog__comparewrap .compare-panel {
+  flex: 1;
+  min-height: 0;
+  border-left: none;
+}
+
+.pr-diff-dialog__comparewrap .compare-panel__editor {
+  flex: 1;
+  min-height: 0;
+}
+/* Compare panel is an ADDED layout below the diff editor (Explorer style) */
+.pr-diff-dialog__comparewrap {
+  flex: 0 0 auto;
+  height: 300px;
+}
+
+.pr-diff-dialog__history {
+  flex-shrink: 0;
+  overflow: auto;
+}
+
+.pr-diff-dialog__history .file-history {
+  height: 100%;
+}

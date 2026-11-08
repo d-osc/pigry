@@ -1,0 +1,36 @@
+/* Draggable splitter between layout panes */
+.resize-handle {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 5;
+}
+
+.resize-handle--v {
+  width: 5px;
+  margin: 0 -2px;
+  cursor: col-resize;
+}
+
+.resize-handle--h {
+  height: 5px;
+  margin: -2px 0;
+  cursor: row-resize;
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.resize-handle:hover::after,
+.resize-handle--dragging::after {
+  background: var(--accent);
+}
+
+body.resizing {
+  user-select: none;
+  cursor: col-resize;
+}

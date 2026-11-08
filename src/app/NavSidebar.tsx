@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Cloud,
   FolderGit2,
   GitBranch,
@@ -9,15 +11,23 @@ import {
   Tag as TagIcon,
   Archive,
   Plus,
+  CircleCheck,
+  ChevronsLeft,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import { workspaceNav, type NavId } from './navigation';
 import './NavSidebar.css';
 
+/** Branch lane colors, cycled in list order (matches the commit graph lanes). */
+export const laneColor = (index: number) =>
+  `var(--lane-${(index % 4) + 1})`;
+
 interface NavSidebarProps {
   activeScreen: NavId;
   onNavigate: (screen: NavId) => void;
   onOpenSettings: () => void;
+  /** Folds the whole side bar away (AppShell keeps the state). */
+  onCollapse?: () => void;
 }
 
 function Section({
@@ -36,18 +46,20 @@ function Section({
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="nav-section">
-      <button className="nav-section__head" type="button" onClick={() => setOpen(!open)}>
-        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-        <span className="nav-section__title">{title}</span>
-        {count !== undefined && <span className="nav-section__count">{count}</span>}
-      </button>
-      {open && action && <div className="nav-section__action">{action}</div>}
+      <div className="nav-section__head-row">
+        <button className="nav-section__head" type="button" onClick={() => setOpen(!open)}>
+          {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          <span className="nav-section__title">{title}</span>
+          {count !== undefined && <span className="nav-section__count">{count}</span>}
+        </button>
+        {action && <div className="nav-section__action">{action}</div>}
+      </div>
       {open && <div className="nav-section__body">{children}</div>}
     </section>
   );
 }
 
-export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSidebarProps) {
+export function NavSidebar({ activeScreen, onNavigate, onOpenSettings, onCollapse }: NavSidebarProps) {
   const {
     repository,
     checkoutBranch,
@@ -58,6 +70,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
     stashApply,
     stashPop,
     stashDrop,
+    stash,
     openRepository,
     busy,
   } = useRepository();
@@ -65,6 +78,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
   const [tagCreating, setTagCreating] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newName, setNewName] = useState('');
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   if (!repository) return null;
 
   const submitNewBranch = () => {
@@ -97,27 +111,49 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
 
   return (
     <aside className="nav-sidebar">
+      <div className="nav-sidebar__topbar">
+        {onCollapse && (
+          <button
+            type="button"
+            className="nav-sidebar__collapse"
+            aria-label="Collapse side bar"
+            title="Collapse side bar (Ctrl+B)"
+            onClick={onCollapse}
+          >
+            <ChevronsLeft size={13} strokeWidth={1.5} />
+          </button>
+        )}
+      </div>
       <div className="nav-sidebar__workspace">
-        <p className="nav-sidebar__heading">Workspace</p>
-        <nav>
-          {workspaceNav.map(({ id, label, icon: Icon, badge }) => (
-            <button
-              key={id}
-              type="button"
-              className={`nav-item${activeScreen === id ? ' nav-item--active' : ''}`}
-              onClick={() => onNavigate(id)}
-            >
-              <Icon size={13} className="nav-item__icon" />
-              <span className="nav-item__label">{label}</span>
-              {id === 'working-changes' && !clean && (
-                <span className="nav-item__badge">{repository.files.length}</span>
-              )}
-              {id !== 'working-changes' && badge !== undefined && (
-                <span className="nav-item__badge">{badge}</span>
-              )}
-            </button>
-          ))}
-        </nav>
+        <button
+          className="nav-sidebar__heading"
+          type="button"
+          onClick={() => setWorkspaceOpen(!workspaceOpen)}
+        >
+          <span>Workspace</span>
+          <ChevronUp size={10} />
+        </button>
+        {workspaceOpen && (
+          <nav>
+            {workspaceNav.map(({ id, label, icon: Icon, badge }) => (
+              <button
+                key={id}
+                type="button"
+                className={`nav-item${activeScreen === id ? ' nav-item--active' : ''}`}
+                onClick={() => onNavigate(id)}
+              >
+                <Icon size={13} className="nav-item__icon" strokeWidth={1.25} />
+                <span className="nav-item__label">{label}</span>
+                {id === 'working-changes' && !clean && (
+                  <span className="nav-item__badge">{repository.files.length}</span>
+                )}
+                {id !== 'working-changes' && badge !== undefined && (
+                  <span className="nav-item__badge">{badge}</span>
+                )}
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
 
       <div className="nav-sidebar__refs">
@@ -131,7 +167,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
               aria-label="Create branch"
               onClick={() => setCreating(true)}
             >
-              +
+              <Plus size={7} />
             </button>
           }
         >
@@ -156,7 +192,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
               />
             </div>
           )}
-          {repository.branches.map((branch) => (
+          {repository.branches.map((branch, index) => (
             <button
               key={branch.name}
               type="button"
@@ -168,8 +204,14 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
                   : `Click to checkout — Shift+click to delete ${branch.name}`
               }
             >
-              <GitBranch size={12} className="nav-branch__icon" />
+              <GitBranch
+                size={10.5}
+                className="nav-branch__icon"
+                strokeWidth={1.25}
+                style={{ color: branch.isHead ? 'var(--accent)' : laneColor(index) }}
+              />
               <span className="nav-branch__name">{branch.name}</span>
+              {branch.isHead && <Check size={10} className="nav-branch__check" />}
             </button>
           ))}
         </Section>
@@ -179,7 +221,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
             {repository.remotes.map(({ remote, branches }) => (
               <div key={remote} className="nav-remote">
                 <div className="nav-remote__head">
-                  <Cloud size={12} />
+                  <Cloud size={11} strokeWidth={1.25} />
                   <span>{remote}</span>
                 </div>
                 {branches.map((branch) => (
@@ -188,7 +230,14 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
                     type="button"
                     className="nav-branch nav-branch--remote"
                   >
-                    <GitBranch size={12} className="nav-branch__icon" />
+                    <GitBranch
+                      size={10.5}
+                      className="nav-branch__icon"
+                      strokeWidth={1.25}
+                      style={{
+                        color: laneColor(repository.branches.findIndex((b) => b.name === branch)),
+                      }}
+                    />
                     <span className="nav-branch__name">{branch}</span>
                   </button>
                 ))}
@@ -201,17 +250,17 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
           title="Tags"
           count={repository.tagTotal}
             action={
-              <button
+            <button
                 type="button"
                 className="nav-section__add"
                 aria-label="Create tag"
                 onClick={() => setTagCreating(true)}
               >
-                <Plus size={11} />
+                <Plus size={7} />
               </button>
             }
-          >
-            {tagCreating && (
+        >
+          {tagCreating && (
               <div className="nav-branch-create">
                 <input
                   autoFocus
@@ -236,24 +285,39 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
               <button
                 key={tag.name}
                 type="button"
-                className="nav-branch"
+                className="nav-branch nav-branch--tag"
                 onClick={() => {
                   if (!busy) void deleteTag(tag.name);
                 }}
                 title={`Tag on ${tag.commitOid ? tag.commitOid.slice(0, 7) : "?"} — click to delete`}
               >
-                <TagIcon size={12} className="nav-branch__icon" />
+                <TagIcon size={10.5} className="nav-branch__icon" strokeWidth={1.25} />
                 <span className="nav-branch__name">{tag.name}</span>
               </button>
             ))}
         </Section>
 
-        {repository.stashes.length > 0 && (
-          <Section title="Stashes" count={repository.stashes.length}>
+        {/* The design keeps STASHES visible even when the list is empty. */}
+        <Section
+          title="Stashes"
+          count={repository.stashes.length}
+          action={
+            <button
+              type="button"
+              className="nav-section__add"
+              aria-label="Stash changes"
+              title="Stash working changes"
+              disabled={busy || repository.files.length === 0}
+              onClick={() => void stash()}
+            >
+              <Plus size={7} />
+            </button>
+          }
+        >
             {repository.stashes.map((stash) => (
               <div key={stash.index} className="nav-stash">
                 <span className="nav-stash__icon">
-                  <Archive size={12} />
+                  <Archive size={12} strokeWidth={1.25} />
                 </span>
                 <span className="nav-branch__name" title={stash.message}>
                   {stash.message}
@@ -290,7 +354,6 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
               </div>
             ))}
           </Section>
-        )}
 
         {repository.worktrees.length > 0 && (
           <Section title="Worktrees" count={repository.worktrees.length}>
@@ -304,7 +367,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
                 }}
                 title={`${tree.path} — branch ${tree.branch}${tree.isCurrent ? ' (open)' : ' — click to open as workspace'}`}
               >
-                <GitBranch size={12} className="nav-branch__icon" />
+                <GitBranch size={10.5} className="nav-branch__icon" strokeWidth={1.25} />
                 <span className="nav-branch__name">{tree.name}</span>
                 <span className="nav-worktree__branch">{tree.branch}</span>
               </button>
@@ -324,7 +387,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
                 }}
                 title={`${sub.path}\n${sub.url} — click to open as workspace`}
               >
-                <FolderGit2 size={12} className="nav-branch__icon" />
+                <FolderGit2 size={12} className="nav-branch__icon" strokeWidth={1.25} />
                 <span className="nav-branch__name">{sub.name}</span>
                 <span
                   className={`nav-submodule__dot${sub.dirty ? ' nav-submodule__dot--dirty' : ''}`}
@@ -338,8 +401,10 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
 
       <div className="nav-sidebar__footer">
         <div className="repo-health">
-          <span
-            className={`repo-health__dot ${clean ? 'repo-health__dot--clean' : ''}`}
+          <CircleCheck
+            size={15}
+            strokeWidth={1.25}
+            className={`repo-health__icon${clean ? ' repo-health__icon--clean' : ''}`}
           />
           <div className="repo-health__text">
             {clean ? (
@@ -361,7 +426,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings }: NavSide
           </div>
         </div>
         <button type="button" className="nav-preferences" onClick={onOpenSettings}>
-          <Settings size={13} />
+          <Settings size={15} strokeWidth={1.25} />
           <span>Preferences</span>
           <kbd>⌘,</kbd>
         </button>

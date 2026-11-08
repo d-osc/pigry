@@ -7,33 +7,65 @@
 }
 
 .commit-history__header {
-  padding: 21px 24px 12px;
+  padding: 21px 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 20px;
   flex-shrink: 0;
 }
 
 .commit-history__title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
 }
 
+.commit-history__title-row > :first-child {
+  margin-right: -8px;
+}
+
 .commit-history__title {
-  font-size: var(--fs-xl);
+  font-size: 22px;
   font-weight: 600;
+  letter-spacing: -0.0273em;
 }
 
 .commit-history__subtitle {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   font-size: var(--fs-sm);
+  margin-right: auto;
 }
 
 .commit-history__scanned {
-  margin-left: auto;
   color: var(--text-muted);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
+}
+
+.commit-history__new-branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  background: var(--accent-tint-1);
+  border: 1px solid var(--accent-tint-3);
+  color: var(--accent);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.commit-history__new-branch:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.commit-history__title-row .outline-button {
+  height: 32px;
+  padding: 0 12px;
+  font-size: var(--fs-md);
+  font-weight: 500;
 }
 
 .commit-history__title-row .outline-button:disabled {
@@ -41,6 +73,7 @@
   cursor: default;
 }
 
+/* ---- Filters ---- */
 .commit-history__filters {
   display: flex;
   align-items: center;
@@ -51,11 +84,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  flex: 1;
-  max-width: 340px;
-  height: 30px;
+  width: 320px;
+  height: 32px;
   padding: 0 10px;
-  background: var(--bg-input);
+  background: var(--bg-sidebar);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-muted);
@@ -67,7 +99,7 @@
   background: none;
   border: none;
   outline: none;
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   color: var(--text-primary);
 }
 
@@ -75,16 +107,64 @@
   color: var(--text-muted);
 }
 
+.commit-history__search-kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 .filter-pill {
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.filter-pill svg {
   color: var(--text-secondary);
-  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+
+.commit-history__view-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .commit-history__remotes {
-  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+.commit-history__remotes input {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+}
+
+.commit-history__columns {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+}
+
+.commit-history__columns:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .commit-history__notice {
@@ -94,10 +174,12 @@
   font-size: var(--fs-xs);
 }
 
+/* ---- Table ---- */
 .commit-history__content {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -105,8 +187,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  border-top: 1px solid var(--border);
-  flex: 1;
   min-width: 0;
 }
 
@@ -124,106 +204,324 @@
 
 .commit-row {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) 170px 90px 110px;
+  grid-template-columns: 176px minmax(0, 1fr) 152px 98px 104px;
   align-items: center;
-  gap: 12px;
-  height: 36px;
-  padding: 0 20px 0 0;
-  font-size: var(--fs-sm);
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  font-size: var(--fs-md);
 }
 
 .commit-row--head {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 30px;
-  background: var(--bg-workspace);
+  height: 32px;
+  background: var(--bg-sidebar);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
+}
+
+.commit-row--head > :last-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.commit-row:not(.commit-row--head) {
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .commit-row:not(.commit-row--head):hover {
   background: var(--bg-panel);
 }
 
+.commit-row--selected,
+.commit-row--selected:hover {
+  background: #202a40;
+  box-shadow: inset 2px 0 0 #344464;
+}
+
 .commit-row__graph {
-  height: 100%;
-  display: flex;
-  align-items: center;
+  display: block;
+  height: 40px;
   overflow: hidden;
+}
+
+.commit-graph__svg {
+  display: block;
+}
+
+/* Invisible lane hit-areas: only the stroke is hoverable, and hovering
+   highlights the visible lane line beneath. */
+.commit-graph__hit {
+  pointer-events: stroke;
+  cursor: default;
+}
+
+.commit-graph__hit:hover + line,
+.commit-graph__hit:hover + path {
+  stroke-width: 2.5;
 }
 
 .commit-row__message {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
+  color: #cbd0da;
+  font-size: var(--fs-md);
   overflow: hidden;
   white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--text-primary);
 }
 
-.commit-row__merge {
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--accent-tint-1);
-  color: var(--accent);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  flex-shrink: 0;
+.commit-row--selected .commit-row__message {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .ref-pill {
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-tint-1);
-  border: 1px solid var(--accent-tint-3);
-  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
+  font-size: var(--fs-xs);
+  font-weight: 500;
   flex-shrink: 0;
-}
-
-.ref-pill--remote {
-  background: var(--bg-card);
-  border-color: var(--border-strong);
-  color: var(--text-secondary);
 }
 
 .commit-row__author {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  padding-left: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-secondary);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
 .commit-row__avatar {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-tint-3), var(--purple-tint));
+  width: 21px;
+  height: 21px;
+  border-radius: var(--radius-pill);
   font-size: 8px;
-  font-weight: 600;
-  color: var(--text-primary);
   flex-shrink: 0;
 }
 
 .commit-row__sha {
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
 }
 
 .commit-row__time {
+  font-size: var(--fs-sm);
   color: var(--text-muted);
+  text-align: right;
+}
+
+/* Filter dropdowns (branch / author / time / path / columns) */
+.filter-dd {
+  position: relative;
+  display: inline-flex;
+}
+
+.filter-pill--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.filter-dd__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 130;
+}
+
+.filter-dd__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-md);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.filter-dd__item:hover {
+  background: var(--accent-tint-1);
+  color: var(--text-primary);
+}
+
+.filter-dd__item--active,
+.filter-dd__item--active:hover {
+  color: var(--accent);
+}
+
+.filter-dd__group {
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.filter-dd__label {
+  margin: 2px 8px 6px;
   font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.filter-dd__path {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px;
+}
+
+.filter-dd__path input {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.filter-dd__path input:focus {
+  border-color: var(--accent);
+}
+
+.filter-dd__path-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-dd__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.filter-dd__check:hover {
+  color: var(--text-primary);
+  background: var(--accent-tint-1);
+}
+
+.filter-dd__check input {
+  accent-color: var(--accent);
+}
+
+/* New branch modal */
+.commit-history__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+}
+
+.commit-history__branch-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100vw - 48px));
+  padding: 20px 22px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.commit-history__branch-modal > strong {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.commit-history__branch-base {
+  font-size: var(--fs-md);
+  color: var(--text-muted);
+}
+
+.commit-history__branch-base code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent-tint-1);
+  color: var(--accent);
+}
+
+.commit-history__branch-modal input[type='text'],
+.commit-history__branch-modal input:not([type='checkbox']) {
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.commit-history__branch-modal input:focus {
+  border-color: var(--accent);
+}
+
+.commit-history__branch-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.commit-history__branch-check input {
+  accent-color: var(--accent);
+}
+
+.commit-history__branch-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.filter-dd__menu--right {
+  left: auto;
+  right: 0;
 }
