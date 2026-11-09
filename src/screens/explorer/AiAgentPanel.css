@@ -759,3 +759,160 @@
 .ai-composer__sel-chip button:hover {
   color: var(--red);
 }
+
+/* ============================================================
+   Editable chat + selection code cards (Copilot-style)
+   ============================================================ */
+
+/* hover edit button on your own messages */
+.explorer-ai__msg-edit-btn {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.explorer-ai__msg:hover .explorer-ai__msg-edit-btn {
+  opacity: 1;
+}
+
+.explorer-ai__msg-edit-btn:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-tint-1);
+}
+
+.explorer-ai__msg-edit-btn:disabled {
+  cursor: default;
+}
+
+/* selection code card pinned to the message */
+.explorer-ai__msg-selection {
+  border: 1px solid var(--accent-tint-3);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.explorer-ai__msg-selection-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.explorer-ai__msg-selection-range {
+  color: var(--text-muted);
+}
+
+.explorer-ai__msg-selection-code {
+  margin: 0;
+  padding: 7px 9px;
+  max-height: 160px;
+  overflow: auto;
+  background: var(--bg-workspace);
+  border-top: 1px solid var(--accent-tint-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre;
+}
+
+/* inline editor for an edited message */
+.explorer-ai__msg-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.explorer-ai__msg-editor-input {
+  width: 100%;
+  resize: vertical;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.explorer-ai__msg-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.explorer-ai__msg-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.explorer-ai__msg-editor-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.explorer-ai__msg-editor-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #10131c;
+  font-weight: 600;
+}
+
+.explorer-ai__msg-editor-btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  color: #10131c;
+  filter: brightness(1.08);
+}
+
+.explorer-ai__msg-editor-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* markdown replies: fenced code blocks inside the chat */
+.explorer-ai__msg-text pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  background: var(--bg-workspace);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.explorer-ai__msg-text p {
+  margin: 0 0 6px;
+}
+
+.explorer-ai__msg-text p:last-child {
+  margin-bottom: 0;
+}

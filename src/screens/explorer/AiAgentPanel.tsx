@@ -7,12 +7,14 @@ import {
   ImageIcon,
   Loader2,
   Paperclip,
+  Pencil,
   Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, readWorktreeFile } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
+import { renderMarkdown } from '../../lib/markdown';
 import {
   activeProviderId,
   anthropicEndpoint,
@@ -36,7 +38,12 @@ interface AttachedFile {
 
 interface ChatMessage {
   role: 'user' | 'assistant';
+  /** Clean, editable message text (context is kept separately). */
   text: string;
+  /** Baked context (selection + attachments) sent with the payload. */
+  context?: string;
+  /** Editor selection attached at send time — shown as a code card. */
+  selection?: { path: string; startLine: number; endLine: number; text: string } | null;
   images?: string[];
   error?: boolean;
 }
@@ -78,6 +85,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  // Message being edited (index) + its draft (Copilot-style edit & resubmit).
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
   // Dismissed selection key — reset whenever a different selection arrives.
   const selectionKey = selection ? `${selection.path}:${selection.startLine}:${selection.endLine}` : '';
   const [dismissedKey, setDismissedKey] = useState('');
@@ -258,19 +268,46 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
 
     const userMessage: ChatMessage = {
       role: 'user',
-      text: text + (context ? `\n\n---\n${context}` : ''),
+      text,
+      context,
+      selection: activeSelection
+        ? {
+            path: activeSelection.path,
+            startLine: activeSelection.startLine,
+            endLine: activeSelection.endLine,
+            text: activeSelection.text.slice(0, 8000),
+          }
+        : null,
       images: images.map((image) => image.dataUrl),
     };
     const history = [...messages, userMessage];
     setMessages(history);
     setInput('');
     setImages([]);
+    await doSend(history);
+  };
+
+  /** Edits a sent user message and re-runs the conversation from there
+   * (VS Code Copilot style): everything after the edited message is
+   * discarded and a fresh reply is generated. */
+  const resendEdited = async (index: number, newText: string) => {
+    if (sending || !newText.trim()) return;
+    const edited: ChatMessage = { ...messages[index], text: newText.trim() };
+    const history = [...messages.slice(0, index), edited];
+    setMessages(history);
+    setEditingIndex(null);
+    await doSend(history);
+  };
+
+  /** Runs the provider for `history` (whose last entry is the user turn). */
+  const doSend = async (history: ChatMessage[]) => {
+    const last = history[history.length - 1];
     setSending(true);
 
     if (isCliProvider(active)) {
       const cli = active.type === 'claude-code' ? 'claude' : 'codex';
       try {
-        const output = await cliAgentRun(cli, userMessage.text);
+        const output = await cliAgentRun(cli, last.text);
         setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)' }]);
       } catch (error) {
         setMessages((m) => [
@@ -290,11 +327,13 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
     const mediaTypeOf = (dataUrl: string) =>
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
+    const fullText = last.text + (last.context ?? '');
+    const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
-      ? images.length > 0
+      ? turnImages.length > 0
         ? [
-            { type: 'text', text: userMessage.text },
-            ...images.map((image) => ({
+            { type: 'text', text: fullText },
+            ...turnImages.map((image) => ({
               type: 'image',
               source: {
                 type: 'base64',
@@ -303,16 +342,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
               },
             })),
           ]
-        : userMessage.text
-      : images.length > 0
+        : fullText
+      : turnImages.length > 0
         ? [
-            { type: 'text', text: userMessage.text },
-            ...images.map((image) => ({
+            { type: 'text', text: fullText },
+            ...turnImages.map((image) => ({
               type: 'image_url',
               image_url: { url: image.dataUrl },
             })),
           ]
-        : userMessage.text;
+        : fullText;
     const payload = isAnthropic
       ? {
           model: active.model || 'claude-sonnet',
@@ -444,15 +483,92 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
         ) : (
           <section className="explorer-ai__section">
             <div className="explorer-ai__card">
-              {messages.map((message, index) => (
-                <div key={index} className={`explorer-ai__msg ${message.role === 'user' ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}>
-                  <div className="explorer-ai__msg-meta">
-                    <span className="explorer-ai__avatar">{message.role === 'user' ? 'You' : 'AI'}</span>
-                    <span className="explorer-ai__msg-name">{message.role === 'user' ? 'You' : 'AI Agent'}</span>
+              {messages.map((message, index) => {
+                const isUser = message.role === 'user';
+                const editing = editingIndex === index;
+                return (
+                  <div
+                    key={index}
+                    className={`explorer-ai__msg ${isUser ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}
+                  >
+                    <div className="explorer-ai__msg-meta">
+                      <span className="explorer-ai__avatar">{isUser ? 'You' : 'AI'}</span>
+                      <span className="explorer-ai__msg-name">{isUser ? 'You' : 'AI Agent'}</span>
+                      {isUser && !editing && (
+                        <button
+                          type="button"
+                          className="explorer-ai__msg-edit-btn"
+                          title="Edit message and resend"
+                          aria-label="Edit message"
+                          disabled={sending}
+                          onClick={() => {
+                            setEditingIndex(index);
+                            setEditDraft(message.text);
+                          }}
+                        >
+                          <Pencil size={11} strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
+                    {editing ? (
+                      <div className="explorer-ai__msg-editor">
+                        <textarea
+                          className="explorer-ai__msg-editor-input"
+                          value={editDraft}
+                          rows={Math.min(10, Math.max(2, editDraft.split('\n').length))}
+                          onChange={(event) => setEditDraft(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') setEditingIndex(null);
+                            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                              event.preventDefault();
+                              void resendEdited(index, editDraft);
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <div className="explorer-ai__msg-editor-actions">
+                          <button
+                            type="button"
+                            className="explorer-ai__msg-editor-btn"
+                            onClick={() => setEditingIndex(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="explorer-ai__msg-editor-btn explorer-ai__msg-editor-btn--primary"
+                            disabled={!editDraft.trim() || sending}
+                            onClick={() => void resendEdited(index, editDraft)}
+                          >
+                            <Check size={11} strokeWidth={2} />
+                            Save &amp; resubmit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {isUser && message.selection && (
+                          <div className="explorer-ai__msg-selection" title={message.selection.path}>
+                            <div className="explorer-ai__msg-selection-head">
+                              <FileText size={10} strokeWidth={1.5} />
+                              <span>{message.selection.path.split('/').pop()}</span>
+                              <span className="explorer-ai__msg-selection-range">
+                                {message.selection.startLine}–{message.selection.endLine}
+                              </span>
+                            </div>
+                            <pre className="explorer-ai__msg-selection-code">
+                              {message.selection.text}
+                            </pre>
+                          </div>
+                        )}
+                        <div className="explorer-ai__msg-text">
+                          {isUser ? message.text : renderMarkdown(message.text)}
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <p className="explorer-ai__msg-text">{message.text}</p>
-                </div>
-              ))}
+                );
+              })}
               {sending && (
                 <div className="explorer-ai__msg">
                   <div className="explorer-ai__msg-meta">
