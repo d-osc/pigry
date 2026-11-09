@@ -1234,8 +1234,9 @@ pub async fn ai_chat(
     url: String,
     api_key: String,
     body: String,
+    auth: Option<String>,
 ) -> Result<ai::AiChatResult, String> {
-    ai::ai_chat(&url, &api_key, &body).map_err(|e| e)
+    ai::ai_chat(&url, &api_key, &body, auth.as_deref()).map_err(|e| e)
 }
 
 #[tauri::command]

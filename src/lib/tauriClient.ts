@@ -461,9 +461,10 @@ export async function aiChat(
   url: string,
   apiKey: string,
   body: string,
+  auth?: 'bearer' | 'anthropic',
 ): Promise<{ ok: boolean; status: number; body: string; error: string }> {
   if (!isTauri()) throw new Error('AI requires the desktop app — browser preview has no backend');
-  return invoke('ai_chat', { url, apiKey, body });
+  return invoke('ai_chat', { url, apiKey, body, auth: auth ?? null });
 }
 
 export async function ghAccountList(): Promise<GhAccount[]> {

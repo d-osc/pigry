@@ -20,8 +20,11 @@ pub struct AiChatResult {
     pub error: String,
 }
 
-/// POST `body_json` to `url` with a Bearer key; returns the raw response body.
-pub fn ai_chat(url: &str, api_key: &str, body_json: &str) -> Result<AiChatResult, String> {
+/// POST `body_json` to `url`; returns the raw response body. `auth_mode`
+/// picks the credential headers: `"bearer"` (default) sends
+/// `Authorization: Bearer <key>`, `"anthropic"` sends
+/// `x-api-key` + `anthropic-version` (the Anthropic /v1/messages scheme).
+pub fn ai_chat(url: &str, api_key: &str, body_json: &str, auth_mode: Option<&str>) -> Result<AiChatResult, String> {
     if url.is_empty() {
         return Err("provider endpoint URL is empty".to_string());
     }
@@ -36,8 +39,18 @@ pub fn ai_chat(url: &str, api_key: &str, body_json: &str) -> Result<AiChatResult
         "Content-Type: application/json",
     ]);
     if !api_key.is_empty() {
-        cmd.args(["-H", &format!("Authorization: Bearer {api_key}")]);
+        if auth_mode == Some("anthropic") {
+            cmd.args([
+                "-H",
+                &format!("x-api-key: {api_key}"),
+                "-H",
+                "anthropic-version: 2023-06-01",
+            ]);
+        } else {
+            cmd.args(["-H", &format!("Authorization: Bearer {api_key}")]);
+        }
     }
+    cmd.arg(url);
     cmd.args(["--data-binary", "@-"]);
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());

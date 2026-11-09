@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, Copy, KeyRound, Loader2, LogIn, LogOut, Pencil, Plus, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, Copy, KeyRound, Loader2, LogIn, LogOut, Search, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { ghAccountList, ghAuthStatus, ghDeviceFlowPoll, ghDeviceFlowStart, ghInstall, ghLoginWithToken, ghOpenUrl, ghReleaseList, ghSwitchAccount, ghTokenScopes } from '../../lib/tauriClient';
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../lib/theme';
-import { detectZcodeGlm } from '../../lib/zcode';
+import { ProviderManager } from './ProviderManager';
 import appPackage from '../../../package.json';
 import type { GhAccount } from '../../types/repository';
 import './AppSettingsScreen.css';
@@ -32,22 +32,6 @@ const readBool = (key: string, fallback: boolean) => {
 };
 
 const SUGGESTED_SCOPES = ['repo', 'workflow', 'read:org', 'gist'];
-
-interface AiProviderEntry {
-  id: string;
-  name: string;
-  type: string;
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-}
-
-const PROVIDER_LABEL: Record<string, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  ollama: 'Ollama (local)',
-  custom: 'Custom',
-};
 
 /** GitHub classic PAT scopes relevant to orbit, rendered as checkboxes. */
 /** Scopes valid for classic OAuth tokens (gh token, device flow). */
@@ -136,43 +120,6 @@ export function AppSettingsScreen({
   });
   const [minimap, setMinimap] = useState(() => readBool('orbit:editor-minimap', false));
   const [lineNumbers, setLineNumbers] = useState(() => readBool('orbit:editor-line-numbers', true));
-
-  // AI providers — a managed list; the active one mirrors the legacy
-  // 'orbit:ai-provider' key so older consumers keep working.
-  const [providers, setProviders] = useState<AiProviderEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem('orbit:ai-providers');
-      if (raw) return JSON.parse(raw) as AiProviderEntry[];
-      const legacy = localStorage.getItem('orbit:ai-provider');
-      if (legacy) {
-        const cfg = JSON.parse(legacy) as Partial<AiProviderEntry> & { provider?: string };
-        return [
-          {
-            id: 'default',
-            name: PROVIDER_LABEL[cfg.provider ?? 'openai'] ?? 'OpenAI',
-            type: cfg.provider ?? 'openai',
-            model: cfg.model ?? '',
-            baseUrl: cfg.baseUrl ?? '',
-            apiKey: cfg.apiKey ?? '',
-          },
-        ];
-      }
-    } catch {
-      // fall through to default
-    }
-    return [
-      { id: 'default', name: 'OpenAI', type: 'openai', model: '', baseUrl: '', apiKey: '' },
-    ];
-  });
-  const [activeAiId, setActiveAiId] = useState<string>(() => {
-    try {
-      return localStorage.getItem('orbit:ai-active') ?? 'default';
-    } catch {
-      return 'default';
-    }
-  });
-  const [aiDraft, setAiDraft] = useState<AiProviderEntry | null>(null);
-  const [aiEditingId, setAiEditingId] = useState<string | null>(null);
 
   // GitHub access
   const [token, setToken] = useState(() => {
@@ -368,54 +315,6 @@ export function AppSettingsScreen({
       }),
     );
   }, [fontSize, wordWrap, fontFamily, ligatures, tabSize, minimap, lineNumbers]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('orbit:ai-providers', JSON.stringify(providers));
-      localStorage.setItem('orbit:ai-active', activeAiId);
-      const active = providers.find((entry) => entry.id === activeAiId) ?? providers[0];
-      if (active) {
-        localStorage.setItem(
-          'orbit:ai-provider',
-          JSON.stringify({
-            provider: active.type,
-            model: active.model,
-            baseUrl: active.baseUrl,
-            apiKey: active.apiKey,
-          }),
-        );
-      }
-    } catch {
-      // session-only
-    }
-  }, [providers, activeAiId]);
-
-  const saveAiDraft = () => {
-    if (!aiDraft) return;
-    const entry: AiProviderEntry = {
-      ...aiDraft,
-      name: aiDraft.name.trim() || PROVIDER_LABEL[aiDraft.type] || 'Provider',
-    };
-    if (aiEditingId) {
-      setProviders((list) => list.map((item) => (item.id === aiEditingId ? { ...entry, id: aiEditingId } : item)));
-    } else {
-      const id = 'p' + Date.now().toString(36);
-      setProviders((list) => [...list, { ...entry, id }]);
-      setActiveAiId(id);
-    }
-    setAiDraft(null);
-    setAiEditingId(null);
-    notify(aiEditingId ? 'Provider updated' : 'Provider added', 'success');
-  };
-
-  const deleteProvider = (id: string) => {
-    setProviders((list) => {
-      const next = list.filter((item) => item.id !== id);
-      if (activeAiId === id) setActiveAiId(next[0]?.id ?? '');
-      return next;
-    });
-    notify('Provider deleted', 'success');
-  };
 
   // The title-bar profile menu shares this auth state.
   useEffect(() => {
@@ -861,189 +760,7 @@ export function AppSettingsScreen({
           {showSection('ai-provider', aiMatch) && (
             <section className="app-settings__section">
               <h2>AI Provider</h2>
-              <div className="app-settings__row">
-                <strong>Providers</strong>
-                <span>
-                  Which service the AI Agent panel should talk to. One is active at a time —
-                  keys are stored locally on this machine only.
-                </span>
-                <div className="app-settings__accounts">
-                  {providers.length === 0 && (
-                    <p className="app-settings__accounts-empty">No providers yet — add one below.</p>
-                  )}
-                  {providers.map((entry) => (
-                    <div key={entry.id} className="app-settings__account">
-                      <Sparkles size={14} strokeWidth={1.5} className="app-settings__provider-icon" />
-                      <span className="app-settings__account-name">
-                        {entry.name}
-                        <span className="app-settings__provider-meta">
-                          {PROVIDER_LABEL[entry.type] ?? entry.type}
-                          {entry.model ? ' · ' + entry.model : ''}
-                        </span>
-                      </span>
-                      {entry.id === activeAiId ? (
-                        <span className="app-settings__pill app-settings__pill--in">active</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="app-settings__button app-settings__button--ghost"
-                          onClick={() => setActiveAiId(entry.id)}
-                        >
-                          Use
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="app-settings__button app-settings__button--ghost"
-                        onClick={() => {
-                          setAiEditingId(entry.id);
-                          setAiDraft({ ...entry });
-                        }}
-                      >
-                        <Pencil size={12} strokeWidth={1.5} />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="app-settings__button app-settings__button--ghost"
-                        onClick={() => deleteProvider(entry.id)}
-                      >
-                        <Trash2 size={12} strokeWidth={1.5} />
-                        Delete
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="app-settings__inline">
-                  <button
-                    type="button"
-                    className="app-settings__button"
-                    onClick={() => {
-                      setAiEditingId(null);
-                      setAiDraft({ id: '', name: '', type: 'openai', model: '', baseUrl: '', apiKey: '' });
-                    }}
-                  >
-                    <Plus size={13} strokeWidth={1.5} />
-                    Add provider
-                  </button>
-                  <button
-                    type="button"
-                    className="app-settings__button app-settings__button--ghost"
-                    onClick={async () => {
-                      try {
-                        const found = await detectZcodeGlm();
-                        if (!found) {
-                          notify('ZCode desktop not detected', 'error');
-                          return;
-                        }
-                        const entry: AiProviderEntry = {
-                          id: 'zcode-cloud',
-                          name: found.name,
-                          type: 'zcode',
-                          model: found.model,
-                          baseUrl: found.baseUrl,
-                          apiKey: found.apiKey,
-                        };
-                        setProviders((list) =>
-                          list.some((item) => item.id === entry.id)
-                            ? list.map((item) => (item.id === entry.id ? entry : item))
-                            : [...list, entry],
-                        );
-                        setActiveAiId(entry.id);
-                        notify('ZCode Cloud (GLM) added from ZCode desktop', 'success');
-                      } catch (error) {
-                        notify(error instanceof Error ? error.message : String(error), 'error');
-                      }
-                    }}
-                  >
-                    <Sparkles size={12} strokeWidth={1.5} />
-                    Detect from ZCode
-                  </button>
-                </div>
-              </div>
-
-              {aiDraft && (
-                <div className="app-settings__provider-form">
-                  <strong>{aiEditingId ? 'Edit provider' : 'Add provider'}</strong>
-                  <div className="app-settings__row">
-                    <span className="app-settings__form-label">Name</span>
-                    <input
-                      className="app-settings__control"
-                      value={aiDraft.name}
-                      onChange={(event) => setAiDraft({ ...aiDraft, name: event.target.value })}
-                      placeholder="My provider"
-                      aria-label="Provider name"
-                      spellCheck={false}
-                    />
-                  </div>
-                  <div className="app-settings__row">
-                    <span className="app-settings__form-label">Type</span>
-                    <select
-                      className="app-settings__control"
-                      value={aiDraft.type}
-                      onChange={(event) => setAiDraft({ ...aiDraft, type: event.target.value })}
-                      aria-label="Provider type"
-                    >
-                      <option value="claude-code">Claude Code (CLI)</option>
-                      <option value="codex">Codex (CLI)</option>
-                      <option value="zcode">ZCode Cloud (GLM)</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="anthropic">Anthropic</option>
-                      <option value="ollama">Ollama (local)</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </div>
-                  <div className="app-settings__row">
-                    <span className="app-settings__form-label">Model</span>
-                    <input
-                      className="app-settings__control"
-                      value={aiDraft.model}
-                      onChange={(event) => setAiDraft({ ...aiDraft, model: event.target.value })}
-                      placeholder="gpt-4o-mini, claude-sonnet, llama3.1…"
-                      aria-label="Provider model"
-                      spellCheck={false}
-                    />
-                  </div>
-                  <div className="app-settings__row">
-                    <span className="app-settings__form-label">Base URL</span>
-                    <input
-                      className="app-settings__control"
-                      value={aiDraft.baseUrl}
-                      onChange={(event) => setAiDraft({ ...aiDraft, baseUrl: event.target.value })}
-                      placeholder="https://api.openai.com/v1"
-                      aria-label="Provider base URL"
-                      spellCheck={false}
-                    />
-                  </div>
-                  <div className="app-settings__row">
-                    <span className="app-settings__form-label">API Key</span>
-                    <input
-                      className="app-settings__control"
-                      type="password"
-                      value={aiDraft.apiKey}
-                      onChange={(event) => setAiDraft({ ...aiDraft, apiKey: event.target.value })}
-                      placeholder="sk-…"
-                      aria-label="Provider API key"
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div className="app-settings__inline">
-                    <button type="button" className="app-settings__button" onClick={saveAiDraft}>
-                      {aiEditingId ? 'Save changes' : 'Add provider'}
-                    </button>
-                    <button
-                      type="button"
-                      className="app-settings__button app-settings__button--ghost"
-                      onClick={() => {
-                        setAiDraft(null);
-                        setAiEditingId(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
+              <ProviderManager />
             </section>
           )}
 

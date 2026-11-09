@@ -101,6 +101,37 @@ export interface ComposedCommitMessage {
   body: string;
 }
 
+/** Wire protocol an AI provider speaks. */
+export type AiApiFormat = 'openai' | 'anthropic';
+
+/** One model inside a provider's model list. */
+export interface AiModelEntry {
+  id: string;
+  name: string;
+  /** Capability badge, e.g. "1M" / "128K" — display only. */
+  context?: string;
+  /** Supports image attachments. */
+  vision: boolean;
+  /** Selectable during chat. */
+  enabled: boolean;
+}
+
+/** A chat provider: built-in (Z.ai / Start Plan) or user-added custom. */
+export interface AiProviderEntry {
+  id: string;
+  name: string;
+  kind: 'builtin' | 'custom';
+  /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */
+  type: string;
+  apiFormat: AiApiFormat;
+  baseUrl: string;
+  apiKey: string;
+  /** Legacy mirror of the first enabled model, for older consumers. */
+  model: string;
+  enabled: boolean;
+  models: AiModelEntry[];
+}
+
 export interface FileDiffContent {
   original: string | null;
   modified: string | null;

@@ -12,16 +12,16 @@ import {
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, readWorktreeFile } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
+import {
+  activeProviderId,
+  anthropicEndpoint,
+  isCliProvider,
+  loadProviders as loadProviderStore,
+  resolveEndpoint,
+  setActiveProvider,
+  type AiProviderEntry,
+} from '../../lib/aiProviders';
 import './AiAgentPanel.css';
-
-interface ProviderEntry {
-  id: string;
-  name: string;
-  type: string;
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-}
 
 interface ChatImage {
   name: string;
@@ -40,37 +40,20 @@ interface ChatMessage {
   error?: boolean;
 }
 
-const DEFAULT_ENDPOINTS: Record<string, string> = {
-  openai: 'https://api.openai.com/v1/chat/completions',
-  anthropic: 'https://api.anthropic.com/v1/messages',
-  zai: 'https://api.z.ai/api/paas/v4/chat/completions',
-  ollama: 'http://localhost:11434/v1/chat/completions',
-};
-
-function loadProviders(): ProviderEntry[] {
-  try {
-    const raw = localStorage.getItem('orbit:ai-providers');
-    if (raw) return JSON.parse(raw) as ProviderEntry[];
-  } catch {
-    // ignore
-  }
-  return [];
-}
-
-function loadActiveId(): string {
-  try {
-    return localStorage.getItem('orbit:ai-active') ?? '';
-  } catch {
-    return '';
-  }
-}
-
-function resolveEndpoint(entry: ProviderEntry): string {
-  if (entry.baseUrl.trim()) return entry.baseUrl.trim();
-  if (entry.type === 'zai' || entry.type === 'zcode') return 'https://api.z.ai/api/coding/paas/v4/chat/completions';
-  if (entry.type === 'ollama') return DEFAULT_ENDPOINTS.ollama;
-  if (entry.type === 'anthropic') return DEFAULT_ENDPOINTS.anthropic;
-  return DEFAULT_ENDPOINTS.openai;
+/** Full store entry for a detected CLI agent (no HTTP config). */
+function cliEntry(id: string, name: string, type: 'claude-code' | 'codex', model: string): AiProviderEntry {
+  return {
+    id,
+    name,
+    kind: 'custom',
+    type,
+    apiFormat: 'openai',
+    baseUrl: '',
+    apiKey: '',
+    model,
+    enabled: true,
+    models: [],
+  };
 }
 
 interface AiAgentPanelProps {
@@ -81,8 +64,8 @@ interface AiAgentPanelProps {
 }
 
 export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps) {
-  const [providers, setProviders] = useState<ProviderEntry[]>([]);
-  const [activeId, setActiveId] = useState<string>(() => loadActiveId());
+  const [providers, setProviders] = useState<AiProviderEntry[]>([]);
+  const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,42 +79,47 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   // ZCode Cloud (GLM) — detected automatically when ZCode desktop is installed.
-  const [zcodeProvider, setZcodeProvider] = useState<ProviderEntry | null>(null);
+  const [zcodeProvider, setZcodeProvider] = useState<AiProviderEntry | null>(null);
   // CLI coding agents — detected via --version on mount.
-  const [cliProviders, setCliProviders] = useState<ProviderEntry[]>([]);
+  const [cliProviders, setCliProviders] = useState<AiProviderEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     detectZcodeGlm()
       .then((provider) => {
         if (!cancelled && provider) {
-          setZcodeProvider({ id: 'zcode-cloud', ...provider });
+          setZcodeProvider({
+            ...cliEntry('zcode-cloud', provider.name, 'claude-code', provider.model),
+            type: 'zcode',
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+          });
         }
       })
       .catch(() => {});
     cliDetect()
       .then((result) => {
         if (cancelled) return;
-        const found: ProviderEntry[] = [];
+        const found: AiProviderEntry[] = [];
         if (result.claude) {
-          found.push({
-            id: 'cli-claude',
-            name: 'Claude Code' + (result.claudeVersion ? ' · ' + result.claudeVersion : ''),
-            type: 'claude-code',
-            model: 'claude CLI (own subscription)',
-            baseUrl: '',
-            apiKey: '',
-          });
+          found.push(
+            cliEntry(
+              'cli-claude',
+              'Claude Code' + (result.claudeVersion ? ' · ' + result.claudeVersion : ''),
+              'claude-code',
+              'claude CLI (own subscription)',
+            ),
+          );
         }
         if (result.codex) {
-          found.push({
-            id: 'cli-codex',
-            name: 'Codex' + (result.codexVersion ? ' · ' + result.codexVersion : ''),
-            type: 'codex',
-            model: 'codex CLI (own subscription)',
-            baseUrl: '',
-            apiKey: '',
-          });
+          found.push(
+            cliEntry(
+              'cli-codex',
+              'Codex' + (result.codexVersion ? ' · ' + result.codexVersion : ''),
+              'codex',
+              'codex CLI (own subscription)',
+            ),
+          );
         }
         setCliProviders(found);
       })
@@ -151,8 +139,8 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
   // Mirror the Settings → AI Provider manager (localStorage-driven).
   useEffect(() => {
     const sync = () => {
-      setProviders(loadProviders());
-      const id = loadActiveId();
+      setProviders(loadProviderStore());
+      const id = activeProviderId();
       if (id) setActiveId(id);
     };
     sync();
@@ -268,24 +256,7 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
     setImages([]);
     setSending(true);
 
-    const endpoint = resolveEndpoint(active);
-    const content =
-      images.length > 0
-        ? [
-            { type: 'text', text: userMessage.text },
-            ...images.map((image) => ({
-              type: 'image_url',
-              image_url: { url: image.dataUrl },
-            })),
-          ]
-        : userMessage.text;
-    const payload = {
-      model: active.model || 'glm-4.6',
-      messages: [{ role: 'user', content }],
-      stream: false,
-    };
-
-    if (active.type === 'claude-code' || active.type === 'codex') {
+    if (isCliProvider(active)) {
       const cli = active.type === 'claude-code' ? 'claude' : 'codex';
       try {
         const output = await cliAgentRun(cli, userMessage.text);
@@ -301,17 +272,83 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
       return;
     }
 
+    const isAnthropic = active.apiFormat === 'anthropic';
+    const rawEndpoint = resolveEndpoint(active);
+    const endpoint = isAnthropic ? anthropicEndpoint(rawEndpoint) : rawEndpoint;
+    // Anthropic image blocks carry base64 without the data: URL prefix.
+    const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const mediaTypeOf = (dataUrl: string) =>
+      dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
+    const content = isAnthropic
+      ? images.length > 0
+        ? [
+            { type: 'text', text: userMessage.text },
+            ...images.map((image) => ({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaTypeOf(image.dataUrl),
+                data: base64Of(image.dataUrl),
+              },
+            })),
+          ]
+        : userMessage.text
+      : images.length > 0
+        ? [
+            { type: 'text', text: userMessage.text },
+            ...images.map((image) => ({
+              type: 'image_url',
+              image_url: { url: image.dataUrl },
+            })),
+          ]
+        : userMessage.text;
+    const payload = isAnthropic
+      ? {
+          model: active.model || 'claude-sonnet',
+          max_tokens: 4096,
+          messages: [{ role: 'user', content }],
+        }
+      : {
+          model: active.model || 'glm-4.6',
+          messages: [{ role: 'user', content }],
+          stream: false,
+        };
+
     try {
-      const result = await aiChat(endpoint, active.apiKey, JSON.stringify(payload));
+      const result = await aiChat(
+        endpoint,
+        active.apiKey,
+        JSON.stringify(payload),
+        isAnthropic ? 'anthropic' : 'bearer',
+      );
+      const parsed = (() => {
+        try {
+          return JSON.parse(result.body) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })();
       let assistantText = '';
-      try {
-        const parsed = JSON.parse(result.body);
-        assistantText = parsed?.choices?.[0]?.message?.content ?? '';
-      } catch {
-        // non-JSON response
+      if (isAnthropic) {
+        const blocks = parsed?.content as Array<{ type?: string; text?: string }> | undefined;
+        assistantText =
+          blocks
+            ?.filter((block) => block?.type === 'text')
+            .map((block) => block.text ?? '')
+            .join('') ?? '';
+      } else {
+        assistantText =
+          (parsed as { choices?: Array<{ message?: { content?: string } }> })
+            ?.choices?.[0]?.message?.content ?? '';
       }
       if (!result.ok || !assistantText) {
-        const message = JSON.parse(result.body || '{}')?.error?.message ?? result.error ?? `HTTP ${result.status}`;
+        // Anthropic gateways surface errors as {code, message}, the official
+        // API as {error:{message}} — try both before falling back.
+        const err = parsed as
+          | { error?: { message?: string }; message?: string; code?: string }
+          | null;
+        const message =
+          err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`;
         setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true }]);
       } else {
         setMessages((m) => [...m, { role: 'assistant', text: assistantText }]);
@@ -392,11 +429,7 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
                     className={`explorer-ai__picker-item${active?.id === zcodeProvider.id ? ' is-active' : ''}`}
                     onClick={() => {
                       setActiveId(zcodeProvider.id);
-                      try {
-                        localStorage.setItem('orbit:ai-active', zcodeProvider.id);
-                      } catch {
-                        // ignore
-                      }
+                      setActiveProvider(zcodeProvider.id);
                       setPickerOpen(false);
                     }}
                   >
@@ -414,11 +447,7 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
                     className={`explorer-ai__picker-item${provider.id === active?.id ? ' is-active' : ''}`}
                     onClick={() => {
                       setActiveId(provider.id);
-                      try {
-                        localStorage.setItem('orbit:ai-active', provider.id);
-                      } catch {
-                        // ignore
-                      }
+                      setActiveProvider(provider.id);
                       setPickerOpen(false);
                     }}
                   >
