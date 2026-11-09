@@ -14,6 +14,7 @@ use crate::ops;
 use crate::ai;
 use crate::gh;
 use crate::settings;
+use crate::memory_vector;
 use crate::gh_insights;
 use crate::insights;
 use crate::wiki;
@@ -1765,6 +1766,54 @@ pub async fn compose_commit_message(
         repo_path_str(&state)?.to_path_buf()
     };
     git_state::compose_commit_message(&repo_path)
+}
+
+#[tauri::command]
+pub async fn memory_list(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<memory_vector::MemoryEntry>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    memory_vector::memory_list(&repo_path)
+}
+
+#[tauri::command]
+pub async fn memory_add(
+    state: State<'_, Mutex<AppState>>,
+    text: String,
+) -> Result<memory_vector::MemoryEntry, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    memory_vector::memory_add(&repo_path, &text)
+}
+
+#[tauri::command]
+pub async fn memory_remove(
+    state: State<'_, Mutex<AppState>>,
+    id: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    memory_vector::memory_remove(&repo_path, &id)
+}
+
+#[tauri::command]
+pub async fn memory_search(
+    state: State<'_, Mutex<AppState>>,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<memory_vector::MemoryHit>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    memory_vector::memory_search(&repo_path, &query, limit.unwrap_or(5))
 }
 
 #[tauri::command]

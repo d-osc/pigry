@@ -5,6 +5,7 @@ mod busybox3;
 mod busybox_extra;
 mod commands;
 mod config;
+mod memory_vector;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
 pub mod net;
@@ -164,6 +165,10 @@ pub fn run() {
             commands::abort_rebase,
             commands::stage_lines,
             commands::compose_commit_message,
+            commands::memory_list,
+            commands::memory_add,
+            commands::memory_remove,
+            commands::memory_search,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

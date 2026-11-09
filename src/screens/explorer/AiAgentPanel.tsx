@@ -16,7 +16,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { aiChat, cliAgentRun, cliDetect, getFileTree, readWorktreeFile } from '../../lib/tauriClient';
+import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readWorktreeFile } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { renderMarkdown } from '../../lib/markdown';
 import { MemoryDialog, SkillsDialog } from './RepoKnowledge';
@@ -351,12 +351,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
 
     let context = '';
     // Project knowledge lives in the repo (.orbit/) — ride along every send.
+    // Memory is a vector database: pick the semantically relevant entries.
     let memoryText = '';
     let skillsText = '';
     try {
-      memoryText = (await readWorktreeFile('.orbit/memory.md')).content.trim().slice(0, 2000);
+      const hits = await memorySearch(text, 5);
+      if (hits.length > 0) {
+        memoryText = hits.map((hit) => `- ${hit.text}`).join('\n').slice(0, 2000);
+      }
     } catch {
-      // no memory file yet
+      // vector store unavailable
     }
     try {
       const tree = await getFileTree();
@@ -377,7 +381,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     } catch {
       // no skills folder yet
     }
-    if (memoryText) context += `\n\n[Project memory — .orbit/memory.md]\n${memoryText}`;
+    if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
     if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
     if (activeSelection) {
       context += `\n\n[Selected code — ${activeSelection.path}:${activeSelection.startLine}-${activeSelection.endLine}]\n${activeSelection.text.slice(0, 8000)}`;

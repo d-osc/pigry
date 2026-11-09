@@ -1,0 +1,3202 @@
+[
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "orbit",
+    "size": 17,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "GIT",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "acme-inc",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "/",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "platform",
+    "size": 13,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Private",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Search or jump to…",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "⌘ K",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "WORKSPACE",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Explorer",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Commit graph",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Working changes",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "0",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AI Agent",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Pull requests",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Releases",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issues",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Actions",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Projects",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Wiki",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Security and quality",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Insights",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "LOCAL BRANCHES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "4",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "main",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "feat/command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "feat/graph-search",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "fix/lane-rendering",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "REMOTES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "1",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "origin",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "main",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "feat/graph-search",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "TAGS",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "18",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "v0.18.0",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "v0.17.2",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "STASHES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "1",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "WIP: graph minimap",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Working tree clean",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "No uncommitted changes",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Preferences",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "⌘,",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Projects",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "/",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Developer experience",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PROJECT 04",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Updated just now",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "New project",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Developer experience",
+    "size": 22,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Active",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#6dd6ad"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Make history easier to navigate, commands faster to find, and Git workflows safer.",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maintainers",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "SR",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "JL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "TARGET MILESTONE",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "v0.19.0",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "CURRENT ITERATION",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12 · Nov 2–13",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "On track",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#6dd6ad"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3 of 12 items completed",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "25%",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Due Nov 20",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Board",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Table",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Roadmap",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "View settings",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Search project items…",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "/",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Assignee",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Label",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Iteration",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "12 items",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Group by: Status",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Backlog",
+    "size": 12,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #241",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add a minimap for large commit graphs",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "graph",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#62cee7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "SR",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sam Rivera",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Next iteration",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #244",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Remember recent command searches",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Next iteration",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #248",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Preview conflicts before cherry-pick",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "git-workflow",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Alex Liu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Next iteration",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "To triage",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Ready",
+    "size": 12,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #236",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Keep graph position when switching branches",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "graph",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#62cee7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "SR",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sam Rivera",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #239",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Expose stash actions in command search",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PR #192",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Draft",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add keyboard shortcuts for branch actions",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "git-workflow",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Alex Liu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Prioritized",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "In progress",
+    "size": 12,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PR #189",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "In review",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Highlight matching commits in graph search",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "graph",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#62cee7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "SR",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sam Rivera",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PR #191",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "In review",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Rank repository commands with fuzzy search",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #233",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "In progress",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Preserve lane order across octopus merges",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "bug",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "JL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Jordan Lee",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "WIP 3 / 4",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Done",
+    "size": 12,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PR #184",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Merged",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Build keyboard-first command palette",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PR #181",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Merged",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Prevent lane crossings on octopus merges",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P1",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "graph",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#62cee7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "JL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Jordan Lee",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue #225",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Closed",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#6dd6ad"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Restore scroll position after history refresh",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "bug",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Alex Liu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sprint 12",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3 completed",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "9 open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "3 completed",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "7 issues · 5 pull requests",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "acme-inc/platform",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "· All project items shown",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Up to date",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "~/Projects/acme/platform",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "12 project items",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "·",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Last synced just now",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Terminal",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add item",
+    "size": 18,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add existing issues and pull requests to",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Developer experience",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "PROJECT 04",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Repository",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "acme-inc / platform",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Private",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command search",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Type: Issues & pull requests",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "State: All",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Hide items already in project",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "6 results",
+    "size": 11,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "· 2 already in project",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "2 selected",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#252",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Support aliases in command search",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue · Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#198",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add keyboard hints to command search results",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Pull request · Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "AL",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Alex Liu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#250",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Keep command search focused after running an action",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue · Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "enhancement",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#b59aff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#244",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Remember recent command searches",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Already in project",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue · Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2 · Backlog",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#239",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Expose stash actions in command search",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Already in project",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue · Open",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "P2 · Ready",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "MC",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Maya Chen",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "#231",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Clear stale command search results after repository switch",
+    "size": 13,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Issue · Closed",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "bug",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#edb675"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "SR",
+    "size": 7,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Sam Rivera",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Or start something new",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Create issue",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add draft item",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "2 items selected",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Initial status",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Backlog",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Nothing added yet. Selected items will be added to this project only.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Cancel",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "Add to project",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Projects · Add item",
+    "text": "2",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "orbit",
+    "size": 17,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "GIT",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "/",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "platform",
+    "size": 13,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Private",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Search or jump to…",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "⌘ K",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "AL",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "WORKSPACE",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Explorer",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Commit graph",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Working changes",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "0",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "AI Agent",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Pull requests",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "3",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Releases",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Issues",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Actions",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Projects",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Wiki",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Security and quality",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Insights",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "LOCAL BRANCHES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "4",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "main",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "feat/command-menu",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "feat/graph-search",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "fix/lane-rendering",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "REMOTES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "1",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "origin",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "main",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "feat/graph-search",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "TAGS",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "18",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "v0.18.0",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "v0.17.2",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "STASHES",
+    "size": 10,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "1",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "WIP: graph minimap",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Working tree clean",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "No uncommitted changes",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Preferences",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "⌘,",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Projects",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "/",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "New project",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "New project",
+    "size": 22,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Give your team a shared place to organize issues, pull requests and what’s next.",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Project details",
+    "size": 14,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "* Required fields",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Owner",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "*",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Organization",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Repository",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "*",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc / platform",
+    "size": 11,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Private",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Project name",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "*",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Platform reliability",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Description",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Optional",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Track reliability improvements, triage recurring failures, and strengthen the platform’s release confidence.",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Visibility",
+    "size": 14,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Private",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Only people with project access can view it.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Public",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Anyone can view it. Private repository items stay private.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Default view",
+    "size": 14,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Choose where your project opens. You can add or switch views later.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Board",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Move work through status-based columns.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Table",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Manage items and fields in a flexible list.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Roadmap",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Plan work over time with a timeline.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Project preview",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "DRAFT",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "/",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Project",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Platform reliability",
+    "size": 18,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Private",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Track reliability improvements, triage recurring failures, and strengthen the platform’s release confidence.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Board",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Group by: Status",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Backlog",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "+",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Add item",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Ready",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "+",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Add item",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "In progress",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "+",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Add item",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Done",
+    "size": 9,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "+",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Add item",
+    "size": 8,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Layout preview · Your board starts empty",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Setup summary",
+    "size": 12,
+    "weight": 500,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Owner",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Repository",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "acme-inc/platform",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Visibility",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Private",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Default view",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Board",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "A private project owned by acme-inc, opening in Board view. Add issues and pull requests from platform after creation.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Nothing is created until you choose Create project.",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Cancel",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Create project",
+    "size": 12,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#111523"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Up to date",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "~/Projects/acme/platform",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "New project",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "·",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Not created",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#656d7c"
+  },
+  {
+    "screen": "Orbit — New project",
+    "text": "Terminal",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "orbit",
+    "size": 17,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "GIT",
+    "size": 9,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#737d8e"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "Home",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#9299a7"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "/",
+    "size": 13,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#737d8e"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "All repositories",
+    "size": 13,
+    "weight": 600,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "Search code",
+    "size": 11,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "⌘ K",
+    "size": 10,
+    "weight": 400,
+    "family": "JetBrains Mono",
+    "color": "#8b9dff"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "AL",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "REPOSITORY SCOPE",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#737d8e"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "All repositories",
+    "size": 12,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#e9ebf0"
+  },
+  {
+    "screen": "Orbit — Home code search",
+    "text": "3 accounts · 10 repositories",
+    "size": 10,
+    "weight": 400,
+    "family": "Inter",
+    "color": "#737d8e"
+  }
+]

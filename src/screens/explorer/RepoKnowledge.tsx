@@ -1,6 +1,7 @@
 /** Project knowledge dialogs — memory + skills, stored IN the working repo
  * so they are versionable with the code:
- *   memory → .orbit/memory.md (one "- entry" per line)
+ *   memory → vector database at .orbit/memory.vector.json (embedded entries,
+ *     semantic search) with a human-readable .orbit/memory.md mirror
  *   skills → .orbit/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -8,65 +9,105 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   deleteWorktreeFile,
   getFileTree,
+  memoryAdd,
+  memoryList,
+  memoryRemove,
+  memorySearch,
   readWorktreeFile,
   writeWorktreeFile,
+  type MemoryEntry,
 } from '../../lib/tauriClient';
 import './RepoKnowledge.css';
 
-const MEMORY_PATH = '.orbit/memory.md';
 const SKILLS_DIR = '.orbit/skills/';
 
+/** Vector-backed memory: list / semantic search / add / remove. */
 export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
-  const [entries, setEntries] = useState<string[]>([]);
+  const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
   /** Uncontrolled input — value read from the DOM on submit so external
    * value-setters (automation, IMEs) that skip React onChange still work. */
   const draftRef = useRef<HTMLInputElement | null>(null);
+  const queryRef = useRef<HTMLInputElement | null>(null);
 
+  const load = useCallback(async () => {
+    try {
+      setEntries(await memoryList());
+    } catch {
+      setEntries([]);
+    }
+    setLoaded(true);
+  }, []);
+
+  // Initial load — reads the store, never sets state synchronously.
   useEffect(() => {
     let cancelled = false;
-    readWorktreeFile(MEMORY_PATH)
-      .then((file) => {
-        if (cancelled) return;
-        setEntries(
-          file.content
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.startsWith('- '))
-            .map((line) => line.slice(2)),
-        );
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+    (async () => {
+      try {
+        const list = await memoryList();
+        if (!cancelled) setEntries(list);
+      } catch {
+        if (!cancelled) setEntries([]);
+      }
+      if (!cancelled) setLoaded(true);
+    })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const persist = useCallback(
-    async (next: string[]) => {
-      setEntries(next);
-      try {
-        const body = ['# Project memory', '', ...next.map((line) => `- ${line}`), ''].join('\n');
-        await writeWorktreeFile(MEMORY_PATH, body);
-      } catch (e) {
-        notify(e instanceof Error ? e.message : String(e), 'error');
+  // Live semantic search (250 ms debounce on the raw input value).
+  useEffect(() => {
+    if (!loaded) return;
+    const handle = window.setTimeout(async () => {
+      const q = queryRef.current?.value.trim() ?? '';
+      if (!q) {
+        await load();
+        return;
       }
-    },
-    [notify],
-  );
+      setSearching(true);
+      try {
+        const hits = await memorySearch(q, 20);
+        setEntries(
+          hits.map((hit) => ({
+            id: hit.id,
+            text: hit.text,
+            vector: [],
+            createdAt: hit.createdAt,
+          })),
+        );
+      } catch {
+        await load();
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [query, loaded, load]);
 
   const addEntry = async () => {
     const line = draftRef.current?.value.trim() ?? '';
     if (!line) return;
-    await persist([...entries, line]);
-    if (draftRef.current) draftRef.current.value = '';
-    notify('Memory saved', 'success');
+    try {
+      await memoryAdd(line);
+      if (draftRef.current) draftRef.current.value = '';
+      notify('Memory saved', 'success');
+      await load();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error');
+    }
   };
 
-  const removeEntry = async (index: number) => {
-    await persist(entries.filter((_, i) => i !== index));
-    notify('Memory removed', 'success');
+  const removeEntry = async (id: string) => {
+    try {
+      await memoryRemove(id);
+      notify('Memory removed', 'success');
+      await load();
+    } catch (e) {
+      notify(e instanceof Error ? e.message : String(e), 'error');
+    }
   };
 
   return (
@@ -82,8 +123,8 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
           <div>
             <strong className="know-dlg__title">Project memory</strong>
             <p className="know-dlg__sub">
-              Facts the AI should remember about this repo — stored in{' '}
-              <code>{MEMORY_PATH}</code> and versioned with the code.
+              Semantic vector database — stored in <code>.orbit/memory.vector.json</code>{' '}
+              (mirrored to <code>.orbit/memory.md</code>) and versioned with the code.
             </p>
           </div>
           <button type="button" className="know-dlg__close" onClick={onClose} aria-label="Close memory">
@@ -91,23 +132,32 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
           </button>
         </header>
         <div className="know-dlg__body">
+          <input
+            ref={queryRef}
+            className="know-dlg__input know-dlg__search"
+            placeholder="Semantic search… (ranked by similarity)"
+            aria-label="Search memories"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.target.value)}
+          />
           {!loaded && <p className="know-dlg__empty">Loading…</p>}
           {loaded && entries.length === 0 && (
             <p className="know-dlg__empty">No memories yet — add one below.</p>
           )}
-          {entries.map((entry, index) => (
-            <div key={`${entry}-${index}`} className="know-row">
-              <span className="know-row__text">{entry}</span>
+          {entries.map((entry) => (
+            <div key={entry.id} className="know-row">
+              <span className="know-row__text">{entry.text}</span>
               <button
                 type="button"
                 className="know-row__del"
-                aria-label={`Remove memory: ${entry}`}
-                onClick={() => void removeEntry(index)}
+                aria-label={`Remove memory: ${entry.text}`}
+                onClick={() => void removeEntry(entry.id)}
               >
                 <Trash2 size={11} strokeWidth={1.5} />
               </button>
             </div>
           ))}
+          {searching && <p className="know-dlg__empty">Searching…</p>}
         </div>
         <form
           className="know-dlg__foot"

@@ -517,8 +517,7 @@ export async function writeWorktreeFile(path: string, content: string): Promise<
   return invoke('write_worktree_file', { path, content });
 }
 
-export async function deleteWorktreeFile(path: string): Promise<void> {
-  if (!isTauri()) return;
+export async function deleteWorktreeFile(path: string): Promise<void> {  if (!isTauri()) return;
   return invoke('delete_worktree_file', { path });
 }
 
@@ -830,4 +829,36 @@ export async function ghDeliveryStats(days = 28): Promise<GhDeliveryStats> {
 export async function ghTraffic(): Promise<GhTraffic> {
   if (!isTauri()) throw new Error('gh not available in browser preview');
   return invoke('gh_traffic');
+}
+
+/** ---- Vector-backed project memory (.orbit/memory.vector.json) ---- */
+
+export interface MemoryEntry {
+  id: string;
+  text: string;
+  vector: number[];
+  createdAt: number;
+}
+
+export interface MemoryHit {
+  id: string;
+  text: string;
+  score: number;
+  createdAt: number;
+}
+
+export async function memoryList(): Promise<MemoryEntry[]> {
+  return invoke('memory_list');
+}
+
+export async function memoryAdd(text: string): Promise<MemoryEntry> {
+  return invoke('memory_add', { text });
+}
+
+export async function memoryRemove(id: string): Promise<void> {
+  return invoke('memory_remove', { id });
+}
+
+export async function memorySearch(query: string, limit = 5): Promise<MemoryHit[]> {
+  return invoke('memory_search', { query, limit });
 }
