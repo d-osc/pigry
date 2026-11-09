@@ -916,3 +916,152 @@
 .explorer-ai__msg-text p:last-child {
   margin-bottom: 0;
 }
+
+/* ============================================================
+   Chat history popover (Copilot-style sessions)
+   ============================================================ */
+
+.ai-sessions-wrap {
+  position: relative;
+}
+
+.ai-sessions-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.ai-sessions-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent-tint-3);
+}
+
+.ai-sessions {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 160;
+  width: 300px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.ai-sessions__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.ai-sessions__title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-sessions__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  border: none;
+  color: #10131c;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-sessions__new:hover {
+  filter: brightness(1.08);
+}
+
+.ai-sessions__empty {
+  margin: 6px;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.ai-sessions__item {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+}
+
+.ai-sessions__item:hover {
+  background: var(--bg-card);
+}
+
+.ai-sessions__item--active {
+  background: var(--accent-tint-1);
+  border-color: var(--accent-tint-3);
+}
+
+.ai-sessions__item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-sessions__item-title {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-sessions__item--active .ai-sessions__item-title {
+  color: var(--accent);
+}
+
+.ai-sessions__item-meta {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.ai-sessions__item-del {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  border-radius: var(--radius-sm);
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.ai-sessions__item:hover .ai-sessions__item-del {
+  opacity: 1;
+}
+
+.ai-sessions__item-del:hover {
+  color: var(--red);
+}

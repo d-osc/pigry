@@ -4,8 +4,10 @@ import {
   Check,
   ChevronDown,
   FileText,
+  History,
   ImageIcon,
   Loader2,
+  MessageSquarePlus,
   Paperclip,
   Pencil,
   Sparkles,
@@ -15,6 +17,18 @@ import {
 import { aiChat, cliAgentRun, cliDetect, readWorktreeFile } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { renderMarkdown } from '../../lib/markdown';
+import { relativeTime } from '../../lib/relativeTime';
+import {
+  activeSessionId,
+  deleteSession,
+  loadSessions,
+  setActiveSessionId,
+  slimMessages,
+  titleFromMessages,
+  upsertSession,
+  type AiChatMessage,
+  type AiChatSession,
+} from '../../lib/aiSessions';
 import {
   activeProviderId,
   anthropicEndpoint,
@@ -36,17 +50,8 @@ interface AttachedFile {
   content: string;
 }
 
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  /** Clean, editable message text (context is kept separately). */
-  text: string;
-  /** Baked context (selection + attachments) sent with the payload. */
-  context?: string;
-  /** Editor selection attached at send time — shown as a code card. */
-  selection?: { path: string; startLine: number; endLine: number; text: string } | null;
-  images?: string[];
-  error?: boolean;
-}
+/** Chat message — storage shape lives in aiSessions. */
+type ChatMessage = AiChatMessage;
 
 /** Full store entry for a detected CLI agent (no HTTP config). */
 function cliEntry(id: string, name: string, type: 'claude-code' | 'codex', model: string): AiProviderEntry {
@@ -177,30 +182,85 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     return () => window.removeEventListener('focus', sync);
   }, []);
 
-  // Persist the conversation (drop image data URLs to respect storage limits).
-  useEffect(() => {
-    try {
-      const slim = messages.slice(-30).map((message) => ({ ...message, images: undefined }));
-      localStorage.setItem('orbit:ai-conversation', JSON.stringify(slim));
-    } catch {
-      // storage full — drop silently
-    }
-  }, [messages]);
+  // Chat sessions (Copilot-style): restore the active session on mount and
+  // upsert on every change. Sessions with no messages are not kept.
+  const [sessionId, setSessionId] = useState(() => activeSessionId());
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
+  const sessionsRef = useRef<HTMLDivElement | null>(null);
 
-  // Restore conversation once.
+  // One-shot restore: active session, else the newest, else a fresh id.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('orbit:ai-conversation');
-      if (raw) setMessages(JSON.parse(raw) as ChatMessage[]);
-    } catch {
-      // ignore
+    const sessions = loadSessions();
+    let id = activeSessionId();
+    let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
+    if (!restored && sessions.length > 0) {
+      restored = sessions[0];
+      id = restored.id;
+      setActiveSessionId(id);
     }
+    if (!id) {
+      id = `chat-${Date.now().toString(36)}`;
+      setActiveSessionId(id);
+    }
+    setSessionId(id);
+    if (restored) setMessages(restored.messages);
   }, []);
+
+  useEffect(() => {
+    if (messages.length === 0 || !sessionId) return;
+    const kept = upsertSession({
+      id: sessionId,
+      title: titleFromMessages(messages),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: slimMessages(messages),
+    });
+    setSessionList(kept);
+  }, [messages, sessionId]);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [messages, sending]);
+
+  // Outside click closes the sessions popover.
+  useEffect(() => {
+    if (!sessionsOpen) return;
+    const onDoc = (event: MouseEvent) => {
+      if (sessionsRef.current?.contains(event.target as Node)) return;
+      setSessionsOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, true);
+    return () => document.removeEventListener('mousedown', onDoc, true);
+  }, [sessionsOpen]);
+
+  /** Starts a fresh conversation; the previous one stays in history. */
+  const startNewChat = () => {
+    const id = `chat-${Date.now().toString(36)}`;
+    setActiveSessionId(id);
+    setSessionId(id);
+    setMessages([]);
+    setInput('');
+    setImages([]);
+    setEditingIndex(null);
+    setSessionsOpen(false);
+  };
+
+  const switchSession = (session: AiChatSession) => {
+    setActiveSessionId(session.id);
+    setSessionId(session.id);
+    setMessages(session.messages);
+    setInput('');
+    setEditingIndex(null);
+    setSessionsOpen(false);
+  };
+
+  const removeSession = (id: string) => {
+    const kept = deleteSession(id);
+    setSessionList(kept);
+    if (id === sessionId) startNewChat();
+  };
 
   const attachImages = (files: FileList | null) => {
     if (!files?.length) return;
@@ -442,6 +502,69 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           <span className="explorer-ai__ctx-chip" title={fileName}>
             {fileName}
           </span>
+          <div className="ai-sessions-wrap" ref={sessionsRef}>
+            <button
+              type="button"
+              className="ai-sessions-btn"
+              title="Chat history"
+              aria-label="Chat history"
+              onClick={() => {
+                setSessionList(loadSessions());
+                setSessionsOpen((open) => !open);
+              }}
+            >
+              <History size={12} strokeWidth={1.5} />
+            </button>
+            {sessionsOpen && (
+              <div className="ai-sessions" role="menu" aria-label="Saved chats">
+                <div className="ai-sessions__head">
+                  <span className="ai-sessions__title">Chat history</span>
+                  <button type="button" className="ai-sessions__new" onClick={startNewChat}>
+                    <MessageSquarePlus size={11} strokeWidth={1.5} />
+                    New chat
+                  </button>
+                </div>
+                {sessionList.length === 0 && (
+                  <p className="ai-sessions__empty">No saved chats yet.</p>
+                )}
+                {sessionList.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`ai-sessions__item${session.id === sessionId ? ' ai-sessions__item--active' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="ai-sessions__item-main"
+                      onClick={() => switchSession(session)}
+                    >
+                      <span className="ai-sessions__item-title">{session.title}</span>
+                      <span className="ai-sessions__item-meta">
+                        {session.messages.length} msgs · {relativeTime(Math.floor(session.updatedAt / 1000))}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ai-sessions__item-del"
+                      title="Delete chat"
+                      aria-label={`Delete chat ${session.title}`}
+                      onClick={() => removeSession(session.id)}
+                    >
+                      <X size={10} strokeWidth={2} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="explorer-ai__collapse"
+            title="New chat"
+            aria-label="Start a new chat"
+            onClick={startNewChat}
+          >
+            <MessageSquarePlus size={12} strokeWidth={1.5} />
+          </button>
           <button
             type="button"
             className="explorer-ai__collapse"
