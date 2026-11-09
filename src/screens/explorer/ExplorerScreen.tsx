@@ -98,6 +98,13 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   const [aiWidth, setAiWidth] = useState(360);
   // AI rail folds away — default closed, reopen via the edge strip.
   const [aiOpen, setAiOpen] = useState(false);
+  // Live editor selection — surfaced in the AI agent panel (VS Code style).
+  const [editorSelection, setEditorSelection] = useState<{
+    path: string;
+    text: string;
+    startLine: number;
+    endLine: number;
+  } | null>(null);
   // Folder expansion is controlled here so the header's fold button can
   // collapse everything without effects inside the tree component.
   const [treeOverrides, setTreeOverrides] = useState<{
@@ -898,6 +905,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               onToggleTerminal={onToggleTerminal}
               onBufferChange={handleBufferChange}
               onJumpToCommit={onJumpToCommit}
+              onSelectionChange={setEditorSelection}
             />
           </section>
         ) : (
@@ -920,6 +928,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             fileName={
               activePath ? (activePath.split('/').pop() ?? activePath) : (repository?.name ?? 'platform')
             }
+            selection={editorSelection}
             onCollapse={() => setAiOpen(false)}
           />
         ) : (

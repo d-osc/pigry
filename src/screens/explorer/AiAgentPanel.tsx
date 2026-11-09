@@ -62,6 +62,8 @@ interface AiAgentPanelProps {
   fileName: string;
   width: number;
   onCollapse: () => void;
+  /** Current editor text selection (VS Code-style "add selection to chat"). */
+  selection?: { path: string; text: string; startLine: number; endLine: number } | null;
 }
 
 /** One-click prompts shown on the empty state. */
@@ -72,10 +74,18 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
 ];
 
-export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps) {
+export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgentPanelProps) {
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  // Dismissed selection key — reset whenever a different selection arrives.
+  const selectionKey = selection ? `${selection.path}:${selection.startLine}:${selection.endLine}` : '';
+  const [dismissedKey, setDismissedKey] = useState('');
+  useEffect(() => {
+    setDismissedKey('');
+  }, [selectionKey]);
+  const activeSelection =
+    selection && selectionKey !== dismissedKey ? selection : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -239,6 +249,9 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
     }
 
     let context = '';
+    if (activeSelection) {
+      context += `\n\n[Selected code — ${activeSelection.path}:${activeSelection.startLine}-${activeSelection.endLine}]\n${activeSelection.text.slice(0, 8000)}`;
+    }
     for (const attached of attachedFiles) {
       context += `\n\n[Attached file: ${attached.path}]\n${attached.content.slice(0, 12000)}`;
     }
@@ -460,8 +473,27 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
 
       <footer className="explorer-ai__footer">
         <div className="ai-composer">
-          {(attachedFiles.length > 0 || images.length > 0) && (
+          {(activeSelection || attachedFiles.length > 0 || images.length > 0) && (
             <div className="ai-composer__attachments">
+              {activeSelection && (
+                <span
+                  className="ai-composer__sel-chip"
+                  title={`Selected lines ${activeSelection.startLine}–${activeSelection.endLine} of ${activeSelection.path} — included with your next message`}
+                >
+                  <FileText size={10} strokeWidth={1.5} />
+                  {activeSelection.path.split('/').pop()}
+                  <span className="ai-composer__sel-range">
+                    {activeSelection.startLine}–{activeSelection.endLine}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Remove selection from chat"
+                    onClick={() => setDismissedKey(selectionKey)}
+                  >
+                    <X size={9} strokeWidth={2} />
+                  </button>
+                </span>
+              )}
               {attachedFiles.map((file) => (
                 <span key={file.path} className="explorer-ai__chip" title={file.path}>
                   <FileText size={10} strokeWidth={1.5} />
@@ -568,6 +600,7 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
         </div>
         <div className="ai-composer__hint">
           Context: {fileName}
+          {activeSelection ? ` · lines ${activeSelection.startLine}–${activeSelection.endLine} selected` : ''}
           {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
         </div>
       </footer>

@@ -31,6 +31,10 @@ interface EditorPaneProps {
   ) => void;
   /** Opens the commit graph focused on the given commit. */
   onJumpToCommit: (oid: string) => void;
+  /** Reports the current text selection (VS Code-style "add to chat"). */
+  onSelectionChange?: (
+    selection: { path: string; text: string; startLine: number; endLine: number } | null,
+  ) => void;
 }
 
 function editorPrefs(): {
@@ -74,6 +78,7 @@ export function EditorPane({
   onToggleTerminal,
   onBufferChange,
   onJumpToCommit,
+  onSelectionChange,
 }: EditorPaneProps) {
   const { refresh, busy, repository } = useRepository();
   const [entry, setEntry] = useState<{
@@ -198,6 +203,40 @@ export function EditorPane({
       // Navigation is best-effort; the editor content still renders.
     }
   }, [revealLine, revealColumn, entry, editorInstance, path]);
+
+  // Report text selections upward (AI agent "add selection to chat").
+  // Collapsed selections clear the report; switching files clears it too.
+  const selectionCbRef = useRef(onSelectionChange);
+  useEffect(() => {
+    selectionCbRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+  useEffect(() => {
+    if (!editorInstance) return;
+    selectionCbRef.current?.(null);
+    const disposable = editorInstance.onDidChangeCursorSelection((event) => {
+      const sel = event.selection;
+      const model = editorInstance.getModel();
+      const collapsed =
+        (sel.startLineNumber === sel.endLineNumber && sel.startColumn === sel.endColumn) ||
+        !model;
+      if (collapsed) {
+        selectionCbRef.current?.(null);
+        return;
+      }
+      const text = model.getValueInRange(sel);
+      if (!text.trim()) {
+        selectionCbRef.current?.(null);
+        return;
+      }
+      selectionCbRef.current?.({
+        path,
+        text,
+        startLine: sel.startLineNumber,
+        endLine: sel.endLineNumber,
+      });
+    });
+    return () => disposable.dispose();
+  }, [editorInstance, path]);
 
   const handleDraftChange = (value: string | undefined) => {
     const next = value ?? '';
