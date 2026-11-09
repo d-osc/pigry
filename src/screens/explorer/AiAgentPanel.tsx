@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  Brain,
   Check,
   ChevronDown,
   FileText,
@@ -10,13 +11,16 @@ import {
   MessageSquarePlus,
   Paperclip,
   Pencil,
+  Puzzle,
   Sparkles,
   Trash2,
   X,
 } from 'lucide-react';
-import { aiChat, cliAgentRun, cliDetect, readWorktreeFile } from '../../lib/tauriClient';
+import { aiChat, cliAgentRun, cliDetect, getFileTree, readWorktreeFile } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { renderMarkdown } from '../../lib/markdown';
+import { MemoryDialog, SkillsDialog } from './RepoKnowledge';
+import { useRepository } from '../../hooks/useRepository';
 import { relativeTime } from '../../lib/relativeTime';
 import {
   activeSessionId,
@@ -87,9 +91,12 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
 ];
 
 export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgentPanelProps) {
+  const { notify } = useRepository();
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  /** Which project-knowledge dialog is open (memory / skills). */
+  const [knowDialog, setKnowDialog] = useState<'memory' | 'skills' | null>(null);
   // Message being edited (index) + its draft (Copilot-style edit & resubmit).
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
@@ -319,6 +326,35 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     }
 
     let context = '';
+    // Project knowledge lives in the repo (.orbit/) — ride along every send.
+    let memoryText = '';
+    let skillsText = '';
+    try {
+      memoryText = (await readWorktreeFile('.orbit/memory.md')).content.trim().slice(0, 2000);
+    } catch {
+      // no memory file yet
+    }
+    try {
+      const tree = await getFileTree();
+      const skillPaths = tree.entries
+        .filter((p) => p.startsWith('.orbit/skills/') && p.endsWith('.md'))
+        .slice(0, 8);
+      const parts: string[] = [];
+      for (const skillPath of skillPaths) {
+        try {
+          parts.push(
+            (await readWorktreeFile(skillPath)).content.trim().slice(0, 1200),
+          );
+        } catch {
+          // skip unreadable skill
+        }
+      }
+      skillsText = parts.join('\n\n').slice(0, 4000);
+    } catch {
+      // no skills folder yet
+    }
+    if (memoryText) context += `\n\n[Project memory — .orbit/memory.md]\n${memoryText}`;
+    if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
     if (activeSelection) {
       context += `\n\n[Selected code — ${activeSelection.path}:${activeSelection.startLine}-${activeSelection.endLine}]\n${activeSelection.text.slice(0, 8000)}`;
     }
@@ -502,6 +538,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           <span className="explorer-ai__ctx-chip" title={fileName}>
             {fileName}
           </span>
+          <button
+            type="button"
+            className="ai-sessions-btn"
+            title="Project memory (.orbit/memory.md)"
+            aria-label="Project memory"
+            onClick={() => setKnowDialog('memory')}
+          >
+            <Brain size={12} strokeWidth={1.5} />
+          </button>
+          <button
+            type="button"
+            className="ai-sessions-btn"
+            title="Project skills (.orbit/skills/)"
+            aria-label="Project skills"
+            onClick={() => setKnowDialog('skills')}
+          >
+            <Puzzle size={12} strokeWidth={1.5} />
+          </button>
           <div className="ai-sessions-wrap" ref={sessionsRef}>
             <button
               type="button"
@@ -862,6 +916,18 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
             setActiveId(providerId);
             setModelDialogOpen(false);
           }}
+        />
+      )}
+      {knowDialog === 'memory' && (
+        <MemoryDialog
+          onClose={() => setKnowDialog(null)}
+          notify={notify}
+        />
+      )}
+      {knowDialog === 'skills' && (
+        <SkillsDialog
+          onClose={() => setKnowDialog(null)}
+          notify={notify}
         />
       )}
     </aside>
