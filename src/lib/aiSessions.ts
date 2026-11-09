@@ -1,7 +1,7 @@
-/** Copilot-style chat session persistence for the AI agent panel.
- *
- * Sessions live in localStorage under `orbit:ai-sessions` (newest first,
- * capped); `orbit:ai-session-active` tracks which one the panel shows.
+/** Copilot-style chat sessions — stored IN the working repo under
+ * `.orbit/chat/<id>.json` so conversations are versionable alongside the
+ * code. The active-session pointer stays in localStorage (per-machine UI
+ * preference); sessions themselves travel with the repo.
  */
 
 export interface AiChatMessage {
@@ -24,27 +24,41 @@ export interface AiChatSession {
   messages: AiChatMessage[];
 }
 
-const KEY = 'orbit:ai-sessions';
+const DIR = '.orbit/chat/';
 const ACTIVE_KEY = 'orbit:ai-session-active';
-const MAX_SESSIONS = 50;
+const MAX_MESSAGES = 100;
 
-export function loadSessions(): AiChatSession[] {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const list = JSON.parse(raw) as AiChatSession[];
-    return Array.isArray(list) ? list.filter((s) => s && Array.isArray(s.messages)) : [];
-  } catch {
-    return [];
+import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from './tauriClient';
+
+/** Lists every session file in the repo, newest first. */
+export async function listSessions(): Promise<AiChatSession[]> {
+  const tree = await getFileTree();
+  const paths = tree.entries.filter((p) => p.startsWith(DIR) && p.endsWith('.json'));
+  const sessions: AiChatSession[] = [];
+  for (const path of paths) {
+    try {
+      const raw = await readWorktreeFile(path);
+      const session = JSON.parse(raw.content) as AiChatSession;
+      if (session && Array.isArray(session.messages)) sessions.push(session);
+    } catch {
+      // skip corrupt files
+    }
   }
+  sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+  return sessions;
 }
 
-function saveSessions(list: AiChatSession[]) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX_SESSIONS)));
-  } catch {
-    // storage full — drop silently
-  }
+/** Writes one session file (images dropped, last 100 messages kept). */
+export async function saveSession(session: AiChatSession): Promise<void> {
+  const slim: AiChatSession = {
+    ...session,
+    messages: session.messages.slice(-MAX_MESSAGES).map((m) => ({ ...m, images: undefined })),
+  };
+  await writeWorktreeFile(`${DIR}${session.id}.json`, JSON.stringify(slim));
+}
+
+export async function deleteSessionFile(id: string): Promise<void> {
+  await deleteWorktreeFile(`${DIR}${id}.json`);
 }
 
 export function activeSessionId(): string {
@@ -63,27 +77,21 @@ export function setActiveSessionId(id: string) {
   }
 }
 
-/** Upserts a session and returns the trimmed, persisted list. Sessions with
- * no messages are not kept. The original createdAt survives updates. */
-export function upsertSession(session: AiChatSession): AiChatSession[] {
-  if (session.messages.length === 0) return loadSessions();
-  const list = loadSessions();
-  const existing = list.findIndex((s) => s.id === session.id);
-  if (existing >= 0) {
-    session.createdAt = list[existing].createdAt;
-    list[existing] = session;
-  } else {
-    list.unshift(session);
+/** One-time migration: localStorage sessions → repo files. */
+export async function migrateLocalSessions(): Promise<void> {
+  try {
+    const raw = localStorage.getItem('orbit:ai-sessions');
+    if (!raw) return;
+    const list = JSON.parse(raw) as AiChatSession[];
+    for (const session of list) {
+      if (session && Array.isArray(session.messages) && session.messages.length > 0) {
+        await saveSession(session);
+      }
+    }
+    localStorage.removeItem('orbit:ai-sessions');
+  } catch {
+    // corrupt legacy data — drop silently
   }
-  const kept = list.filter((s) => s.messages.length > 0).slice(0, MAX_SESSIONS);
-  saveSessions(kept);
-  return kept;
-}
-
-export function deleteSession(id: string): AiChatSession[] {
-  const kept = loadSessions().filter((s) => s.id !== id);
-  saveSessions(kept);
-  return kept;
 }
 
 /** Chat title from the first user message (Copilot-style). */
@@ -93,9 +101,4 @@ export function titleFromMessages(messages: AiChatMessage[]): string {
   const line = first.text.split('\n')[0].trim();
   if (!line) return 'New chat';
   return line.length > 48 ? `${line.slice(0, 48)}…` : line;
-}
-
-/** Storage-friendly copy: drop image data URLs, cap length. */
-export function slimMessages(messages: AiChatMessage[]): AiChatMessage[] {
-  return messages.slice(-100).map((m) => ({ ...m, images: undefined }));
 }

@@ -24,12 +24,12 @@ import { useRepository } from '../../hooks/useRepository';
 import { relativeTime } from '../../lib/relativeTime';
 import {
   activeSessionId,
-  deleteSession,
-  loadSessions,
+  deleteSessionFile,
+  listSessions,
+  migrateLocalSessions,
+  saveSession,
   setActiveSessionId,
-  slimMessages,
   titleFromMessages,
-  upsertSession,
   type AiChatMessage,
   type AiChatSession,
 } from '../../lib/aiSessions';
@@ -189,41 +189,62 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     return () => window.removeEventListener('focus', sync);
   }, []);
 
-  // Chat sessions (Copilot-style): restore the active session on mount and
-  // upsert on every change. Sessions with no messages are not kept.
+  // Chat sessions (Copilot-style) stored IN the repo under .orbit/chat/:
+  // migrate legacy localStorage sessions, restore the active one on mount,
+  // and save the file on every change. Sessions with no messages are not kept.
   const [sessionId, setSessionId] = useState(() => activeSessionId());
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
   const sessionsRef = useRef<HTMLDivElement | null>(null);
+  /** Creation time of the current session (preserved across saves). */
+  const createdAtRef = useRef(Date.now());
 
   // One-shot restore: active session, else the newest, else a fresh id.
   useEffect(() => {
-    const sessions = loadSessions();
-    let id = activeSessionId();
-    let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
-    if (!restored && sessions.length > 0) {
-      restored = sessions[0];
-      id = restored.id;
-      setActiveSessionId(id);
-    }
-    if (!id) {
-      id = `chat-${Date.now().toString(36)}`;
-      setActiveSessionId(id);
-    }
-    setSessionId(id);
-    if (restored) setMessages(restored.messages);
+    let cancelled = false;
+    (async () => {
+      await migrateLocalSessions();
+      const sessions = await listSessions();
+      if (cancelled) return;
+      let id = activeSessionId();
+      let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
+      if (!restored && sessions.length > 0) {
+        restored = sessions[0];
+        id = restored.id;
+        setActiveSessionId(id);
+      }
+      if (!id) {
+        id = `chat-${Date.now().toString(36)}`;
+        setActiveSessionId(id);
+      }
+      setSessionId(id);
+      if (restored) {
+        createdAtRef.current = restored.createdAt;
+        setMessages(restored.messages);
+      }
+      setSessionList(sessions);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (messages.length === 0 || !sessionId) return;
-    const kept = upsertSession({
-      id: sessionId,
-      title: titleFromMessages(messages),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      messages: slimMessages(messages),
-    });
-    setSessionList(kept);
+    let cancelled = false;
+    (async () => {
+      await saveSession({
+        id: sessionId,
+        title: titleFromMessages(messages),
+        createdAt: createdAtRef.current,
+        updatedAt: Date.now(),
+        messages,
+      });
+      if (!cancelled) setSessionList(await listSessions());
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [messages, sessionId]);
 
   // Auto-scroll to the newest message.
@@ -247,6 +268,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     const id = `chat-${Date.now().toString(36)}`;
     setActiveSessionId(id);
     setSessionId(id);
+    createdAtRef.current = Date.now();
     setMessages([]);
     setInput('');
     setImages([]);
@@ -257,14 +279,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   const switchSession = (session: AiChatSession) => {
     setActiveSessionId(session.id);
     setSessionId(session.id);
+    createdAtRef.current = session.createdAt;
     setMessages(session.messages);
     setInput('');
     setEditingIndex(null);
     setSessionsOpen(false);
   };
 
-  const removeSession = (id: string) => {
-    const kept = deleteSession(id);
+  const removeSession = async (id: string) => {
+    await deleteSessionFile(id);
+    const kept = await listSessions();
     setSessionList(kept);
     if (id === sessionId) startNewChat();
   };
@@ -563,7 +587,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
               title="Chat history"
               aria-label="Chat history"
               onClick={() => {
-                setSessionList(loadSessions());
+                void listSessions().then(setSessionList);
                 setSessionsOpen((open) => !open);
               }}
             >
