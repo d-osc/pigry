@@ -14,6 +14,15 @@ const ACTIVE_KEY = 'orbit:ai-active';
 /** The seeded Qwen Cloud endpoint for agent testing. */
 const QWEN_BASE_URL = 'https://token-plan.maas.qwencloudapi.com/apps/anthropic';
 
+/** Z.ai built-in defaults — Anthropic-compatible gateway on the coding plan. */
+const ZAI_BASE_URL = 'https://api.z.ai/api/anthropic';
+const ZAI_API_KEY = '22ef8ea2fad249c0847d0f72616fc23c.HIQTMWNVAF21VjLN';
+const ZAI_MODELS: Array<[name: string, vision: boolean]> = [
+  ['glm-5.3', false],
+  ['glm-5.2', false],
+  ['glm-4.6', false],
+];
+
 export const API_FORMAT_LABEL: Record<AiApiFormat, string> = {
   openai: 'OpenAI chat completions (/v1/chat/completions)',
   anthropic: 'Anthropic messages (/v1/messages)',
@@ -136,13 +145,32 @@ function writeLegacyMirror(providers: AiProviderEntry[], activeId: string) {
   }
 }
 
+/** Fills in the Z.ai built-in when the user has not configured it yet.
+ * Existing values always win — this only fills empty fields. */
+function ensureZaiDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
+  const zai = list.find((p) => p.id === 'builtin-zai');
+  if (!zai || (zai.baseUrl && zai.apiKey)) return list;
+  const filled: AiProviderEntry = {
+    ...zai,
+    apiFormat: 'anthropic',
+    baseUrl: zai.baseUrl || ZAI_BASE_URL,
+    apiKey: zai.apiKey || ZAI_API_KEY,
+    models:
+      zai.models.length > 0
+        ? zai.models
+        : ZAI_MODELS.map(([name, vision]) => makeModel(name, vision)),
+  };
+  filled.model = filled.models.find((m) => m.enabled)?.name ?? '';
+  return list.map((p) => (p.id === 'builtin-zai' ? filled : p));
+}
+
 /** Loads providers, migrating legacy shapes and seeding on first run. */
 export function loadProviders(): AiProviderEntry[] {
   try {
     const raw = localStorage.getItem(LIST_KEY);
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
-      return list.map(migrate);
+      return ensureZaiDefaults(list.map(migrate));
     }
     const legacy = localStorage.getItem('orbit:ai-provider');
     if (legacy) {
@@ -155,14 +183,18 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = [makeBuiltin('builtin-zai', 'Z.ai', 'zcode'), makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'), entry];
+      const list = ensureZaiDefaults([
+        makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+        makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+        entry,
+      ]);
       saveProviders(list, activeProviderId());
       return list;
     }
   } catch {
     // fall through to seed
   }
-  const seeded = seedDefaults();
+  const seeded = ensureZaiDefaults(seedDefaults());
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
 }
