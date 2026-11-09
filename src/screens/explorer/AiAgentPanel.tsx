@@ -64,6 +64,14 @@ interface AiAgentPanelProps {
   onCollapse: () => void;
 }
 
+/** One-click prompts shown on the empty state. */
+const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
+  { label: 'Explain this file', prompt: 'Explain what this file does and walk through its key parts.' },
+  { label: 'Review for bugs', prompt: 'Review this file for bugs and edge cases. Be specific.' },
+  { label: 'Improve naming', prompt: 'Suggest clearer names for the identifiers in this file.' },
+  { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
+];
+
 export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps) {
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
@@ -77,6 +85,7 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
   const [attachError, setAttachError] = useState('');
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ZCode Cloud (GLM) — detected automatically when ZCode desktop is installed.
   const [zcodeProvider, setZcodeProvider] = useState<AiProviderEntry | null>(null);
@@ -395,12 +404,30 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
 
       <div className="explorer-ai__body" ref={bodyRef}>
         {messages.length === 0 ? (
-          <section className="explorer-ai__section">
-            <div className="explorer-ai__card explorer-ai__empty">
-              <Sparkles size={18} strokeWidth={1.25} />
-              <p>Ask anything about <code>{fileName}</code> — attach files or images for deeper context.</p>
+          <div className="ai-hero">
+            <div className="ai-hero__icon">
+              <Sparkles size={20} strokeWidth={1.5} />
             </div>
-          </section>
+            <h3 className="ai-hero__title">
+              Ask AI about <code>{fileName}</code>
+            </h3>
+            <p className="ai-hero__sub">Attach files or images for deeper context.</p>
+            <div className="ai-hero__chips">
+              {SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion.label}
+                  type="button"
+                  className="ai-hero__chip"
+                  onClick={() => {
+                    setInput(suggestion.prompt);
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  {suggestion.label}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
           <section className="explorer-ai__section">
             <div className="explorer-ai__card">
@@ -416,19 +443,25 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
               {sending && (
                 <div className="explorer-ai__msg">
                   <div className="explorer-ai__msg-meta">
-                    <Loader2 size={12} className="explorer-ai__spinner" />
+                    <span className="explorer-ai__avatar">AI</span>
                     <span className="explorer-ai__msg-name">AI Agent</span>
                   </div>
-                  <p className="explorer-ai__msg-text">Thinking…</p>
+                  <span className="ai-typing" aria-label="AI is thinking">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
                 </div>
               )}
             </div>
           </section>
         )}
+      </div>
 
-        <section className="explorer-ai__section">
-          {attachedFiles.length > 0 && (
-            <div className="explorer-ai__attached">
+      <footer className="explorer-ai__footer">
+        <div className="ai-composer">
+          {(attachedFiles.length > 0 || images.length > 0) && (
+            <div className="ai-composer__attachments">
               {attachedFiles.map((file) => (
                 <span key={file.path} className="explorer-ai__chip" title={file.path}>
                   <FileText size={10} strokeWidth={1.5} />
@@ -438,10 +471,6 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
                   </button>
                 </span>
               ))}
-            </div>
-          )}
-          {images.length > 0 && (
-            <div className="explorer-ai__thumbs">
               {images.map((image, index) => (
                 <span key={index} className="explorer-ai__thumb">
                   <img src={image.dataUrl} alt={image.name} />
@@ -456,54 +485,13 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
               ))}
             </div>
           )}
-          {attachError && <p className="explorer-ai__attach-error">{attachError}</p>}
-        </section>
-      </div>
-
-      <footer className="explorer-ai__footer">
-        <div className="explorer-ai__attach-row">
-          <button
-            type="button"
-            className="explorer-ai__attach-btn"
-            title="Attach image (PNG/JPG)"
-            onClick={() => imageInputRef.current?.click()}
-          >
-            <ImageIcon size={12} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="explorer-ai__attach-btn"
-            title={`Attach active file (${fileName})`}
-            onClick={() => void attachActiveFile()}
-          >
-            <Paperclip size={12} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="explorer-ai__attach-btn explorer-ai__attach-btn--danger"
-            title="Clear conversation"
-            onClick={clearConversation}
-          >
-            <Trash2 size={12} strokeWidth={1.5} />
-          </button>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(event) => {
-              attachImages(event.target.files);
-              event.target.value = '';
-            }}
-          />
-        </div>
-        <div className="explorer-ai__input">
           <textarea
-            placeholder="Ask AI to improve this file… (Enter to send)"
+            ref={textareaRef}
+            className="ai-composer__input"
+            placeholder={`Ask AI to improve this file… (Enter to send)`}
             aria-label="Ask AI"
             value={input}
-            rows={1}
+            rows={2}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
@@ -512,29 +500,75 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
               }
             }}
           />
-          <button
-            type="button"
-            className="explorer-ai__send"
-            aria-label="Send"
-            disabled={sending || !input.trim()}
-            onClick={() => void send()}
-          >
-            {sending ? <Loader2 size={14} strokeWidth={1.5} className="explorer-ai__send-spin" /> : <ArrowRight size={14} strokeWidth={1.5} />}
-          </button>
+          {attachError && <p className="ai-composer__error">{attachError}</p>}
+          <div className="ai-composer__bar">
+            <div className="ai-composer__tools">
+              <button
+                type="button"
+                className="ai-composer__tool"
+                title="Attach image (PNG/JPG)"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <ImageIcon size={12} strokeWidth={1.5} />
+              </button>
+              <button
+                type="button"
+                className="ai-composer__tool"
+                title={`Attach active file (${fileName})`}
+                onClick={() => void attachActiveFile()}
+              >
+                <Paperclip size={12} strokeWidth={1.5} />
+              </button>
+              <button
+                type="button"
+                className="ai-composer__tool"
+                title="Clear conversation"
+                onClick={clearConversation}
+              >
+                <Trash2 size={12} strokeWidth={1.5} />
+              </button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(event) => {
+                  attachImages(event.target.files);
+                  event.target.value = '';
+                }}
+              />
+            </div>
+            <div className="ai-composer__right">
+              <button
+                type="button"
+                className="explorer-ai__model-pill"
+                title="Change provider or model"
+                onClick={() => setModelDialogOpen(true)}
+              >
+                <span className={`explorer-ai__model-dot explorer-ai__model-dot--${active && active.apiKey && active.baseUrl ? 'ok' : 'warn'}`} />
+                <span className="explorer-ai__model-pill-name">{providerLabel}</span>
+                <ChevronDown size={11} strokeWidth={1.75} />
+              </button>
+              <button
+                type="button"
+                className="ai-composer__send"
+                aria-label="Send"
+                disabled={sending || !input.trim()}
+                onClick={() => void send()}
+              >
+                {sending ? (
+                  <Loader2 size={14} strokeWidth={1.75} className="explorer-ai__send-spin" />
+                ) : (
+                  <ArrowRight size={14} strokeWidth={1.75} />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
-        <div className="explorer-ai__footer-actions">
-          <button
-            type="button"
-            className="explorer-ai__model-pill"
-            title="Change provider or model"
-            onClick={() => setModelDialogOpen(true)}
-          >
-            <span className={`explorer-ai__model-dot explorer-ai__model-dot--${active && active.apiKey && active.baseUrl ? 'ok' : 'warn'}`} />
-            <Sparkles size={11} strokeWidth={1.5} />
-            <span className="explorer-ai__model-pill-name">{providerLabel}</span>
-            <ChevronDown size={11} strokeWidth={1.75} />
-          </button>
-          <span className="explorer-ai__ctx-hint">Context: {fileName} {attachedFiles.length > 0 ? `+${attachedFiles.length} attached` : ''}</span>
+        <div className="ai-composer__hint">
+          Context: {fileName}
+          {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
         </div>
       </footer>
 

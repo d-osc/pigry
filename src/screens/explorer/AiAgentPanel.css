@@ -494,3 +494,234 @@
   font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
+
+/* ============================================================
+   Polish pass — hero empty state, unified composer, typing dots
+   ============================================================ */
+
+/* --- hero empty state --- */
+
+.ai-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto;
+  padding: 28px 16px 20px;
+  text-align: center;
+}
+
+.ai-hero__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  color: var(--accent);
+  background: linear-gradient(135deg, var(--accent-tint-2), var(--accent-tint-1));
+  border: 1px solid var(--accent-tint-3);
+  box-shadow: 0 4px 16px rgb(139 157 255 / 22%);
+}
+
+.ai-hero__title {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-hero__title code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--cyan);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+}
+
+.ai-hero__sub {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.ai-hero__chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ai-hero__chip {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  transition: color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.ai-hero__chip:hover {
+  color: var(--accent);
+  border-color: var(--accent-tint-3);
+  background: var(--accent-tint-1);
+  transform: translateY(-1px);
+}
+
+/* --- unified composer card --- */
+
+.ai-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  transition: border-color var(--transition-fast);
+}
+
+.ai-composer:focus-within {
+  border-color: var(--accent-tint-3);
+}
+
+.ai-composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.ai-composer__input {
+  resize: none;
+  border: none;
+  outline: none;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--text-primary);
+  max-height: 140px;
+}
+
+.ai-composer__input::placeholder {
+  color: var(--text-muted);
+}
+
+.ai-composer__error {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--danger, #f66);
+}
+
+.ai-composer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-composer__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ai-composer__tool {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.ai-composer__tool:hover {
+  color: var(--accent);
+  background: var(--accent-tint-1);
+}
+
+.ai-composer__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ai-composer__send {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #10131c;
+  cursor: pointer;
+  transition: filter var(--transition-fast), transform var(--transition-fast);
+}
+
+.ai-composer__send:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: scale(1.05);
+}
+
+.ai-composer__send:disabled {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: default;
+  transform: none;
+}
+
+.ai-composer__hint {
+  padding: 6px 4px 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+/* --- typing indicator (three bouncing dots) --- */
+
+.ai-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.ai-typing i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.45;
+  animation: ai-bounce 1.1s ease-in-out infinite;
+}
+
+.ai-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.ai-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes ai-bounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
