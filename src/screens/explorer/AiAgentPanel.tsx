@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  Check,
+  ChevronDown,
   FileText,
   ImageIcon,
   Loader2,
   Paperclip,
-  Settings2,
   Sparkles,
   Trash2,
   X,
@@ -18,7 +19,7 @@ import {
   isCliProvider,
   loadProviders as loadProviderStore,
   resolveEndpoint,
-  setActiveProvider,
+  saveProviders,
   type AiProviderEntry,
 } from '../../lib/aiProviders';
 import './AiAgentPanel.css';
@@ -66,8 +67,7 @@ interface AiAgentPanelProps {
 export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps) {
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -172,17 +172,6 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
   }, [messages, sending]);
-
-  // Outside click closes the provider picker.
-  useEffect(() => {
-    if (!pickerOpen) return;
-    const onDoc = (event: MouseEvent) => {
-      if (pickerRef.current?.contains(event.target as Node)) return;
-      setPickerOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc, true);
-    return () => document.removeEventListener('mousedown', onDoc, true);
-  }, [pickerOpen]);
 
   const attachImages = (files: FileList | null) => {
     if (!files?.length) return;
@@ -405,69 +394,6 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
       </header>
 
       <div className="explorer-ai__body" ref={bodyRef}>
-        <section className="explorer-ai__section">
-          <p className="explorer-ai__label">Provider</p>
-          <div className="explorer-ai__card explorer-ai__provider-row">
-            <Sparkles size={12} strokeWidth={1.5} className="explorer-ai__provider-icon" />
-            <span className="explorer-ai__provider-name" title={providerLabel}>
-              {providerLabel}
-            </span>
-            <button
-              type="button"
-              className="explorer-ai__provider-btn"
-              aria-label="Change provider or model"
-              title="Change provider / model (Settings → AI Provider)"
-              onClick={() => setPickerOpen((open) => !open)}
-            >
-              <Settings2 size={12} strokeWidth={1.5} />
-            </button>
-            {pickerOpen && (
-              <div className="explorer-ai__picker" ref={pickerRef}>
-                {zcodeProvider && (
-                  <button
-                    type="button"
-                    className={`explorer-ai__picker-item${active?.id === zcodeProvider.id ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setActiveId(zcodeProvider.id);
-                      setActiveProvider(zcodeProvider.id);
-                      setPickerOpen(false);
-                    }}
-                  >
-                    <Sparkles size={11} strokeWidth={1.5} />
-                    {zcodeProvider.name} — detected
-                  </button>
-                )}
-                {providers.length === 0 && !zcodeProvider && (
-                  <p className="explorer-ai__picker-empty">No providers — add one in Settings → AI Provider.</p>
-                )}
-                {providers.map((provider) => (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    className={`explorer-ai__picker-item${provider.id === active?.id ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setActiveId(provider.id);
-                      setActiveProvider(provider.id);
-                      setPickerOpen(false);
-                    }}
-                  >
-                    <Sparkles size={11} strokeWidth={1.5} />
-                    {provider.name}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="explorer-ai__picker-settings"
-                  onClick={() => setPickerOpen(false)}
-                >
-                  <Settings2 size={11} strokeWidth={1.5} />
-                  Manage in Settings
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-
         {messages.length === 0 ? (
           <section className="explorer-ai__section">
             <div className="explorer-ai__card explorer-ai__empty">
@@ -477,7 +403,6 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
           </section>
         ) : (
           <section className="explorer-ai__section">
-            <p className="explorer-ai__label">Conversation</p>
             <div className="explorer-ai__card">
               {messages.map((message, index) => (
                 <div key={index} className={`explorer-ai__msg ${message.role === 'user' ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}>
@@ -598,9 +523,123 @@ export function AiAgentPanel({ fileName, width, onCollapse }: AiAgentPanelProps)
           </button>
         </div>
         <div className="explorer-ai__footer-actions">
+          <button
+            type="button"
+            className="explorer-ai__model-pill"
+            title="Change provider or model"
+            onClick={() => setModelDialogOpen(true)}
+          >
+            <span className={`explorer-ai__model-dot explorer-ai__model-dot--${active && active.apiKey && active.baseUrl ? 'ok' : 'warn'}`} />
+            <Sparkles size={11} strokeWidth={1.5} />
+            <span className="explorer-ai__model-pill-name">{providerLabel}</span>
+            <ChevronDown size={11} strokeWidth={1.75} />
+          </button>
           <span className="explorer-ai__ctx-hint">Context: {fileName} {attachedFiles.length > 0 ? `+${attachedFiles.length} attached` : ''}</span>
         </div>
       </footer>
+
+      {modelDialogOpen && (
+        <ModelPickerDialog
+          providers={providers}
+          activeId={active?.id ?? ''}
+          onClose={() => setModelDialogOpen(false)}
+          onPick={(providerId, modelName) => {
+            // Persist the chosen model as the provider's active one, then
+            // switch — the panel and legacy consumers both read the mirror.
+            const list = providers.map((p) =>
+              p.id === providerId
+                ? { ...p, model: modelName, models: p.models.map((m) => ({ ...m, enabled: m.name === modelName ? true : m.enabled })) }
+                : p,
+            );
+            saveProviders(list, providerId);
+            setProviders(list);
+            setActiveId(providerId);
+            setModelDialogOpen(false);
+          }}
+        />
+      )}
     </aside>
+  );
+}
+
+/** Full-screen dialog: pick a provider on the left, a model on the right. */
+function ModelPickerDialog({
+  providers,
+  activeId,
+  onClose,
+  onPick,
+}: {
+  providers: AiProviderEntry[];
+  activeId: string;
+  onClose: () => void;
+  onPick: (providerId: string, modelName: string) => void;
+}) {
+  const activeProvider = providers.find((p) => p.id === activeId) ?? null;
+  const [viewId, setViewId] = useState(activeProvider?.id ?? providers[0]?.id ?? '');
+  const viewed = providers.find((p) => p.id === viewId) ?? providers[0] ?? null;
+
+  return (
+    <div
+      className="model-dlg-overlay"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="model-dlg" role="dialog" aria-modal="true" aria-label="Select model">
+        <header className="model-dlg__head">
+          <strong className="model-dlg__title">Select model</strong>
+          <button type="button" className="model-dlg__close" onClick={onClose} aria-label="Close model picker">
+            <X size={13} strokeWidth={1.5} />
+          </button>
+        </header>
+        <div className="model-dlg__body">
+          <aside className="model-dlg__providers" aria-label="Providers">
+            <span className="model-dlg__group">Providers</span>
+            {providers.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                className={`model-dlg__provider${provider.id === viewId ? ' model-dlg__provider--active' : ''}`}
+                onClick={() => setViewId(provider.id)}
+              >
+                <span className={`model-dlg__dot model-dlg__dot--${provider.apiKey && provider.baseUrl ? 'ok' : 'warn'}`} />
+                <span className="model-dlg__provider-name">{provider.name}</span>
+                <span className="model-dlg__provider-count">{provider.models.length}</span>
+              </button>
+            ))}
+          </aside>
+          <section className="model-dlg__models" aria-label={`Models of ${viewed?.name ?? ''}`}>
+            {viewed && viewed.models.length === 0 && (
+              <p className="model-dlg__empty">No models — add some in Settings → AI Provider.</p>
+            )}
+            {viewed?.models.map((model) => {
+              const isChosen = viewed.id === activeId && model.name === viewed.model;
+              return (
+                <button
+                  key={model.id}
+                  type="button"
+                  className={`model-dlg__model${isChosen ? ' model-dlg__model--chosen' : ''}${model.enabled ? '' : ' model-dlg__model--off'}`}
+                  onClick={() => onPick(viewed.id, model.name)}
+                  disabled={!model.enabled}
+                >
+                  {isChosen ? (
+                    <Check size={13} strokeWidth={2} className="model-dlg__check" />
+                  ) : (
+                    <span className="model-dlg__check-spacer" />
+                  )}
+                  <span className="model-dlg__model-name">{model.name}</span>
+                  {model.context && <span className="model-dlg__badge">{model.context}</span>}
+                  {model.vision && <span className="model-dlg__badge">Vision</span>}
+                </button>
+              );
+            })}
+          </section>
+        </div>
+        <footer className="model-dlg__foot">
+          <span className="model-dlg__hint">Manage providers in Settings → AI Provider.</span>
+        </footer>
+      </div>
+    </div>
   );
 }
