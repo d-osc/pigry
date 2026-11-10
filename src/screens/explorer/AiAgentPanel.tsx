@@ -125,6 +125,16 @@ function agentProfileText(agent: AgentEntry): string {
   return `${lines.join('\n')}\n\nYou are @${agent.username}. Respond in character as this agent.`;
 }
 
+/** Display name for a replying agent — resolved from its @username, falling
+ * back to the generic label when the handle is unknown. */
+function agentDisplayName(username?: string): string {
+  if (username) {
+    const agent = loadAgents().find((entry) => entry.username === username);
+    if (agent?.name) return agent.name;
+  }
+  return 'AI Agent';
+}
+
 /** Wall-clock stamp — wrapped so async send paths stay purity-clean. */
 function now(): number {
   return Date.now();
@@ -194,6 +204,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  /** Username of the agent currently generating a reply (typing indicator). */
+  const [replyingAs, setReplyingAs] = useState('');
   /** Which section of the panel is visible — chat body or one of the tool tabs. */
   const [panelTab, setPanelTab] = useState<
     'chat' | 'tools' | 'mcp' | 'plugins' | 'agents' | 'hooks' | 'instructions'
@@ -731,6 +743,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       return await runTurn(history, target ?? null, chainLeft);
     } finally {
       setSending(false);
+      setReplyingAs('');
       // after-reply hooks (Hooks tab) run once the reply lands or fails.
       try {
         await runEventHooks('after-reply', repository?.localPath ?? '.');
@@ -756,6 +769,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       return active;
     })();
     const repliedAs = target?.username ?? agentUsername;
+    setReplyingAs(repliedAs);
 
     if (isCliProvider(provider)) {
       const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
@@ -1156,6 +1170,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             {messages.map((message, index) => {
               const isUser = message.role === 'user';
               const editing = editingIndex === index;
+              const replyAgent = !isUser && message.agent
+                ? loadAgents().find((entry) => entry.username === message.agent)
+                : null;
               return (
                 <div
                   key={index}
@@ -1165,12 +1182,14 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                       <span className="explorer-ai__avatar">
                         {isUser && ghUser?.avatarUrl ? (
                           <img src={ghUser.avatarUrl} alt={ghUser.name} />
+                        ) : replyAgent?.avatar ? (
+                          <img src={replyAgent.avatar} alt={replyAgent.name} />
                         ) : (
                           isUser ? 'You' : 'AI'
                         )}
                       </span>
                       <span className="explorer-ai__msg-name">
-                        {isUser ? ghUser?.login || 'You' : 'AI Agent'}
+                        {isUser ? ghUser?.login || 'You' : agentDisplayName(message.agent)}
                       </span>
                       {message.time && (
                         <span className="explorer-ai__msg-time">{fmtMsgTime(message.time)}</span>
@@ -1254,7 +1273,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                 <div className="explorer-ai__card explorer-ai__msg">
                   <div className="explorer-ai__msg-meta">
                     <span className="explorer-ai__avatar">AI</span>
-                    <span className="explorer-ai__msg-name">AI Agent</span>
+                    <span className="explorer-ai__msg-name">{agentDisplayName(replyingAs)}</span>
                   </div>
                   <span className="ai-typing" aria-label="AI is thinking">
                     <i />
