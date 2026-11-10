@@ -64,6 +64,16 @@ pub fn cherry_pick(repo_path: &Path, oid: &str) -> Result<String> {
     run_git_timed(repo_path, &["cherry-pick", "--no-commit", oid])
 }
 
+/// Aborts an in-progress cherry-pick, restoring the branch state.
+/// Conflicted picks made with --no-commit leave no sequencer state
+/// (modern git skips CHERRY_PICK_HEAD), so abort is a hard reset to HEAD.
+pub fn cherry_pick_abort(repo_path: &Path) -> Result<String> {
+    match run_git_timed(repo_path, &["cherry-pick", "--abort"]) {
+        Ok(result) => Ok(result),
+        Err(_) => run_git_timed(repo_path, &["reset", "--hard", "HEAD"]),
+    }
+}
+
 /// Merges a branch into the current branch. Prefers fast-forward.
 /// Merges a branch into the checked-out branch.
 /// strategy: "ff" (fast-forward only — fails when diverged), "no-ff" (always a merge commit),

@@ -720,3 +720,69 @@ fn stash_preview_lists_entry_files() {
 
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn cherry_pick_conflict_then_abort_restores_branch() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-cherryabort-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+
+    let commit_files = |dir: &PathBuf, message: &str, content: &str| {
+        fs::write(dir.join("a.txt"), content).unwrap();
+        let repo = Repository::open(dir).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
+        let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
+    };
+
+    commit_files(&dir, "base", "one\n");
+    let base_branch = Repository::open(&dir)
+        .unwrap()
+        .head()
+        .unwrap()
+        .shorthand()
+        .unwrap_or("master")
+        .to_string();
+    git_cli(&dir, &["checkout", "-b", "feature"]);
+    commit_files(&dir, "feature edit", "one\nfeature\n");
+    let feature_tip = Repository::open(&dir)
+        .unwrap()
+        .head()
+        .unwrap()
+        .peel_to_commit()
+        .unwrap()
+        .id()
+        .to_string();
+    git_cli(&dir, &["checkout", &base_branch]);
+    commit_files(&dir, "main edit", "one\nmain\n");
+
+    // Picking the feature commit onto main conflicts on a.txt.
+    let result = crate::ops::cherry_pick(&dir, &feature_tip);
+    let error = result.unwrap_err();
+    assert!(
+        error.contains("CONFLICT") || error.contains("could not apply"),
+        "conflict reported: {error}"
+    );
+
+    // Abort restores the pre-pick state.
+    crate::ops::cherry_pick_abort(&dir).unwrap();
+    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
+    assert_eq!(content, "one\nmain\n", "branch content restored");
+    let repo = Repository::open(&dir).unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(head.summary().unwrap_or_default(), "main edit");
+
+    fs::remove_dir_all(&dir).unwrap();
+}

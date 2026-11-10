@@ -1627,6 +1627,19 @@ pub async fn push_preview(
 }
 
 #[tauri::command]
+pub async fn cherry_pick_abort(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::cherry_pick_abort(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
 pub async fn stash_preview(
     state: State<'_, Mutex<AppState>>,
     index: usize,

@@ -176,6 +176,7 @@ pub fn run() {
             commands::merge_preview,
             commands::push_preview,
             commands::stash_preview,
+            commands::cherry_pick_abort,
             commands::merge_status,
             commands::merge_file_versions,
             commands::get_line_changes,

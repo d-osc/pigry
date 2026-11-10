@@ -752,6 +752,10 @@ export async function cherryPick(oid: string): Promise<AppStatePayload> {
   return invoke('cherry_pick', { oid });
 }
 
+export async function cherryPickAbort(): Promise<AppStatePayload> {
+  return invoke('cherry_pick_abort');
+}
+
 export async function mergeBranch(
   branch: string,
   strategy?: string,
