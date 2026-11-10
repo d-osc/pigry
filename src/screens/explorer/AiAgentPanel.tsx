@@ -271,7 +271,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await migrateLocalSessions(chatScope);
+      await migrateLocalSessions();
       const sessions = await listSessions(chatScope);
       if (cancelled) return;
       let id = activeSessionId(chatScope);
@@ -313,7 +313,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         team,
         agentUsername,
         owner: ownerName,
-      }, chatScope);
+      });
       if (!cancelled) setSessionList(await listSessions(chatScope));
     })();
     return () => {
@@ -381,7 +381,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       return;
     }
     try {
-      await renameSessionFile(session.id, title, chatScope);
+      await renameSessionFile(session.id, title);
       setSessionList(await listSessions(chatScope));
       if (session.id === sessionId) setGroupTitle({ name: title, custom: true });
     } catch (error) {
@@ -391,7 +391,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   };
 
   const removeSession = async (id: string) => {
-    await deleteSessionFile(id, chatScope);
+    await deleteSessionFile(id);
     const kept = await listSessions(chatScope);
     setSessionList(kept);
     if (id === sessionId) startNewChat();
