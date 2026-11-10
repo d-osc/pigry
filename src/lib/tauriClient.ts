@@ -732,8 +732,24 @@ export async function cherryPick(oid: string): Promise<AppStatePayload> {
   return invoke('cherry_pick', { oid });
 }
 
-export async function mergeBranch(branch: string): Promise<AppStatePayload> {
-  return invoke('merge_branch', { branch });
+export async function mergeBranch(
+  branch: string,
+  strategy?: string,
+): Promise<AppStatePayload> {
+  return invoke('merge_branch', { branch, strategy: strategy ?? null });
+}
+
+export async function mergeAbort(): Promise<AppStatePayload> {
+  return invoke('merge_abort');
+}
+
+export interface MergeStatusInfo {
+  inProgress: boolean;
+  conflicted: string[];
+}
+
+export async function mergeStatus(): Promise<MergeStatusInfo> {
+  return invoke('merge_status');
 }
 
 export async function cloneRepo(url: string, target: string): Promise<AppStatePayload> {

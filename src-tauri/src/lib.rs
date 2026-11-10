@@ -172,6 +172,8 @@ pub fn run() {
             commands::revert_commit,
             commands::cherry_pick,
             commands::merge_branch,
+            commands::merge_abort,
+            commands::merge_status,
             commands::get_line_changes,
             commands::get_user_info,
             commands::set_user_info,

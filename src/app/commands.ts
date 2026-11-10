@@ -231,7 +231,7 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
       section: "Sync" as const,
       icon: GitBranchPlus,
       enabled: true,
-      run: () => void repository.mergeBranch(branch.name),
+      run: () => void repository.mergeBranch(branch.name, undefined),
     }));
 
   const syncCommands: Command[] = [

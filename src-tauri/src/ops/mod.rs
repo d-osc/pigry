@@ -65,8 +65,56 @@ pub fn cherry_pick(repo_path: &Path, oid: &str) -> Result<String> {
 }
 
 /// Merges a branch into the current branch. Prefers fast-forward.
-pub fn merge_branch(repo_path: &Path, branch: &str) -> Result<String> {
-    run_git_timed(repo_path, &["merge", branch, "--no-edit", "--ff"])
+/// Merges a branch into the checked-out branch.
+/// strategy: "ff" (fast-forward only — fails when diverged), "no-ff" (always a merge commit),
+/// or "squash" (stages the result — commit to finish).
+pub fn merge_branch(repo_path: &Path, branch: &str, strategy: &str) -> Result<String> {
+    let args = match strategy {
+        "no-ff" => vec!["merge", branch, "--no-edit", "--no-ff"],
+        "squash" => vec!["merge", branch, "--squash"],
+        _ => vec!["merge", branch, "--no-edit", "--ff-only"],
+    };
+    match run_git_timed(repo_path, &args) {
+        Ok(output) => Ok(output),
+        Err(e) if e.contains("CONFLICT") => {
+            Err("CONFLICT: merge has unresolved conflicts".into())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Aborts an in-progress merge (git merge --abort).
+pub fn merge_abort(repo_path: &Path) -> Result<String> {
+    run_git_timed(repo_path, &["merge", "--abort"])
+}
+
+/// Merge state for the conflict UI — in-progress flag + conflicted paths.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeStatus {
+    pub in_progress: bool,
+    pub conflicted: Vec<String>,
+}
+
+pub fn merge_status(repo_path: &Path) -> Result<MergeStatus> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let in_progress = repo.path().join("MERGE_HEAD").exists();
+    let mut conflicted: Vec<String> = Vec::new();
+    if in_progress {
+        let mut index = repo.index().map_err(|e| e.to_string())?;
+        for conflict in index.conflicts().map_err(|e| e.to_string())? {
+            if let Ok(conflict) = conflict {
+                let entry = conflict.our.or(conflict.their).or(conflict.ancestor);
+                if let Some(entry) = entry {
+                    let path = String::from_utf8_lossy(&entry.path).to_string();
+                    if !conflicted.contains(&path) {
+                        conflicted.push(path);
+                    }
+                }
+            }
+        }
+    }
+    Ok(MergeStatus { in_progress, conflicted })
 }
 
 #[cfg(test)]

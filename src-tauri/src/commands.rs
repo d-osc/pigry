@@ -1589,14 +1589,43 @@ pub async fn merge_branch(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
     branch: String,
+    strategy: Option<String>,
 ) -> Result<AppStatePayload, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    ops::merge_branch(&repo_path, &branch)?;
+    ops::merge_branch(&repo_path, &branch, strategy.as_deref().unwrap_or("ff"))?;
+    if ops::has_conflicts(&repo_path).unwrap_or(false) {
+        return Err("CONFLICT: merge has unresolved conflicts — resolve them in Working changes".into());
+    }
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn merge_abort(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_abort(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn merge_status(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<ops::MergeStatus, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_status(&repo_path)
 }
 
 

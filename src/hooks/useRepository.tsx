@@ -60,7 +60,8 @@ export interface RepositoryContextValue {
   abortRebase: () => Promise<void>;
   revertCommit: (oid: string) => Promise<void>;
   cherryPick: (oid: string) => Promise<void>;
-  mergeBranch: (branch: string) => Promise<void>;
+  mergeBranch: (branch: string, strategy?: string) => Promise<void>;
+  mergeAbort: () => Promise<void>;
   stashApply: (index: number) => Promise<void>;
   stashPop: (index: number) => Promise<void>;
   stashDrop: (index: number) => Promise<void>;
@@ -210,7 +211,8 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       abortRebase: () => run(() => client.abortRebase(), (p) => p, 'Rebase aborted'),
       revertCommit: (oid) => run(() => client.revertCommit(oid), (p) => p, 'Commit reverted'),
       cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p, 'Commit cherry-picked'),
-      mergeBranch: (branch) => run(() => client.mergeBranch(branch), (p) => p, `Merged ${branch}`),
+      mergeBranch: (branch, strategy) => run(() => client.mergeBranch(branch, strategy), (p) => p, `Merged ${branch}`),
+      mergeAbort: () => run(() => client.mergeAbort(), (p) => p, 'Merge aborted'),
       stashApply: (index) => run(() => client.stashApply(index), (p) => p, 'Stash applied'),
       stashPop: (index) => run(() => client.stashPop(index), (p) => p, 'Stash popped'),
       stashDrop: (index) => run(() => client.stashDrop(index), (p) => p, 'Stash dropped'),

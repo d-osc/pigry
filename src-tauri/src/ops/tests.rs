@@ -159,7 +159,7 @@ fn merge_branch_fast_forward() {
 
     // Back to base branch, then merge feature (fast-forward).
     git_cli(&dir, &["checkout", &base_branch]);
-    crate::ops::merge_branch(&dir, "feature").unwrap();
+    crate::ops::merge_branch(&dir, "feature", "ff").unwrap();
 
     // Fast-forward merge: feature file should exist on the base branch now.
     assert!(dir.join("b.txt").exists());
@@ -193,7 +193,7 @@ fn clone_repo_copies_repository() {
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
-    crate::ops::merge_branch(&work, "master").unwrap(); // no-op, just exercises
+    crate::ops::merge_branch(&work, "master", "ff").unwrap(); // no-op, just exercises
     git_cli(&work, &["push", "--set-upstream", "origin", "master"]);
 
     let cloned = base.join("cloned");
@@ -408,4 +408,121 @@ fn rebase_conflict_then_abort_restores_original_tip() {
         "from edit2\n"
     );
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn merge_branch_strategies_conflicts_and_abort() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-merge2-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    // Mixed git-CLI checkouts and git2 commits need stable line endings.
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+
+    fs::write(dir.join("shared.txt"), "line1\nline2\nline3\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
+    let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
+
+    git_cli(&dir, &["checkout", "-b", "feature"]);
+    fs::write(dir.join("shared.txt"), "feature-line1\nline2\nline3\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "feature edit", &tree, &[&head]).unwrap();
+    git_cli(&dir, &["checkout", &main_branch]);
+    fs::write(dir.join("shared.txt"), "line1\nline2\nmain-line3\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "main edit", &tree, &[&head]).unwrap();
+
+    // 1. ff is not possible when branches diverged.
+    assert!(crate::ops::merge_branch(&dir, "feature", "ff").is_err());
+
+    // 2. no-ff merges with a merge commit.
+    crate::ops::merge_branch(&dir, "feature", "no-ff").unwrap();
+    let merged = fs::read_to_string(dir.join("shared.txt")).unwrap().replace("\r", "");
+    assert!(merged.contains("feature-line1"), "no-ff carries the branch edit");
+    let status = crate::ops::merge_status(&dir).unwrap();
+    assert!(!status.in_progress, "no-ff finished without conflicts");
+
+    // 3. diverge again -> conflict -> normalize + abort.
+    git_cli(&dir, &["checkout", "feature"]);
+    fs::write(dir.join("shared.txt"), "conflict-feature\nline2\nmain-line3\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "feature rewrite", &tree, &[&head]).unwrap();
+    git_cli(&dir, &["checkout", &main_branch]);
+    fs::write(dir.join("shared.txt"), "conflict-main\nline2\nmain-line3\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "conflict main", &tree, &[&head]).unwrap();
+
+    let result = crate::ops::merge_branch(&dir, "feature", "no-ff");
+    let err = match result { Err(e) => e, Ok(_) => panic!("expected conflict") };
+    assert!(err.starts_with("CONFLICT"), "conflict error normalized: {err}");
+    let status = crate::ops::merge_status(&dir).unwrap();
+    assert!(status.in_progress);
+    assert!(status.conflicted.iter().any(|f| f.contains("shared.txt")), "conflicted file listed: {:?}", status.conflicted);
+    crate::ops::merge_abort(&dir).unwrap();
+    let status = crate::ops::merge_status(&dir).unwrap();
+    assert!(!status.in_progress, "abort cleared the merge");
+    let content = fs::read_to_string(dir.join("shared.txt")).unwrap().replace("\r", "");
+    assert!(content.contains("conflict-main"), "abort restored the working file");
+
+    // 4. squash: a branch off main with a clean tail commit stages
+    //    the addition without creating a merge commit.
+    git_cli(&dir, &["checkout", "-b", "tail-branch"]);
+    fs::write(dir.join("shared.txt"), "conflict-main\nline2\nmain-line3\nfeature-tail\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "feature tail", &tree, &[&head]).unwrap();
+    git_cli(&dir, &["checkout", &main_branch]);
+    crate::ops::merge_branch(&dir, "tail-branch", "squash").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(head.summary().unwrap_or_default(), "conflict main", "squash does not auto-commit");
+    let content = fs::read_to_string(dir.join("shared.txt")).unwrap().replace("\r", "");
+    assert!(content.contains("feature-tail"), "squash staged the tail");
+
+    fs::remove_dir_all(&dir).unwrap();
 }
