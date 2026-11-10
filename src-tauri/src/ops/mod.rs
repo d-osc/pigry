@@ -281,6 +281,95 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
     Ok(MergePreview { up_to_date, commits, files })
 }
 
+/// Preview of the local commits waiting to be pushed upstream.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushPreviewCommit {
+    pub oid: String,
+    pub short_oid: String,
+    pub summary: String,
+    pub body: String,
+    pub author_name: String,
+    pub time_seconds: i64,
+    /// First parent (None for root commits) — the compare base in the UI.
+    pub parent_oid: Option<String>,
+    pub files: Vec<MergePreviewCommitFile>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushPreview {
+    pub branch: String,
+    /// Upstream ref like "origin/main" (None when the branch has none yet).
+    pub upstream: Option<String>,
+    pub ahead: usize,
+    pub commits: Vec<PushPreviewCommit>,
+}
+
+/// Lists the local commits ahead of the upstream, each with its files.
+pub fn push_preview(repo_path: &Path) -> Result<PushPreview> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
+    let head_oid = head.target().ok_or_else(|| String::from("HEAD not found"))?;
+    let branch = head.shorthand().unwrap_or_default().to_string();
+
+    let mut upstream_name: Option<String> = None;
+    let mut upstream_oid: Option<git2::Oid> = None;
+    if let Some(short) = head.shorthand() {
+        if let Ok(local) = repo.find_branch(short, git2::BranchType::Local) {
+            if let Ok(upstream) = local.upstream() {
+                upstream_name = Some(
+                    upstream
+                        .name()
+                        .map(|n| n.unwrap_or_default().to_string())
+                        .unwrap_or_default(),
+                );
+                upstream_oid = upstream.get().target();
+            }
+        }
+    }
+
+    let mut commits: Vec<PushPreviewCommit> = Vec::new();
+    if let Some(up) = upstream_oid {
+        let mut walk = repo.revwalk().map_err(err)?;
+        walk.push(head_oid).map_err(err)?;
+        walk.hide(up).map_err(err)?;
+        walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
+        for oid in walk.flatten() {
+            let Ok(commit) = repo.find_commit(oid) else { continue };
+            let parent = commit.parent(0).ok();
+            let parent_tree = parent.as_ref().and_then(|p| p.tree().ok());
+            let tree = commit.tree().map_err(err)?;
+            let files = tree_diff_stats(&repo, parent_tree.as_ref(), &tree)?
+                .into_iter()
+                .map(|(path, letter, additions, deletions)| MergePreviewCommitFile {
+                    path,
+                    status: letter.to_string(),
+                    additions,
+                    deletions,
+                })
+                .collect();
+            commits.push(PushPreviewCommit {
+                oid: commit.id().to_string(),
+                short_oid: commit
+                    .as_object()
+                    .short_id()
+                    .map(|buf| buf.as_str().map(|str| str.to_string()).unwrap_or_default())
+                    .unwrap_or_default(),
+                summary: commit.summary().unwrap_or_default().to_string(),
+                body: commit.message().unwrap_or_default().trim_end().to_string(),
+                author_name: commit.author().name().unwrap_or_default().to_string(),
+                time_seconds: commit.time().seconds(),
+                parent_oid: parent.map(|p| p.id().to_string()),
+                files,
+            });
+        }
+    }
+
+    let ahead = commits.len();
+    Ok(PushPreview { branch, upstream: upstream_name, ahead, commits })
+}
+
 /// Ours/HEAD, incoming/source-tip and workdir contents of one file
 /// (None when the side does not have the file — add/delete merges).
 #[derive(serde::Serialize)]

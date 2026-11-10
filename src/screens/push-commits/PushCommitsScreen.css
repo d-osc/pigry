@@ -1,0 +1,250 @@
+/* Push Commits screen — commits waiting for the upstream + compare views. */
+
+.push-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.push__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.push__header {
+  gap: 10px;
+}
+
+.push__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.push__title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.push__branch {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.push__push-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 14px;
+  border: 1px solid var(--success, #6dd6ad);
+  border-radius: var(--radius-sm);
+  background: rgba(109, 214, 173, 0.12);
+  color: var(--success, #6dd6ad);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.push__push-btn:hover:not(:disabled) {
+  background: rgba(109, 214, 173, 0.2);
+}
+
+.push__push-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.push__section-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.push__empty {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.push__up-to-date .push__empty {
+  color: var(--success, #6dd6ad);
+}
+
+.push__commits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.push__commit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.push__commit-row:hover,
+.push__commit-row.is-open {
+  border-color: var(--accent);
+}
+
+.push__commit-sha {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.push__commit-summary {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push__commit-meta {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.push__commit-detail {
+  margin: 4px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  display: grid;
+  gap: 6px;
+}
+
+.push__commit-body {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.push__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.push__file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+}
+
+.push__file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.push__file-status {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.push__file-status--A {
+  color: var(--success, #6dd6ad);
+}
+
+.push__file-status--M {
+  color: var(--warning, #edb675);
+}
+
+.push__file-status--D {
+  color: var(--danger, #e79098);
+}
+
+.push__file-status--R {
+  color: var(--accent);
+}
+
+.push__file-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push__file-stats {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.push__file:hover {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.push__file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.push__file-view-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}

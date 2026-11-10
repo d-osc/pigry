@@ -1616,6 +1616,17 @@ pub async fn merge_preview(
 }
 
 #[tauri::command]
+pub async fn push_preview(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<ops::PushPreview, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::push_preview(&repo_path)
+}
+
+#[tauri::command]
 pub async fn merge_abort(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,

@@ -801,6 +801,37 @@ export async function mergePreview(branch: string): Promise<MergePreview> {
   return invoke('merge_preview', { branch });
 }
 
+export interface PushPreviewCommitFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface PushPreviewCommit {
+  oid: string;
+  shortOid: string;
+  summary: string;
+  body: string;
+  authorName: string;
+  timeSeconds: number;
+  /** First parent (null for root commits) — the compare base. */
+  parentOid: string | null;
+  files: PushPreviewCommitFile[];
+}
+
+export interface PushPreview {
+  branch: string;
+  /** Upstream ref like "origin/main" (null when the branch has none yet). */
+  upstream: string | null;
+  ahead: number;
+  commits: PushPreviewCommit[];
+}
+
+export async function pushPreview(): Promise<PushPreview> {
+  return invoke('push_preview');
+}
+
 export async function mergeStatus(): Promise<MergeStatusInfo> {
   return invoke('merge_status');
 }

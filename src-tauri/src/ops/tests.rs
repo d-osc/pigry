@@ -600,3 +600,79 @@ fn merge_preview_details_commits_and_files() {
 
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn push_preview_lists_unpushed_commits_with_files() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-pushprev-{}", std::process::id()));
+    let remote_dir = std::env::temp_dir().join(format!("orbit-ops-pushprev-remote-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&remote_dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::create_dir_all(&remote_dir).unwrap();
+    Repository::init(&dir).unwrap();
+    Repository::init_bare(&remote_dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+    let repo = Repository::open(&dir).unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+    git_cli(&dir, &["remote", "add", "origin", remote_dir.to_string_lossy().as_ref()]);
+
+    let commit_files = |dir: &PathBuf, message: &str, edits: &[(&str, &str)]| {
+        let repo = Repository::open(dir).unwrap();
+        for (path, content) in edits {
+            fs::write(dir.join(path), content).unwrap();
+        }
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
+        let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
+    };
+
+    // Base commit pushed to the bare remote.
+    commit_files(&dir, "base", &[("a.txt", "one\n")]);
+    git_cli(&dir, &["push", "-u", "origin", "main"]);
+
+    // No upstream yet on a fresh local branch.
+    git_cli(&dir, &["checkout", "-b", "local-only"]);
+    let preview = crate::ops::push_preview(&dir).unwrap();
+    assert_eq!(preview.upstream, None, "branch without upstream");
+    assert_eq!(preview.ahead, 0);
+    git_cli(&dir, &["checkout", "main"]);
+
+    // One local commit ahead — the preview lists it with its files.
+    commit_files(&dir, "add b.txt\n\nbody detail", &[("b.txt", "b1\nb2\n")]);
+    let preview = crate::ops::push_preview(&dir).unwrap();
+    assert_eq!(preview.branch, "main");
+    assert_eq!(preview.upstream.as_deref(), Some("origin/main"));
+    assert_eq!(preview.ahead, 1);
+    let commit = &preview.commits[0];
+    assert_eq!(commit.summary, "add b.txt");
+    assert!(commit.body.contains("body detail"));
+    assert_eq!(commit.files.len(), 1);
+    assert_eq!(commit.files[0].path, "b.txt");
+    assert_eq!(commit.files[0].status, "A");
+    assert_eq!((commit.files[0].additions, commit.files[0].deletions), (2, 0));
+    let repo = Repository::open(&dir).unwrap();
+    let head = repo.head().unwrap().peel_to_commit().unwrap();
+    assert_eq!(
+        commit.parent_oid.as_deref(),
+        Some(head.parent(0).unwrap().id().to_string().as_str()),
+        "parent oid is the compare base"
+    );
+
+    // After pushing, nothing is ahead.
+    git_cli(&dir, &["push", "origin", "main"]);
+    let preview = crate::ops::push_preview(&dir).unwrap();
+    assert_eq!(preview.ahead, 0, "all pushed");
+
+    fs::remove_dir_all(&dir).unwrap();
+    fs::remove_dir_all(&remote_dir).unwrap();
+}
