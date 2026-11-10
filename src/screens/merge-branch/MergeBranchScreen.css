@@ -232,3 +232,275 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* Preview: commits + files the merge brings in */
+.merge-branch__up-to-date {
+  font-size: var(--fs-sm);
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__commits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.merge-branch__commit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.merge-branch__commit-row:hover,
+.merge-branch__commit-row.is-open {
+  border-color: var(--accent);
+}
+
+.merge-branch__commit-detail {
+  margin: 4px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  display: grid;
+  gap: 6px;
+}
+
+.merge-branch__commit-body {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.merge-branch__commit-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.merge-branch__commit-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-xs);
+}
+
+.merge-branch__commit-file .merge-branch__file-stats {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.merge-branch__commit-sha {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.merge-branch__commit-summary {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-branch__commit-meta {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.merge-branch__files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.merge-branch__file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 12px;
+  font-size: var(--fs-xs);
+}
+
+.merge-branch__file:hover {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.merge-branch__file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.merge-branch__file-commits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding-left: 24px;
+  color: var(--text-muted);
+}
+
+.merge-branch__file-commit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.merge-branch__file-commit-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 340px;
+}
+
+.merge-branch__file-status {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.merge-branch__file-status--A {
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__file-status--M {
+  color: var(--warning, #edb675);
+}
+
+.merge-branch__file-status--D {
+  color: var(--danger, #e79098);
+}
+
+.merge-branch__file-status--R {
+  color: var(--purple, #b59aff);
+}
+
+.merge-branch__file-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-branch__file-stats {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.merge-branch__conflict-editor {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.merge-branch__conflict-editor-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.merge-branch__save-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-branch__save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.merge-branch__conflict-editor-host {
+  height: 300px;
+}
+
+.merge-branch__file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.merge-branch__file-view-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.merge-branch__conflict-resolved {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__conflict-file-btn {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-branch__conflict-file-btn:hover,
+.merge-branch__conflict-file-btn.is-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}

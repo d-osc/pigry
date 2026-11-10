@@ -526,3 +526,77 @@ fn merge_branch_strategies_conflicts_and_abort() {
 
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn merge_preview_details_commits_and_files() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-preview-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+
+    let commit_files = |dir: &PathBuf, message: &str, edits: &[(&str, &str)]| {
+        let repo = Repository::open(dir).unwrap();
+        for (path, content) in edits {
+            fs::write(dir.join(path), content).unwrap();
+        }
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
+        let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
+    };
+
+    fs::write(dir.join("a.txt"), "one\n").unwrap();
+    commit_files(&dir, "base", &[]);
+    git_cli(&dir, &["checkout", "-b", "feature"]);
+    commit_files(&dir, "edit a.txt", &[("a.txt", "one\ntwo\n")]);
+    commit_files(
+        &dir,
+        "add b.txt\n\nbody line",
+        &[("b.txt", "b1\nb2\n")],
+    );
+    let default_branch = Repository::open(&dir)
+        .unwrap()
+        .find_branch("master", git2::BranchType::Local)
+        .map(|_| "master")
+        .unwrap_or("main")
+        .to_string();
+    git_cli(&dir, &["checkout", &default_branch]);
+
+    let preview = crate::ops::merge_preview(&dir, "feature").unwrap();
+    assert!(!preview.up_to_date, "source is ahead");
+    assert_eq!(preview.commits.len(), 2, "two source commits, oldest first");
+
+    let first = &preview.commits[0];
+    assert_eq!(first.summary, "edit a.txt");
+    assert_eq!(first.files.len(), 1);
+    assert_eq!(first.files[0].path, "a.txt");
+    assert_eq!((first.files[0].additions, first.files[0].deletions), (1, 0));
+
+    let second = &preview.commits[1];
+    assert_eq!(second.summary, "add b.txt");
+    assert!(second.body.contains("body line"), "full message body present");
+    assert_eq!(second.files.len(), 1);
+    assert_eq!(second.files[0].path, "b.txt");
+    assert_eq!(second.files[0].status, "A");
+    assert_eq!((second.files[0].additions, second.files[0].deletions), (2, 0));
+
+    // Whole-range file list attributes each file to its source commit.
+    let a_file = preview.files.iter().find(|f| f.path == "a.txt").unwrap();
+    assert_eq!(a_file.commits.len(), 1);
+    assert_eq!(a_file.commits[0].short_oid, first.short_oid);
+    assert_eq!(a_file.commits[0].summary, "edit a.txt");
+    let b_file = preview.files.iter().find(|f| f.path == "b.txt").unwrap();
+    assert_eq!(b_file.commits[0].short_oid, second.short_oid);
+
+    fs::remove_dir_all(&dir).unwrap();
+}

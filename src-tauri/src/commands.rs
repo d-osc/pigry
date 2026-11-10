@@ -1604,6 +1604,18 @@ pub async fn merge_branch(
 }
 
 #[tauri::command]
+pub async fn merge_preview(
+    state: State<'_, Mutex<AppState>>,
+    branch: String,
+) -> Result<ops::MergePreview, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_preview(&repo_path, &branch)
+}
+
+#[tauri::command]
 pub async fn merge_abort(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
@@ -1615,6 +1627,19 @@ pub async fn merge_abort(
     ops::merge_abort(&repo_path)?;
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn merge_file_versions(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    branch: String,
+) -> Result<ops::MergeFileVersions, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_file_versions(&repo_path, &path, &branch)
 }
 
 #[tauri::command]

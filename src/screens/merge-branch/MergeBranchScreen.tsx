@@ -1,9 +1,20 @@
 /** Merge Branch screen — merge a branch INTO the checked-out branch with
  * strategy choice, conflict handling (file list + abort) and a result log. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { DiffEditor, Editor } from '@monaco-editor/react';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { mergeStatus, type MergeStatusInfo } from '../../lib/tauriClient';
+import {
+  mergePreview,
+  mergeFileVersions,
+  mergeStatus,
+  writeWorktreeFile,
+  type MergePreview,
+  type MergeStatusInfo,
+} from '../../lib/tauriClient';
+import { ConflictController } from '../../editor/conflictMarkers';
+import { relativeTime } from '../../lib/relativeTime';
+import '../../editor/monacoSetup';
 import './MergeBranchScreen.css';
 
 type MergeStrategy = 'ff' | 'no-ff' | 'squash';
@@ -25,18 +36,85 @@ export function MergeBranchScreen() {
   const [conflict, setConflict] = useState<MergeStatusInfo | null>(null);
   const [log, setLog] = useState<Array<{ text: string; kind: 'info' | 'success' | 'error' }>>([]);
 
+  // Expanded file viewer: compare diff or conflict-marker editor.
+  const [expandedPath, setExpandedPath] = useState<string | null>(null);
+  const [versions, setVersions] = useState<{ ours: string; incoming: string; workdir: string } | null>(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+
+  // Commit expanded to show its full message + files.
+  const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
+
+  // Conflicted files are ALL open at once; this set holds collapsed ones.
+  const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
+
+  const toggleFile = async (filePath: string) => {
+    if (expandedPath === filePath) {
+      setExpandedPath(null);
+      setVersions(null);
+      return;
+    }
+    setExpandedPath(filePath);
+    setVersions(null);
+    setLoadingVersions(true);
+    try {
+      const result = await mergeFileVersions(filePath, effectiveSource || currentBranch);
+      setVersions({
+        ours: result.ours ?? '',
+        incoming: result.incoming ?? '',
+        workdir: result.workdir ?? '',
+      });
+    } catch {
+      setVersions(null);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
   // Auto-pick the first candidate until the user chooses one.
   const effectiveSource = source || branches[0]?.name || '';
+
+  // Load the merge preview whenever the source branch changes.
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+  useEffect(() => {
+    if (!effectiveSource) {
+      void Promise.resolve().then(() => setPreview(null));
+      return;
+    }
+    let cancelled = false;
+    mergePreview(effectiveSource)
+      .then((result) => {
+        if (!cancelled) setPreview(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      })
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSource]);
 
   // Poll merge state while the screen is open (conflicts show live).
   useEffect(() => {
     let cancelled = false;
     const tick = () => {
-      mergeStatus()
-        .then((status) => {
-          if (!cancelled) setConflict(status.inProgress ? status : null);
-        })
-        .catch(() => {});
+      void (async () => {
+        try {
+          const status = await mergeStatus();
+          if (cancelled) return;
+          const next = status.inProgress ? status : null;
+          setConflict((prev) => {
+            const same =
+              (prev === null && next === null) ||
+              (prev !== null &&
+                next !== null &&
+                prev.inProgress === next.inProgress &&
+                prev.conflicted.join("|") === next.conflicted.join("|"));
+            return same ? prev : next;
+          });
+        } catch {
+          // merge state unreadable — keep the last known state
+        }
+      })();
     };
     tick();
     const timer = window.setInterval(tick, 2000);
@@ -144,6 +222,147 @@ export function MergeBranchScreen() {
           </div>
         </section>
 
+        {preview?.upToDate && (
+          <section className="merge-branch__section merge-branch__up-to-date">
+            <p className="merge-branch__empty">
+              {effectiveSource} is already part of {currentBranch || 'the current branch'} — nothing to merge.
+            </p>
+          </section>
+        )}
+
+        {preview && !preview.upToDate && preview.commits.length > 0 && (
+          <section className="merge-branch__section">
+            <h3 className="merge-branch__section-title">
+              Commits merged in ({preview.commits.length})
+            </h3>
+            <ul className="merge-branch__commits">
+              {preview.commits.map((commit) => {
+                const open = expandedCommit === commit.oid;
+                return (
+                  <li key={commit.oid} className="merge-branch__commit">
+                    <button
+                      type="button"
+                      className={`merge-branch__commit-row${open ? ' is-open' : ''}`}
+                      title="Show commit detail"
+                      onClick={() => setExpandedCommit(open ? null : commit.oid)}
+                    >
+                      <span className="merge-branch__commit-sha">{commit.shortOid}</span>
+                      <span className="merge-branch__commit-summary">{commit.summary}</span>
+                      <span className="merge-branch__commit-meta">
+                        {commit.authorName} · {relativeTime(commit.timeSeconds)}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="merge-branch__commit-detail">
+                        {commit.body !== commit.summary && (
+                          <pre className="merge-branch__commit-body">{commit.body}</pre>
+                        )}
+                        {commit.files.length > 0 ? (
+                          <ul className="merge-branch__commit-files">
+                            {commit.files.map((entry) => (
+                              <li
+                                key={`${entry.path}:${entry.status}`}
+                                className="merge-branch__commit-file"
+                              >
+                                <span
+                                  className={`merge-branch__file-status merge-branch__file-status--${entry.status}`}
+                                >
+                                  {entry.status}
+                                </span>
+                                <span className="merge-branch__file-path">{entry.path}</span>
+                                <span className="merge-branch__file-stats">
+                                  +{entry.additions} / −{entry.deletions}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="merge-branch__empty">No file changes (merge commit).</p>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {preview && !preview.upToDate && preview.files.length > 0 && (
+          <section className="merge-branch__section">
+            <h3 className="merge-branch__section-title">
+              Files changed ({preview.files.length})
+            </h3>
+            <ul className="merge-branch__files">
+              {preview.files.map((file) => {
+                const expanded = expandedPath === file.path && versions !== null;
+                return (
+                  <li key={file.path} className="merge-branch__file">
+                    <button
+                      type="button"
+                      className="merge-branch__file-row"
+                      title={`Compare ${file.path} (ours vs incoming)`}
+                      onClick={() => void toggleFile(file.path)}
+                    >
+                      <span className={`merge-branch__file-status merge-branch__file-status--${file.status}`}>
+                        {file.status}
+                      </span>
+                      <span className="merge-branch__file-path">{file.path}</span>
+                      <span className="merge-branch__file-stats">
+                        +{file.additions} / −{file.deletions}
+                      </span>
+                    </button>
+                    {file.commits.length > 0 && (
+                      <div className="merge-branch__file-commits">
+                        {file.commits.map((entry) => (
+                          <span
+                            key={`${file.path}:${entry.shortOid}`}
+                            className="merge-branch__file-commit"
+                            title={`${entry.shortOid} ${entry.summary}`}
+                          >
+                            <span className="merge-branch__commit-sha">{entry.shortOid}</span>
+                            <span className="merge-branch__file-commit-summary">{entry.summary}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {expanded && (
+                      <>
+                        {loadingVersions && versions === null && (
+                          <div className="merge-branch__conflict-editor">
+                            <p className="merge-branch__empty">Loading versions…</p>
+                          </div>
+                        )}
+                        <div className="merge-branch__file-view">
+                          <div className="merge-branch__file-view-labels">
+                            <span>OURS — {currentBranch || 'current'}</span>
+                            <span>INCOMING — {effectiveSource}</span>
+                          </div>
+                          <DiffEditor
+                            key={`${file.path}:${effectiveSource}`}
+                            original={versions?.ours ?? ''}
+                            modified={versions?.incoming ?? ''}
+                            language="plaintext"
+                            theme="orbit-dark"
+                            options={{
+                              readOnly: true,
+                              renderSideBySide: true,
+                              fontSize: 11,
+                              lineHeight: 18,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
         <div className="merge-branch__run">
           <button
             type="button"
@@ -172,13 +391,41 @@ export function MergeBranchScreen() {
               Conflicts ({conflict.conflicted.length})
             </h3>
             <p className="merge-branch__conflict-hint">
-              Resolve the conflicted files in Working changes, stage them, then commit to
-              finish the merge — or abort to restore the branch.
+              Every conflicted file is open below — resolve each with the accept
+              buttons, or abort to restore the branch.
             </p>
             <ul className="merge-branch__conflict-list">
-              {conflict.conflicted.map((file) => (
-                <li key={file}>{file}</li>
-              ))}
+              {conflict.conflicted.map((file) => {
+                const collapsed = collapsedConflicts.has(file);
+                return (
+                  <li key={file} className="merge-branch__conflict-file">
+                    <button
+                      type="button"
+                      className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
+                      title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
+                      onClick={() =>
+                        setCollapsedConflicts((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(file)) next.delete(file);
+                          else next.add(file);
+                          return next;
+                        })
+                      }
+                    >
+                      {file}
+                    </button>
+                    {!collapsed && (
+                      <div className="merge-branch__conflict-editor">
+                        <ConflictEditor
+                          key={`${file}:${effectiveSource || currentBranch}`}
+                          path={file}
+                          branch={effectiveSource || currentBranch}
+                        />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -204,3 +451,130 @@ export function MergeBranchScreen() {
     </div>
   );
 }
+
+
+/** Editable conflict-marker editor for one file — the VS Code-style accept
+ * widget is attached through ConflictController; Save writes the resolved
+ * buffer back to the working file. Loads its own working-tree content so
+ * every conflicted file can stay open at once. */
+function ConflictEditor({ path, branch }: { path: string; branch: string }) {
+  const { refresh, notify } = useRepository();
+  const [text, setText] = useState<string | null>(null);
+  const [value, setValue] = useState('');
+  const valueRef = useRef('');
+  const [saving, setSaving] = useState(false);
+  const controllerRef = useRef<ConflictController | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    mergeFileVersions(path, branch)
+      .then((versions) => {
+        if (!alive) return;
+        const workdir = versions.workdir ?? '';
+        setText(workdir);
+        setValue(workdir);
+        valueRef.current = workdir;
+      })
+      .catch(() => {
+        if (alive) setText('');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [path, branch]);
+
+  const controllerAccept = (kind: 'current' | 'incoming' | 'both') => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    controller.accept(kind);
+    const resolved = controller.getValue();
+    setValue(resolved);
+    valueRef.current = resolved;
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await writeWorktreeFile(path, valueRef.current);
+      notify('Resolved file saved — stage and commit to finish', 'success');
+      refresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (text === null) {
+    return (
+      <div className="merge-branch__conflict-editor">
+        <p className="merge-branch__empty">Loading {path}…</p>
+      </div>
+    );
+  }
+
+  if (!text.includes('<<<<<<<')) {
+    return (
+      <p className="merge-branch__conflict-resolved">
+        No conflict markers remain — stage the file and commit to finish.
+      </p>
+    );
+  }
+
+  return (
+    <div className="merge-branch__conflict-editor">
+      <div className="merge-branch__conflict-editor-toolbar">
+        <div className="merge-branch__accept-actions">
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('current')}>
+            ✓ Accept Current
+          </button>
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('incoming')}>
+            ✓ Accept Incoming
+          </button>
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('both')}>
+            ⇉ Accept Both
+          </button>
+        </div>
+        <button
+          type="button"
+          className="merge-branch__save-btn"
+          disabled={saving}
+          onClick={() => void save()}
+        >
+          {saving ? 'Saving…' : 'Save resolved file'}
+        </button>
+      </div>
+      <div className="merge-branch__conflict-editor-host">
+        <Editor
+          key={path}
+          value={value}
+          language="plaintext"
+          theme="orbit-dark"
+          onChange={(next) => {
+            const nextText = next ?? '';
+            setValue(nextText);
+            valueRef.current = nextText;
+          }}
+          onMount={(editor, monaco) => {
+            const controller = new ConflictController(editor, monaco);
+            controllerRef.current = controller;
+            controller.onChange = (text2) => {
+              setValue(text2);
+              valueRef.current = text2;
+            };
+            controller.update();
+          }}
+          options={{
+            fontSize: 11,
+            lineHeight: 18,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
