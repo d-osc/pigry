@@ -56,7 +56,14 @@ export function CherryPickScreen() {
   }, [headOid]);
 
   const selectCommit = async (row: CommitRow) => {
-    if (selected?.oid === row.oid) return;
+    // Clicking the selected row again collapses its detail.
+    if (selected?.oid === row.oid) {
+      setSelected(null);
+      setDetail(null);
+      setOpenFile(null);
+      setFileContent(null);
+      return;
+    }
     setSelected(row);
     setDetail(null);
     setOpenFile(null);
