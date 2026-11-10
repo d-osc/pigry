@@ -45,14 +45,13 @@
     "username": "test-runner",
     "role": "",
     "team": "Explorer",
-    "providerId": "builtin-zai",
-    "model": "glm-5.3",
+    "providerId": "zai-test",
     "description": "",
     "enabled": true,
     "tools": [],
     "skills": [],
     "mcpServers": [],
-    "definition": "# Test Runner (@test-runner)\n\n\n**Team:** Explorer\n\n**Model:** builtin-zai · glm-5.3\n\n\n## Description\n\n_(no description)_\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
+    "definition": "# Test Runner (@test-runner)\n\n\n**Team:** Explorer\n\n\n\n## Description\n\n_(no description)_\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
   },
   {
     "id": "agent-mwa7mo81",

@@ -26,7 +26,7 @@ const ZAI_MODELS: Array<[name: string, vision: boolean]> = [
 /** Z.ai test provider — same Anthropic-compatible gateway, dedicated test key. */
 const ZAI_TEST_ID = 'zai-test';
 const ZAI_TEST_BASE_URL = 'https://api.z.ai/api/anthropic';
-const ZAI_TEST_API_KEY = '4edbc982ef384dd9998851b773832c7d.ghzVb0sQTuhP7C9g';
+const ZAI_TEST_API_KEY = 'c466230fbad74dda9f33d3cc9c18fdf1.kN4JqIlzCGV9mdkx';
 
 export const API_FORMAT_LABEL: Record<AiApiFormat, string> = {
   openai: 'OpenAI chat completions (/v1/chat/completions)',
@@ -162,12 +162,30 @@ function makeZaiTestProvider(): AiProviderEntry {
   return entry;
 }
 
-/** Appends the Z.ai test provider when it is missing from a stored list. */
+/** Appends the Z.ai test provider when it is missing from a stored list, and
+ * keeps stored copies in sync with the seeded credentials — the key is
+ * managed in code (this is the throwaway test provider), so the constant
+ * always wins over any stale localStorage copy. */
 function ensureZaiTestProvider(list: AiProviderEntry[]): AiProviderEntry[] {
-  if (list.some((p) => p.id === ZAI_TEST_ID)) return list;
-  const zaiIndex = list.findIndex((p) => p.id === 'builtin-zai');
-  const insertAt = zaiIndex >= 0 ? zaiIndex + 1 : list.length;
-  return [...list.slice(0, insertAt), makeZaiTestProvider(), ...list.slice(insertAt)];
+  const idx = list.findIndex((p) => p.id === ZAI_TEST_ID);
+  if (idx < 0) {
+    const zaiIndex = list.findIndex((p) => p.id === 'builtin-zai');
+    const insertAt = zaiIndex >= 0 ? zaiIndex + 1 : list.length;
+    return [...list.slice(0, insertAt), makeZaiTestProvider(), ...list.slice(insertAt)];
+  }
+  const entry = list[idx];
+  if (entry.apiKey === ZAI_TEST_API_KEY && entry.baseUrl === ZAI_TEST_BASE_URL) return list;
+  const models = entry.models.length > 0 ? entry.models : makeZaiTestProvider().models;
+  const next = [...list];
+  next[idx] = {
+    ...entry,
+    apiFormat: 'anthropic',
+    baseUrl: ZAI_TEST_BASE_URL,
+    apiKey: ZAI_TEST_API_KEY,
+    models,
+    model: models.some((m) => m.name === entry.model) ? entry.model : models[0]?.name ?? '',
+  };
+  return next;
 }
 
 /** Fills in the Z.ai built-in when the user has not configured it yet.
