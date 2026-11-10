@@ -38,6 +38,7 @@ import { InsightsScreen } from '../screens/insights/InsightsScreen';
 import { WikiScreen } from '../screens/wiki/WikiScreen';
 import { SecurityScreen } from '../screens/security/SecurityScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
+import { ErrorBoundary } from './ErrorBoundary';
 import './AppShell.css';
 
 /** Workspace screens that show the shared AI Agent rail. Every nav menu has
@@ -459,7 +460,9 @@ function AppShellInner() {
                 <main className="app-shell__workspace">
                   <RebaseBanner onAbort={() => void repository.abortRebase()} />
                   <ErrorBanner />
-                  {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
+                  <ErrorBoundary>
+                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
+                  </ErrorBoundary>
                 </main>
                 {AI_RAIL_SCREENS.includes(screen) && railOpen && (
                   <ResizeHandle
