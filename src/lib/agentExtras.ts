@@ -89,6 +89,7 @@ const SCREEN_TEAM: Record<string, string> = {
   projects: 'Projects',
   wiki: 'Wiki',
   security: 'Security and quality',
+  insights: 'Insights',
 };
 
 /** Default team for an agent created while `screen` is the active menu. */

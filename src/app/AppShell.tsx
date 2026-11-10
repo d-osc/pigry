@@ -35,15 +35,19 @@ import { SecurityScreen } from '../screens/security/SecurityScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import './AppShell.css';
 
-/** Workspace screens that show the shared AI Agent rail. */
+/** Workspace screens that show the shared AI Agent rail. Every nav menu has
+ * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
+ * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS: NavId[] = [
   'working-changes',
+  'actions',
   'pull-requests',
   'releases',
   'issues',
   'projects',
   'wiki',
   'security',
+  'insights',
 ];
 
 function ErrorBanner() {
