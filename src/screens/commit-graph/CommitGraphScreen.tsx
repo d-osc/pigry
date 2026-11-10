@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDown,
   CalendarRange,
+  ChevronLeft,
   Cloud,
   FolderOpen,
   GitBranch,
@@ -19,6 +20,9 @@ import { relativeTime } from '../../lib/relativeTime';
 import { laneColor } from '../../app/NavSidebar';
 import { CommitGraphColumn } from './CommitGraphColumn';
 import { CommitDetailPanel } from './CommitDetailPanel';
+import { AiAgentPanel } from '../explorer/AiAgentPanel';
+import { ResizeHandle } from '../../app/ResizeHandle';
+import { teamForScreen } from '../../lib/agentExtras';
 import './CommitGraphScreen.css';
 
 /** Muted author avatar tints from the design (cycled by initials). */
@@ -50,6 +54,9 @@ export function CommitGraphScreen({
   focusCommit?: string | null;
 }) {
   const { repository, fetchRemote, busy, notify, createBranch } = useRepository();
+  // AI Agent rail (same panel as Explorer, team defaults to Commit graph).
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiWidth, setAiWidth] = useState(340);
   const [includeRemotes, setIncludeRemotes] = useState(true);
   const [query, setQuery] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -411,6 +418,7 @@ export function CommitGraphScreen({
       {error && <div className="commit-history__notice">{error}</div>}
 
       <div className="commit-history__content">
+        <div className="commit-history__main">
         <div className="commit-history__table">
           <div className="commit-history__head commit-row commit-row--head">
             <span>Graph</span>
@@ -503,6 +511,33 @@ export function CommitGraphScreen({
             onClose={() => setSelectedCommit(null)}
             onStartRebase={onStartRebase}
           />
+        )}
+        </div>
+
+        {aiOpen && (
+          <ResizeHandle
+            orientation="v"
+            label="Resize AI panel"
+            onDelta={(dx) => setAiWidth((w) => Math.min(480, Math.max(280, w - dx)))}
+          />
+        )}
+        {aiOpen ? (
+          <AiAgentPanel
+            width={aiWidth}
+            fileName={repository?.name ?? 'orbit'}
+            defaultTeam={teamForScreen('commit-graph')}
+            onCollapse={() => setAiOpen(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            className="ai-rail-strip"
+            title="Show AI Agent panel"
+            onClick={() => setAiOpen(true)}
+          >
+            <ChevronLeft size={14} strokeWidth={1.5} />
+            <span>AI Agent</span>
+          </button>
         )}
       </div>
 

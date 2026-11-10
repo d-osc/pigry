@@ -34,6 +34,7 @@ import {
 import { FileTree } from './FileTree';
 import { EditorPane } from './EditorPane';
 import { AiAgentPanel } from './AiAgentPanel';
+import { teamForScreen } from '../../lib/agentExtras';
 import './ExplorerScreen.css';
 
 interface ExplorerScreenProps {
@@ -95,6 +96,14 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   // Draggable column widths (px).
   const [treeWidth, setTreeWidth] = useState(288);
+  // FILES panel folds away — default open, remembered across restarts.
+  const [filesOpen, setFilesOpen] = useState(() => {
+    try {
+      return localStorage.getItem('orbit:files-open') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [aiWidth, setAiWidth] = useState(360);
   // AI rail folds away — default closed, reopen via the edge strip.
   const [aiOpen, setAiOpen] = useState(false);
@@ -492,6 +501,69 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     ? repository?.files.find((file) => file.path === contextMenu.target.path)
     : undefined;
 
+  const handleMove = useCallback(
+    async (sourcePath: string, targetFolder: string) => {
+      if (!sourcePath || sourcePath === targetFolder || targetFolder.startsWith(`${sourcePath}/`)) {
+        return;
+      }
+      const base = sourcePath.split('/').pop() ?? sourcePath;
+      const newPath = targetFolder ? `${targetFolder}/${base}` : base;
+      if (newPath === sourcePath) return;
+      const isFolder = (tree?.entries ?? []).some(
+        (entry) => entry === sourcePath || entry.startsWith(`${sourcePath}/`),
+      );
+      try {
+        if (isFolder) {
+          await renameWorktreeFolder(sourcePath, newPath);
+        } else {
+          await renameWorktreeFile(sourcePath, newPath);
+        }
+        setTree(await getFileTree());
+        const remap = (tab: string) => {
+          if (tab === sourcePath) return newPath;
+          if (isFolder && tab.startsWith(`${sourcePath}/`)) {
+            return `${newPath}/${tab.slice(sourcePath.length + 1)}`;
+          }
+          return tab;
+        };
+        setOpenTabs((tabs) => tabs.map(remap));
+        setSelectedPath((current) => (current ? remap(current) : current));
+        notify(`Moved to ${newPath}`, 'success');
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      }
+    },
+    [tree],
+  );
+
+  // Remember the FILES panel fold state.
+  useEffect(() => {
+    try {
+      localStorage.setItem('orbit:files-open', filesOpen ? '1' : '0');
+    } catch {
+      // storage unavailable — session-only
+    }
+  }, [filesOpen]);
+
+  // VS Code reveal: keep the active file's parents expanded so its row
+  // stays visible in the tree.
+  useEffect(() => {
+    if (!activePath) return;
+    const t = window.setTimeout(() => {
+      setTreeOverrides((previous) => {
+        const added = new Set(previous?.added ?? []);
+        const parts = activePath.split('/');
+        let prefix = '';
+        for (const part of parts.slice(0, -1)) {
+          prefix = prefix ? `${prefix}/${part}` : part;
+          added.add(prefix);
+        }
+        return { added, removed: previous?.removed ?? new Set() };
+      });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [activePath]);
+
   const handleRename = useCallback(
     async (oldPath: string, newName: string, kind: 'file' | 'folder') => {
       setRenamingPath(null);
@@ -598,6 +670,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
         </div>
       </header>
       <div className="explorer-screen__body">
+        {filesOpen ? (
         <aside className="explorer-screen__tree" style={{ width: treeWidth }}>
           <div className="explorer-tree-head">
             <span>Files</span>
@@ -637,6 +710,14 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
                 onClick={handleCollapseAll}
               >
                 <FoldVertical size={13} strokeWidth={1.25} />
+              </button>
+              <button
+                type="button"
+                aria-label="Collapse FILES panel"
+                title="Hide FILES panel"
+                onClick={() => setFilesOpen(false)}
+              >
+                <ChevronLeft size={13} strokeWidth={1.25} />
               </button>
             </div>
           </div>
@@ -836,6 +917,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               void handleRename(path, name, isFolder ? 'folder' : 'file');
             }}
             onRenameCancel={() => setRenamingPath(null)}
+            onMove={(sourcePath, targetFolder) => void handleMove(sourcePath, targetFolder)}
+            revealPath={activePath}
           />
           )}
           <div className="explorer-tree-foot">
@@ -849,14 +932,28 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             )}
           </div>
         </aside>
+        ) : (
+          <button
+            type="button"
+            className="files-strip"
+            aria-label="Show FILES panel"
+            title="Show FILES panel"
+            onClick={() => setFilesOpen(true)}
+          >
+            <ChevronRight size={13} strokeWidth={1.5} />
+            <span>FILES</span>
+          </button>
+        )}
 
-        <ResizeHandle
-          orientation="v"
-          label="Resize file tree"
-          onDelta={(dx) =>
-            setTreeWidth((w) => Math.min(440, Math.max(200, w + dx)))
-          }
-        />
+        {filesOpen && (
+          <ResizeHandle
+            orientation="v"
+            label="Resize file tree"
+            onDelta={(dx) =>
+              setTreeWidth((w) => Math.min(440, Math.max(200, w + dx)))
+            }
+          />
+        )}
 
         {activePath ? (
           <section className="explorer-screen__editor-col">
@@ -929,6 +1026,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               activePath ? (activePath.split('/').pop() ?? activePath) : (repository?.name ?? 'platform')
             }
             selection={editorSelection}
+            defaultTeam={teamForScreen('explorer')}
             onCollapse={() => setAiOpen(false)}
           />
         ) : (

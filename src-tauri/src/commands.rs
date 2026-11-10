@@ -1768,44 +1768,51 @@ pub async fn compose_commit_message(
     git_state::compose_commit_message(&repo_path)
 }
 
+/// `scope` selects the memory store inside .orbit -- "teams/<team>" is the
+/// team-wide store, "teams/<team>/agents/<username>" an agent's private one;
+/// omitted = the project-wide store (.orbit/memory.vector.json).
 #[tauri::command]
 pub async fn memory_list(
     state: State<'_, Mutex<AppState>>,
+    scope: Option<String>,
 ) -> Result<Vec<memory_vector::MemoryEntry>, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    memory_vector::memory_list(&repo_path)
+    memory_vector::memory_list(&repo_path, scope.as_deref())
 }
 
 #[tauri::command]
 pub async fn memory_add(
     state: State<'_, Mutex<AppState>>,
+    scope: Option<String>,
     text: String,
 ) -> Result<memory_vector::MemoryEntry, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    memory_vector::memory_add(&repo_path, &text)
+    memory_vector::memory_add(&repo_path, scope.as_deref(), &text)
 }
 
 #[tauri::command]
 pub async fn memory_remove(
     state: State<'_, Mutex<AppState>>,
+    scope: Option<String>,
     id: String,
 ) -> Result<(), String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    memory_vector::memory_remove(&repo_path, &id)
+    memory_vector::memory_remove(&repo_path, scope.as_deref(), &id)
 }
 
 #[tauri::command]
 pub async fn memory_search(
     state: State<'_, Mutex<AppState>>,
+    scope: Option<String>,
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<memory_vector::MemoryHit>, String> {
@@ -1813,7 +1820,7 @@ pub async fn memory_search(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    memory_vector::memory_search(&repo_path, &query, limit.unwrap_or(5))
+    memory_vector::memory_search(&repo_path, scope.as_deref(), &query, limit.unwrap_or(5))
 }
 
 #[tauri::command]

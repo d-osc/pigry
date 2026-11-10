@@ -1,24 +1,49 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  Bold,
+  Bot,
   Brain,
   Check,
   ChevronDown,
+  ChevronRight,
+  Code,
   FileText,
-  History,
+  Heading2,
   ImageIcon,
+  Italic,
+  Link2,
+  List,
   Loader2,
+  MessageSquare,
   MessageSquarePlus,
   Paperclip,
   Pencil,
+  Plug,
   Puzzle,
+  Quote,
   Sparkles,
+  Strikethrough,
   Trash2,
+  Webhook,
+  Wrench,
   X,
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readWorktreeFile } from '../../lib/tauriClient';
+import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
+import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
+import { loadMcpServers } from '../../lib/mcpServers';
+import { loadAgents, readInstructions, runEventHooks } from '../../lib/agentExtras';
 import { renderMarkdown } from '../../lib/markdown';
+import {
+  AgentToolsTab,
+  AgentsTab,
+  HooksTab,
+  InstructionsTab,
+  McpTab,
+  PluginsTab,
+} from './AgentPanelTabs';
 import { MemoryDialog, SkillsDialog } from './RepoKnowledge';
 import { useRepository } from '../../hooks/useRepository';
 import { relativeTime } from '../../lib/relativeTime';
@@ -27,6 +52,7 @@ import {
   deleteSessionFile,
   listSessions,
   migrateLocalSessions,
+  renameSessionFile,
   saveSession,
   setActiveSessionId,
   titleFromMessages,
@@ -57,6 +83,22 @@ interface AttachedFile {
 /** Chat message — storage shape lives in aiSessions. */
 type ChatMessage = AiChatMessage;
 
+/** "14:32" today, "Nov 8, 14:32" otherwise — shown next to the sender name. */
+function fmtMsgTime(time?: number): string {
+  if (!time) return '';
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return '';
+  const clock = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const sameDay = new Date().toDateString() === date.toDateString();
+  if (sameDay) return clock;
+  const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${day}, ${clock}`;
+}
+
 /** Full store entry for a detected CLI agent (no HTTP config). */
 function cliEntry(id: string, name: string, type: 'claude-code' | 'codex', model: string): AiProviderEntry {
   return {
@@ -80,6 +122,9 @@ interface AiAgentPanelProps {
   onCollapse: () => void;
   /** Current editor text selection (VS Code-style "add selection to chat"). */
   selection?: { path: string; text: string; startLine: number; endLine: number } | null;
+  /** Team preselected in the Agents tab's "Add agent" form (from the active
+   * workspace menu). */
+  defaultTeam?: string;
 }
 
 /** One-click prompts shown on the empty state. */
@@ -90,8 +135,11 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
 ];
 
-export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgentPanelProps) {
-  const { notify } = useRepository();
+export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam }: AiAgentPanelProps) {
+  const { repository, notify } = useRepository();
+  // Chats and memories live under this team's .orbit/teams/<team>/ store.
+  const team = defaultTeam ?? 'Copilot';
+  const chatScope = useMemo(() => ({ team }), [team]);
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
@@ -112,6 +160,22 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  /** Which section of the panel is visible — chat body or one of the tool tabs. */
+  const [panelTab, setPanelTab] = useState<
+    'chat' | 'tools' | 'mcp' | 'plugins' | 'agents' | 'hooks' | 'instructions'
+  >('chat');
+  /** Active group-chat name; custom=true once the user renames the group. */
+  const [groupTitle, setGroupTitle] = useState<{ name: string; custom: boolean }>({
+    name: '',
+    custom: false,
+  });
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  /** Inline rename of the group name shown in the header. */
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  /** The signed-in GitHub account — real name + avatar on user messages. */
+  const [ghUser, setGhUser] = useState<{ name: string; login: string; avatarUrl: string } | null>(null);
   const [images, setImages] = useState<ChatImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState('');
@@ -192,7 +256,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   // Chat sessions (Copilot-style) stored IN the repo under .orbit/chat/:
   // migrate legacy localStorage sessions, restore the active one on mount,
   // and save the file on every change. Sessions with no messages are not kept.
-  const [sessionId, setSessionId] = useState(() => activeSessionId());
+  const [sessionId, setSessionId] = useState(() => activeSessionId(chatScope));
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
   const sessionsRef = useRef<HTMLDivElement | null>(null);
@@ -203,19 +267,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await migrateLocalSessions();
-      const sessions = await listSessions();
+      await migrateLocalSessions(chatScope);
+      const sessions = await listSessions(chatScope);
       if (cancelled) return;
-      let id = activeSessionId();
+      let id = activeSessionId(chatScope);
       let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
       if (!restored && sessions.length > 0) {
         restored = sessions[0];
         id = restored.id;
-        setActiveSessionId(id);
+        setActiveSessionId(id, chatScope);
       }
       if (!id) {
         id = `chat-${Date.now().toString(36)}`;
-        setActiveSessionId(id);
+        setActiveSessionId(id, chatScope);
       }
       setSessionId(id);
       if (restored) {
@@ -227,6 +291,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     return () => {
       cancelled = true;
     };
+    // Restore runs once per mount — the team does not change on this screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -235,17 +301,18 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     (async () => {
       await saveSession({
         id: sessionId,
-        title: titleFromMessages(messages),
+        title: groupTitle.custom ? groupTitle.name : titleFromMessages(messages),
+        titleCustom: groupTitle.custom,
         createdAt: createdAtRef.current,
         updatedAt: Date.now(),
         messages,
-      });
-      if (!cancelled) setSessionList(await listSessions());
+      }, chatScope);
+      if (!cancelled) setSessionList(await listSessions(chatScope));
     })();
     return () => {
       cancelled = true;
     };
-  }, [messages, sessionId]);
+  }, [messages, sessionId, groupTitle, chatScope]);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -263,12 +330,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     return () => document.removeEventListener('mousedown', onDoc, true);
   }, [sessionsOpen]);
 
+  // The signed-in GitHub account — real name + avatar on user messages.
+  // Reads the shared ghProfile cache (fetched at app start, kept fresh by
+  // the title bar account menu).
+  useEffect(
+    () =>
+      subscribeGhProfile((profile) => {
+        setGhUser(profile ? { name: profile.login, login: profile.name, avatarUrl: profile.avatarUrl } : null);
+      }),
+    [],
+  );
+
   /** Starts a fresh conversation; the previous one stays in history. */
   const startNewChat = () => {
     const id = `chat-${Date.now().toString(36)}`;
-    setActiveSessionId(id);
+    setActiveSessionId(id, chatScope);
     setSessionId(id);
     createdAtRef.current = Date.now();
+    setGroupTitle({ name: '', custom: false });
     setMessages([]);
     setInput('');
     setImages([]);
@@ -277,18 +356,36 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
   };
 
   const switchSession = (session: AiChatSession) => {
-    setActiveSessionId(session.id);
+    setActiveSessionId(session.id, chatScope);
     setSessionId(session.id);
     createdAtRef.current = session.createdAt;
+    setGroupTitle({ name: session.title, custom: session.titleCustom === true });
     setMessages(session.messages);
     setInput('');
     setEditingIndex(null);
     setSessionsOpen(false);
   };
 
+  /** Renames the group chat on disk and refreshes the list. */
+  const commitRename = async (session: AiChatSession, name: string) => {
+    const title = name.trim();
+    if (!title) {
+      setRenamingId(null);
+      return;
+    }
+    try {
+      await renameSessionFile(session.id, title, chatScope);
+      setSessionList(await listSessions(chatScope));
+      if (session.id === sessionId) setGroupTitle({ name: title, custom: true });
+    } catch (error) {
+      notify(`Could not rename group: ${String(error)}`, 'error');
+    }
+    setRenamingId(null);
+  };
+
   const removeSession = async (id: string) => {
-    await deleteSessionFile(id);
-    const kept = await listSessions();
+    await deleteSessionFile(id, chatScope);
+    const kept = await listSessions(chatScope);
     setSessionList(kept);
     if (id === sessionId) startNewChat();
   };
@@ -309,6 +406,58 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
         };
         reader.readAsDataURL(file);
       });
+  };
+
+  /** Wraps the composer selection with markdown tokens (bold, code, link…). */
+  const applyMdWrap = (before: string, after: string, placeholder: string) => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? input.length;
+    const end = ta?.selectionEnd ?? input.length;
+    const selected = input.slice(start, end);
+    const body = selected || placeholder;
+    setInput(input.slice(0, start) + before + body + after + input.slice(end));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      const selStart = start + before.length;
+      ta.setSelectionRange(selStart, selStart + body.length);
+    });
+  };
+
+  /** Prefixes every selected line (lists, quotes, headings). */
+  const applyMdPrefix = (prefix: string) => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? 0;
+    const end = ta?.selectionEnd ?? 0;
+    const lineStart = input.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const block = input.slice(lineStart, end);
+    const prefixed = block
+      ? block.split('\n').map((line) => (line.startsWith(prefix) ? line : prefix + line)).join('\n')
+      : prefix;
+    setInput(input.slice(0, lineStart) + prefixed + input.slice(end));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(lineStart, lineStart + prefixed.length);
+    });
+  };
+
+  /** Inline `code`, or a fenced block when the selection spans lines. */
+  const applyMdCode = () => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? 0;
+    const end = ta?.selectionEnd ?? 0;
+    const multi = input.slice(start, end).includes('\n');
+    applyMdWrap(multi ? '```\n' : '`', multi ? '\n```' : '`', 'code');
+  };
+
+  /** Paste support — images from the clipboard attach as chat images. */
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = event.clipboardData?.files;
+    if (files && Array.from(files).some((file) => file.type.startsWith('image/'))) {
+      event.preventDefault();
+      attachImages(files);
+    }
   };
 
   const attachActiveFile = async () => {
@@ -344,6 +493,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           role: 'assistant',
           text: 'No AI provider configured — add one in Settings → AI Provider.',
           error: true,
+          time: Date.now(),
         },
       ]);
       return;
@@ -355,7 +505,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     let memoryText = '';
     let skillsText = '';
     try {
-      const hits = await memorySearch(text, 5);
+      const hits = await memorySearch(text, 5, team);
       if (hits.length > 0) {
         memoryText = hits.map((hit) => `- ${hit.text}`).join('\n').slice(0, 2000);
       }
@@ -383,6 +533,64 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     }
     if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
     if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
+    // Project instructions (.orbit/instructions.md) — always ride along.
+    try {
+      const instructions = (await readInstructions()).trim();
+      if (instructions) context += `\n\n[Project instructions]\n${instructions.slice(0, 4000)}`;
+    } catch {
+      // no instructions file yet
+    }
+    // Agents defined on the Agents tab — the model can reference them by name.
+    try {
+      const agents = loadAgents().filter((agent) => agent.enabled);
+      if (agents.length > 0) {
+        context +=
+          `\n\n[Available agents]\n` +
+          agents
+            .map((agent) => {
+              const parts = [
+                `- ${agent.username ? `@${agent.username} ` : ''}${agent.name}`,
+              ];
+              if (agent.role) parts.push(` (${agent.role})`);
+              if (agent.team) parts.push(` [team: ${agent.team}]`);
+              if (agent.description) parts.push(` — ${agent.description}`);
+              if (agent.tools.length > 0) parts.push(` | tools: ${agent.tools.join(', ')}`);
+              if (agent.skills.length > 0) parts.push(` | skills: ${agent.skills.join(', ')}`);
+              if (agent.mcpServers.length > 0) parts.push(` | mcp: ${agent.mcpServers.join(', ')}`);
+              return parts.join('');
+            })
+            .join('\n');
+      }
+    } catch {
+      // agent registry unavailable
+    }
+    // before-send hooks (Commands tab on Hooks) run in the repository root.
+    try {
+      await runEventHooks('before-send', repository?.localPath ?? '.');
+    } catch {
+      // hook execution must never block a send
+    }
+    // Announce the tool surface the user allows (Settings → Tools / MCP).
+    try {
+      const enabled = loadEnabledTools();
+      const toolsText = enabledToolsSummary(enabled);
+      const mcpServers = loadMcpServers().filter((server) => server.enabled);
+      const mcpNames = mcpServers.map((server) => server.name);
+      const toolBlocks: string[] = [];
+      if (toolsText) {
+        toolBlocks.push(
+          `[Available tools — you may reference these; the user runs them from the app]\n${toolsText}`,
+        );
+      }
+      if (mcpNames.length > 0) {
+        toolBlocks.push(
+          `[MCP servers enabled]\n${mcpNames.map((name) => `- ${name}`).join('\n')}`,
+        );
+      }
+      if (toolBlocks.length > 0) context += `\n\n${toolBlocks.join('\n\n')}`;
+    } catch {
+      // tool registry unavailable
+    }
     if (activeSelection) {
       context += `\n\n[Selected code — ${activeSelection.path}:${activeSelection.startLine}-${activeSelection.endLine}]\n${activeSelection.text.slice(0, 8000)}`;
     }
@@ -393,6 +601,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
     const userMessage: ChatMessage = {
       role: 'user',
       text,
+      time: Date.now(),
       context,
       selection: activeSelection
         ? {
@@ -416,7 +625,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
    * discarded and a fresh reply is generated. */
   const resendEdited = async (index: number, newText: string) => {
     if (sending || !newText.trim()) return;
-    const edited: ChatMessage = { ...messages[index], text: newText.trim() };
+    const edited: ChatMessage = { ...messages[index], text: newText.trim(), time: Date.now() };
     const history = [...messages.slice(0, index), edited];
     setMessages(history);
     setEditingIndex(null);
@@ -432,11 +641,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
       const cli = active.type === 'claude-code' ? 'claude' : 'codex';
       try {
         const output = await cliAgentRun(cli, last.text);
-        setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)' }]);
+        setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)', time: Date.now() }]);
       } catch (error) {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true },
+          { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: Date.now() },
         ]);
       } finally {
         setSending(false);
@@ -523,9 +732,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           | null;
         const message =
           err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`;
-        setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true }]);
+        setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true, time: Date.now() }]);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', text: assistantText }]);
+        setMessages((m) => [...m, { role: 'assistant', text: assistantText, time: Date.now() }]);
       }
     } catch (error) {
       setMessages((m) => [
@@ -534,10 +743,17 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           role: 'assistant',
           text: error instanceof Error ? error.message : String(error),
           error: true,
+          time: Date.now(),
         },
       ]);
     } finally {
       setSending(false);
+      // after-reply hooks (Hooks tab) run once the reply lands or fails.
+      try {
+        await runEventHooks('after-reply', repository?.localPath ?? '.');
+      } catch {
+        // never block the UI on a hook
+      }
     }
   };
 
@@ -552,113 +768,218 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
 
   const providerLabel = active ? `${active.name || active.type}${active.model ? ' · ' + active.model : ''}` : 'No provider';
 
+  /** The group name in the header: custom name > auto title > default. */
+  const headerTitle =
+    groupTitle.custom && groupTitle.name
+      ? groupTitle.name
+      : messages.length > 0
+        ? titleFromMessages(messages)
+        : 'New group';
+
+  /** Saves the header rename — the autosave effect persists it to the session file. */
+  const commitTitle = () => {
+    const name = titleDraft.trim();
+    if (name) setGroupTitle({ name, custom: true });
+    setEditingTitle(false);
+  };
+
   return (
     <aside className="explorer-ai" style={{ width }}>
       <header className="explorer-ai__header">
-        <div className="explorer-ai__title">
-          <span className="explorer-ai__badge">
-            <i />
-            AI
-          </span>
-          <strong>AI Agent</strong>
-        </div>
+        <button
+          type="button"
+          className="explorer-ai__collapse"
+          aria-label="Collapse AI panel"
+          title="Hide AI Agent panel"
+          onClick={onCollapse}
+        >
+          <ChevronRight size={12} strokeWidth={1.5} />
+        </button>
+        {editingTitle ? (
+          <input
+            className="explorer-ai__title-input"
+            autoFocus
+            value={titleDraft}
+            aria-label="Group chat name"
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitTitle();
+              if (event.key === 'Escape') setEditingTitle(false);
+            }}
+            onBlur={commitTitle}
+          />
+        ) : (
+          <button
+            type="button"
+            className="explorer-ai__title explorer-ai__title--edit"
+            title="Rename group chat"
+            onClick={() => {
+              setTitleDraft(headerTitle);
+              setEditingTitle(true);
+            }}
+          >
+            <strong>{headerTitle}</strong>
+            <Pencil size={10} strokeWidth={1.5} className="explorer-ai__title-pen" />
+          </button>
+        )}
         <div className="explorer-ai__header-actions">
-          <span className="explorer-ai__ctx-chip" title={fileName}>
-            {fileName}
-          </span>
-          <button
-            type="button"
-            className="ai-sessions-btn"
-            title="Project memory (.orbit/memory.md)"
-            aria-label="Project memory"
-            onClick={() => setKnowDialog('memory')}
-          >
-            <Brain size={12} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="ai-sessions-btn"
-            title="Project skills (.orbit/skills/)"
-            aria-label="Project skills"
-            onClick={() => setKnowDialog('skills')}
-          >
-            <Puzzle size={12} strokeWidth={1.5} />
-          </button>
           <div className="ai-sessions-wrap" ref={sessionsRef}>
-            <button
+          <button
               type="button"
               className="ai-sessions-btn"
-              title="Chat history"
-              aria-label="Chat history"
+              title="Group chat"
+              aria-label="Group chat"
               onClick={() => {
-                void listSessions().then(setSessionList);
+                void listSessions(chatScope).then(setSessionList);
                 setSessionsOpen((open) => !open);
               }}
             >
-              <History size={12} strokeWidth={1.5} />
+              <MessageSquarePlus size={12} strokeWidth={1.5} />
             </button>
             {sessionsOpen && (
-              <div className="ai-sessions" role="menu" aria-label="Saved chats">
+              <div className="ai-sessions" role="menu" aria-label="Group chats">
                 <div className="ai-sessions__head">
-                  <span className="ai-sessions__title">Chat history</span>
+                  <span className="ai-sessions__title">Group Chat</span>
                   <button type="button" className="ai-sessions__new" onClick={startNewChat}>
                     <MessageSquarePlus size={11} strokeWidth={1.5} />
-                    New chat
+                    New group
                   </button>
                 </div>
                 {sessionList.length === 0 && (
-                  <p className="ai-sessions__empty">No saved chats yet.</p>
+                  <p className="ai-sessions__empty">No groups yet — start typing to create one.</p>
                 )}
-                {sessionList.map((session) => (
-                  <div
-                    key={session.id}
-                    className={`ai-sessions__item${session.id === sessionId ? ' ai-sessions__item--active' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className="ai-sessions__item-main"
-                      onClick={() => switchSession(session)}
+                {sessionList.map((session) =>
+                  renamingId === session.id ? (
+                    <div key={session.id} className="ai-sessions__item ai-sessions__item--rename">
+                      <input
+                        autoFocus
+                        className="ai-sessions__rename"
+                        value={renameDraft}
+                        aria-label="Group name"
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') void commitRename(session, renameDraft);
+                          if (event.key === 'Escape') setRenamingId(null);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="ai-sessions__item-del"
+                        title="Save name"
+                        aria-label="Save group name"
+                        onClick={() => void commitRename(session, renameDraft)}
+                      >
+                        <Check size={10} strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        className="ai-sessions__item-del"
+                        title="Cancel"
+                        aria-label="Cancel rename"
+                        onClick={() => setRenamingId(null)}
+                      >
+                        <X size={10} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      key={session.id}
+                      className={`ai-sessions__item${session.id === sessionId ? ' ai-sessions__item--active' : ''}`}
                     >
-                      <span className="ai-sessions__item-title">{session.title}</span>
-                      <span className="ai-sessions__item-meta">
-                        {session.messages.length} msgs · {relativeTime(Math.floor(session.updatedAt / 1000))}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="ai-sessions__item-del"
-                      title="Delete chat"
-                      aria-label={`Delete chat ${session.title}`}
-                      onClick={() => removeSession(session.id)}
-                    >
-                      <X size={10} strokeWidth={2} />
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        type="button"
+                        className="ai-sessions__item-main"
+                        onClick={() => switchSession(session)}
+                      >
+                        <span className="ai-sessions__item-title">{session.title}</span>
+                        <span className="ai-sessions__item-meta">
+                          {session.messages.length} msgs · {relativeTime(Math.floor(session.updatedAt / 1000))}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="ai-sessions__item-ren"
+                        title="Rename group"
+                        aria-label={`Rename group ${session.title}`}
+                        onClick={() => {
+                          setRenamingId(session.id);
+                          setRenameDraft(session.title);
+                        }}
+                      >
+                        <Pencil size={10} strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        className="ai-sessions__item-del"
+                        title="Delete group"
+                        aria-label={`Delete group ${session.title}`}
+                        onClick={() => removeSession(session.id)}
+                      >
+                        <X size={10} strokeWidth={2} />
+                      </button>
+                    </div>
+                  ),
+                )}
               </div>
             )}
-          </div>
-          <button
-            type="button"
-            className="explorer-ai__collapse"
-            title="New chat"
-            aria-label="Start a new chat"
-            onClick={startNewChat}
-          >
-            <MessageSquarePlus size={12} strokeWidth={1.5} />
-          </button>
-          <button
-            type="button"
-            className="explorer-ai__collapse"
-            aria-label="Collapse AI panel"
-            title="Hide AI Agent panel"
-            onClick={onCollapse}
-          >
-            <X size={12} strokeWidth={1.5} />
-          </button>
+        </div>
         </div>
       </header>
 
+      <nav className="explorer-ai__tabs" role="tablist" aria-label="AI agent sections">
+        {(
+          [
+            { id: 'chat', label: 'Chat', Icon: MessageSquare },
+            { id: 'tools', label: 'Tools', Icon: Wrench },
+            { id: 'mcp', label: 'MCP', Icon: Plug },
+            { id: 'plugins', label: 'Plugins', Icon: Puzzle },
+            { id: 'agents', label: 'Agents', Icon: Bot },
+            { id: 'hooks', label: 'Hooks', Icon: Webhook },
+            { id: 'instructions', label: 'Instructions', Icon: FileText },
+          ] as const
+        ).map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={panelTab === id}
+            aria-label={label}
+            title={label}
+            className={`explorer-ai__tab${panelTab === id ? ' explorer-ai__tab--active' : ''}`}
+            onClick={() => setPanelTab(id)}
+          >
+            <Icon size={14} strokeWidth={1.5} />
+          </button>
+        ))}
+        <span className="explorer-ai__tabs-spacer" />
+        <button
+          type="button"
+          className="ai-sessions-btn"
+          title="Project memory (.orbit/memory.md)"
+          aria-label="Project memory"
+          onClick={() => setKnowDialog('memory')}
+        >
+          <Brain size={12} strokeWidth={1.5} />
+        </button>
+        <button
+          type="button"
+          className="ai-sessions-btn"
+          title="Project skills (.orbit/skills/)"
+          aria-label="Project skills"
+          onClick={() => setKnowDialog('skills')}
+        >
+          <Puzzle size={12} strokeWidth={1.5} />
+        </button>
+      </nav>
+
+      {panelTab === 'tools' && <AgentToolsTab />}
+      {panelTab === 'mcp' && <McpTab />}
+      {panelTab === 'plugins' && <PluginsTab />}
+      {panelTab === 'agents' && <AgentsTab defaultTeam={defaultTeam} />}
+      {panelTab === 'hooks' && <HooksTab />}
+      {panelTab === 'instructions' && <InstructionsTab />}
+      {panelTab === 'chat' && (
+      <>
       <div className="explorer-ai__body" ref={bodyRef}>
         {messages.length === 0 ? (
           <div className="ai-hero">
@@ -687,18 +1008,28 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           </div>
         ) : (
           <section className="explorer-ai__section">
-            <div className="explorer-ai__card">
-              {messages.map((message, index) => {
-                const isUser = message.role === 'user';
-                const editing = editingIndex === index;
-                return (
-                  <div
-                    key={index}
-                    className={`explorer-ai__msg ${isUser ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}
-                  >
+            {messages.map((message, index) => {
+              const isUser = message.role === 'user';
+              const editing = editingIndex === index;
+              return (
+                <div
+                  key={index}
+                  className={`explorer-ai__card explorer-ai__msg ${isUser ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}
+                >
                     <div className="explorer-ai__msg-meta">
-                      <span className="explorer-ai__avatar">{isUser ? 'You' : 'AI'}</span>
-                      <span className="explorer-ai__msg-name">{isUser ? 'You' : 'AI Agent'}</span>
+                      <span className="explorer-ai__avatar">
+                        {isUser && ghUser?.avatarUrl ? (
+                          <img src={ghUser.avatarUrl} alt={ghUser.name} />
+                        ) : (
+                          isUser ? 'You' : 'AI'
+                        )}
+                      </span>
+                      <span className="explorer-ai__msg-name">
+                        {isUser ? ghUser?.login || 'You' : 'AI Agent'}
+                      </span>
+                      {message.time && (
+                        <span className="explorer-ai__msg-time">{fmtMsgTime(message.time)}</span>
+                      )}
                       {isUser && !editing && (
                         <button
                           type="button"
@@ -767,7 +1098,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
                           </div>
                         )}
                         <div className="explorer-ai__msg-text">
-                          {isUser ? message.text : renderMarkdown(message.text)}
+                          {renderMarkdown(message.text)}
                         </div>
                       </>
                     )}
@@ -775,7 +1106,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
                 );
               })}
               {sending && (
-                <div className="explorer-ai__msg">
+                <div className="explorer-ai__card explorer-ai__msg">
                   <div className="explorer-ai__msg-meta">
                     <span className="explorer-ai__avatar">AI</span>
                     <span className="explorer-ai__msg-name">AI Agent</span>
@@ -787,13 +1118,38 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
                   </span>
                 </div>
               )}
-            </div>
           </section>
         )}
       </div>
 
       <footer className="explorer-ai__footer">
         <div className="ai-composer">
+          <div className="ai-composer__mdtools" role="toolbar" aria-label="Markdown formatting">
+            <button type="button" title="Bold **…**" onClick={() => applyMdWrap('**', '**', 'bold')}>
+              <Bold size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Italic _…_" onClick={() => applyMdWrap('_', '_', 'italic')}>
+              <Italic size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Strikethrough ~~…~~" onClick={() => applyMdWrap('~~', '~~', 'strike')}>
+              <Strikethrough size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Code" onClick={applyMdCode}>
+              <Code size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Heading ##" onClick={() => applyMdPrefix('## ')}>
+              <Heading2 size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Link […](url)" onClick={() => applyMdWrap('[', '](https://)', 'link text')}>
+              <Link2 size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Bullet list -" onClick={() => applyMdPrefix('- ')}>
+              <List size={12} strokeWidth={1.5} />
+            </button>
+            <button type="button" title="Quote >" onClick={() => applyMdPrefix('> ')}>
+              <Quote size={12} strokeWidth={1.5} />
+            </button>
+          </div>
           {(activeSelection || attachedFiles.length > 0 || images.length > 0) && (
             <div className="ai-composer__attachments">
               {activeSelection && (
@@ -841,11 +1197,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           <textarea
             ref={textareaRef}
             className="ai-composer__input"
-            placeholder={`Ask AI to improve this file… (Enter to send)`}
+            placeholder={`Ask AI to improve this file… (markdown supported, paste images)`}
             aria-label="Ask AI"
             value={input}
             rows={2}
             onChange={(event) => setInput(event.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
@@ -925,6 +1282,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
           {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
         </div>
       </footer>
+      </>
+      )}
 
       {modelDialogOpen && (
         <ModelPickerDialog
@@ -950,6 +1309,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection }: AiAgent
         <MemoryDialog
           onClose={() => setKnowDialog(null)}
           notify={notify}
+          team={team}
         />
       )}
       {knowDialog === 'skills' && (

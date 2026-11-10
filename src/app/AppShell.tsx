@@ -6,11 +6,14 @@ import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
 import { ShortcutSheet } from './ShortcutSheet';
-import { ChevronsRight, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronsRight, Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
 import { getFileTree, readWorktreeFile } from '../lib/tauriClient';
+import { AiAgentPanel } from '../screens/explorer/AiAgentPanel';
+import { ResizeHandle } from './ResizeHandle';
+import { teamForScreen } from '../lib/agentExtras';
 import {
   useRepository,
   RepositoryProvider,
@@ -31,6 +34,17 @@ import { WikiScreen } from '../screens/wiki/WikiScreen';
 import { SecurityScreen } from '../screens/security/SecurityScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import './AppShell.css';
+
+/** Workspace screens that show the shared AI Agent rail. */
+const AI_RAIL_SCREENS: NavId[] = [
+  'working-changes',
+  'pull-requests',
+  'releases',
+  'issues',
+  'projects',
+  'wiki',
+  'security',
+];
 
 function ErrorBanner() {
   const { error } = useRepository();
@@ -144,6 +158,10 @@ function AppShellInner() {
   const [focusCommit, setFocusCommit] = useState<string | null>(null);
   const [rebaseBase, setRebaseBase] = useState<string | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // Shared AI Agent rail — shown on the workspace screens listed above.
+  // One instance, so chats persist while hopping between those screens.
+  const [railOpen, setRailOpen] = useState(false);
+  const [railWidth, setRailWidth] = useState(340);
   const repository = useRepository();
   const { mode } = repository;
   // The landing screen (repository picker) shows at startup; "Go home"
@@ -419,6 +437,32 @@ function AppShellInner() {
                   <ErrorBanner />
                   {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
                 </main>
+                {AI_RAIL_SCREENS.includes(screen) && railOpen && (
+                  <ResizeHandle
+                    orientation="v"
+                    label="Resize AI panel"
+                    onDelta={(dx) => setRailWidth((w) => Math.min(480, Math.max(280, w - dx)))}
+                  />
+                )}
+                {AI_RAIL_SCREENS.includes(screen) &&
+                  (railOpen ? (
+                    <AiAgentPanel
+                      width={railWidth}
+                      fileName={repository.repository?.name ?? 'orbit'}
+                      defaultTeam={teamForScreen(screen)}
+                      onCollapse={() => setRailOpen(false)}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="ai-rail-strip"
+                      title="Show AI Agent panel"
+                      onClick={() => setRailOpen(true)}
+                    >
+                      <ChevronLeft size={14} strokeWidth={1.5} />
+                      <span>AI Agent</span>
+                    </button>
+                  ))}
               </div>
               <StatusBar />
             </>

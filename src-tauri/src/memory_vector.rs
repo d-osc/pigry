@@ -53,12 +53,42 @@ fn workdir(repo_path: &Path) -> Result<PathBuf> {
         .to_path_buf())
 }
 
-fn store_path(repo_path: &Path) -> Result<PathBuf> {
-    Ok(workdir(repo_path)?.join(STORE_PATH))
+/// Resolves `.orbit/<scope>` for a team/agent scope. `scope` is a relative
+/// subpath like "teams/Explorer" (team store) or
+/// "teams/Explorer/agents/browser" (that agent's private store) -- segments
+/// are validated so nothing escapes the .orbit directory.
+fn orbit_scope_path(scope: Option<&str>) -> Result<PathBuf> {
+    let Some(scope) = scope.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(PathBuf::from(".orbit"));
+    };
+    let mut path = PathBuf::from(".orbit");
+    for segment in scope.split('/') {
+        let segment = segment.trim();
+        if segment.is_empty()
+            || segment.contains("..")
+            || segment.contains('\\')
+            || !segment
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | ' '))
+        {
+            return Err("invalid memory scope".to_string());
+        }
+        path.push(segment);
+    }
+    Ok(path)
 }
 
-fn mirror_path(repo_path: &Path) -> Result<PathBuf> {
-    Ok(workdir(repo_path)?.join(MIRROR_PATH))
+fn store_path(repo_path: &Path, scope: Option<&str>) -> Result<PathBuf> {
+    // orbit_scope_path already includes the .orbit prefix.
+    Ok(workdir(repo_path)?
+        .join(orbit_scope_path(scope)?)
+        .join("memory.vector.json"))
+}
+
+fn mirror_path(repo_path: &Path, scope: Option<&str>) -> Result<PathBuf> {
+    Ok(workdir(repo_path)?
+        .join(orbit_scope_path(scope)?)
+        .join("memory.md"))
 }
 
 fn load_store(path: &Path) -> MemoryStore {
@@ -131,23 +161,27 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Regenerates the human-readable markdown mirror.
-fn write_mirror(repo_path: &Path, entries: &[MemoryEntry]) -> Result<()> {
+fn write_mirror(repo_path: &Path, entries: &[MemoryEntry], scope: Option<&str>) -> Result<()> {
     let mut sorted: Vec<&MemoryEntry> = entries.iter().collect();
     sorted.sort_by_key(|e| e.created_at);
     let mut body = String::from("# Project memory\n");
     for entry in sorted.iter().take(MIRROR_CAP) {
         body.push_str(&format!("- {}\n", entry.text));
     }
-    fs::write(mirror_path(repo_path)?, body).map_err(err)
+    fs::write(mirror_path(repo_path, scope)?, body).map_err(err)
 }
 
 /// Seeds the store from the markdown mirror on first run (upgrade path from
 /// the flat file), so existing memories are not lost.
-fn seed_from_mirror(repo_path: &Path, store: &mut MemoryStore) -> Result<()> {
+fn seed_from_mirror(
+    repo_path: &Path,
+    scope: Option<&str>,
+    store: &mut MemoryStore,
+) -> Result<()> {
     if !store.entries.is_empty() {
         return Ok(());
     }
-    let mirror = mirror_path(repo_path)?;
+    let mirror = mirror_path(repo_path, scope)?;
     let Ok(text) = fs::read_to_string(mirror) else {
         return Ok(());
     };
@@ -166,28 +200,28 @@ fn seed_from_mirror(repo_path: &Path, store: &mut MemoryStore) -> Result<()> {
         }
     }
     if !store.entries.is_empty() {
-        save_store(&store_path(repo_path)?, store)?;
+        save_store(&store_path(repo_path, scope)?, store)?;
     }
     Ok(())
 }
 
 /// Lists all memories (ordered oldest first, as written).
-pub fn memory_list(repo_path: &Path) -> Result<Vec<MemoryEntry>> {
-    let path = store_path(repo_path)?;
+pub fn memory_list(repo_path: &Path, scope: Option<&str>) -> Result<Vec<MemoryEntry>> {
+    let path = store_path(repo_path, scope)?;
     let mut store = load_store(&path);
-    seed_from_mirror(repo_path, &mut store)?;
+    seed_from_mirror(repo_path, scope, &mut store)?;
     Ok(store.entries)
 }
 
 /// Adds a memory (dedupes identical text) and refreshes the markdown mirror.
-pub fn memory_add(repo_path: &Path, text: &str) -> Result<MemoryEntry> {
+pub fn memory_add(repo_path: &Path, scope: Option<&str>, text: &str) -> Result<MemoryEntry> {
     let text = text.trim().to_string();
     if text.is_empty() {
         return Err("memory text must not be empty".to_string());
     }
-    let path = store_path(repo_path)?;
+    let path = store_path(repo_path, scope)?;
     let mut store = load_store(&path);
-    seed_from_mirror(repo_path, &mut store)?;
+    seed_from_mirror(repo_path, scope, &mut store)?;
     if let Some(existing) = store.entries.iter().find(|e| e.text == text) {
         return Ok(existing.clone());
     }
@@ -199,30 +233,35 @@ pub fn memory_add(repo_path: &Path, text: &str) -> Result<MemoryEntry> {
     };
     store.entries.push(entry.clone());
     save_store(&path, &store)?;
-    write_mirror(repo_path, &store.entries)?;
+    write_mirror(repo_path, &store.entries, scope)?;
     Ok(entry)
 }
 
 /// Removes a memory by id and refreshes the markdown mirror.
-pub fn memory_remove(repo_path: &Path, id: &str) -> Result<()> {
-    let path = store_path(repo_path)?;
+pub fn memory_remove(repo_path: &Path, scope: Option<&str>, id: &str) -> Result<()> {
+    let path = store_path(repo_path, scope)?;
     let mut store = load_store(&path);
-    seed_from_mirror(repo_path, &mut store)?;
+    seed_from_mirror(repo_path, scope, &mut store)?;
     let before = store.entries.len();
     store.entries.retain(|e| e.id != id);
     if store.entries.len() == before {
         return Err(format!("memory {id} not found"));
     }
     save_store(&path, &store)?;
-    write_mirror(repo_path, &store.entries)?;
+    write_mirror(repo_path, &store.entries, scope)?;
     Ok(())
 }
 
 /// Semantic search: the most similar memories for a query, best first.
-pub fn memory_search(repo_path: &Path, query: &str, limit: usize) -> Result<Vec<MemoryHit>> {
-    let path = store_path(repo_path)?;
+pub fn memory_search(
+    repo_path: &Path,
+    scope: Option<&str>,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<MemoryHit>> {
+    let path = store_path(repo_path, scope)?;
     let mut store = load_store(&path);
-    seed_from_mirror(repo_path, &mut store)?;
+    seed_from_mirror(repo_path, scope, &mut store)?;
     let qvec = embed(query);
     let mut hits: Vec<MemoryHit> = store
         .entries
@@ -270,11 +309,11 @@ mod tests {
     #[test]
     fn add_search_remove_roundtrip() {
         let dir = scratch("roundtrip");
-        memory_add(&dir, "tests must run serially on windows").unwrap();
-        memory_add(&dir, "the frontend uses react 19 and vite").unwrap();
-        memory_add(&dir, "deploy with docker compose up -d").unwrap();
+        memory_add(&dir, None, "tests must run serially on windows").unwrap();
+        memory_add(&dir, None, "the frontend uses react 19 and vite").unwrap();
+        memory_add(&dir, None, "deploy with docker compose up -d").unwrap();
 
-        let hits = memory_search(&dir, "how do I run the tests?", 2).unwrap();
+        let hits = memory_search(&dir, None, "how do I run the tests?", 2).unwrap();
         assert!(!hits.is_empty());
         assert!(
             hits[0].text.contains("serially"),
@@ -283,13 +322,13 @@ mod tests {
         );
         assert!(hits[0].score > 0.05, "score should be meaningful");
 
-        let list = memory_list(&dir).unwrap();
+        let list = memory_list(&dir, None).unwrap();
         assert_eq!(list.len(), 3);
 
         let id = list[0].id.clone();
-        memory_remove(&dir, &id).unwrap();
-        assert_eq!(memory_list(&dir).unwrap().len(), 2);
-        assert!(memory_remove(&dir, &id).is_err(), "double remove errors");
+        memory_remove(&dir, None, &id).unwrap();
+        assert_eq!(memory_list(&dir, None).unwrap().len(), 2);
+        assert!(memory_remove(&dir, None, &id).is_err(), "double remove errors");
 
         // Mirror regenerated with the remaining entries.
         let mirror = fs::read_to_string(dir.join(MIRROR_PATH)).unwrap();
@@ -303,10 +342,10 @@ mod tests {
     #[test]
     fn dedupes_identical_text() {
         let dir = scratch("dedupe");
-        let first = memory_add(&dir, "uses pnpm").unwrap();
-        let second = memory_add(&dir, "uses pnpm").unwrap();
+        let first = memory_add(&dir, None, "uses pnpm").unwrap();
+        let second = memory_add(&dir, None, "uses pnpm").unwrap();
         assert_eq!(first.id, second.id);
-        assert_eq!(memory_list(&dir).unwrap().len(), 1);
+        assert_eq!(memory_list(&dir, None).unwrap().len(), 1);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -319,7 +358,7 @@ mod tests {
             "# Project memory\n\n- legacy memory one\n- legacy memory two\n",
         )
         .unwrap();
-        let list = memory_list(&dir).unwrap();
+        let list = memory_list(&dir, None).unwrap();
         assert_eq!(list.len(), 2, "bullets imported as memories");
         assert!(list.iter().any(|e| e.text == "legacy memory one"));
         // Vector file now exists next to the mirror.

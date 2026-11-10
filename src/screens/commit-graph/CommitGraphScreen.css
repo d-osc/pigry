@@ -179,8 +179,17 @@
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
+}
+
+/* Table + detail keep the original column layout; the AI rail docks beside them. */
+.commit-history__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .commit-history__table {

@@ -8,9 +8,11 @@ import '@fontsource/jetbrains-mono/600.css';
 import './styles/tokens.css';
 import './styles/global.css';
 import { startThemeWatcher } from './lib/theme';
+import { initGhProfile } from './lib/ghProfile';
 import App from './App';
 
 startThemeWatcher();
+initGhProfile();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

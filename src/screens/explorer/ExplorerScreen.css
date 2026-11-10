@@ -367,9 +367,9 @@
 .explorer-ai__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   height: 42px;
-  padding: 0 16px 0 12px;
+  padding: 0 16px 0 8px;
   background: var(--bg-sidebar);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -378,57 +378,65 @@
 .explorer-ai__title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   min-width: 0;
 }
 
 .explorer-ai__title strong {
   font-size: var(--fs-md);
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.explorer-ai__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: var(--radius);
-  background: var(--accent-tint-1);
-  border: 1px solid var(--accent-tint-3);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+/* Click-to-rename group title */
+.explorer-ai__title--edit {
+  background: none;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  max-width: calc(100% - 12px);
+}
+
+.explorer-ai__title--edit:hover {
+  background: var(--bg-panel);
+}
+
+.explorer-ai__title--edit:hover strong {
   color: var(--accent);
 }
 
-.explorer-ai__badge i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
+.explorer-ai__title-pen {
+  opacity: 0;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.explorer-ai__title--edit:hover .explorer-ai__title-pen {
+  opacity: 1;
+}
+
+.explorer-ai__title-input {
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-tint-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  outline: none;
+  min-width: 0;
+  flex: 1;
 }
 
 .explorer-ai__header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.explorer-ai__ctx-chip {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 8px;
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--text-secondary);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-left: auto;
 }
 
 .explorer-ai__collapse {
@@ -475,14 +483,38 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-sidebar);
+  padding: 10px 12px;
+  border-radius: 12px;
+  border-bottom-left-radius: 4px;
+  background: var(--bg-panel);
   border: 1px solid var(--border);
 }
 
 .explorer-ai__card--user {
   background: var(--bg-panel);
+}
+
+/* ---- Chat bubbles: AI left, You right ---- */
+.explorer-ai__msg {
+  align-self: flex-start;
+  max-width: 92%;
+  gap: 6px;
+}
+
+.explorer-ai__msg--user {
+  align-self: flex-end;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 4px;
+}
+
+.explorer-ai__msg--user .explorer-ai__msg-meta {
+  flex-direction: row-reverse;
+}
+
+.explorer-ai__msg--user .explorer-ai__avatar {
+  background: var(--accent-tint-2);
+  border-color: var(--accent-tint-3);
+  color: var(--text-primary);
 }
 
 .explorer-ai__card-label {
@@ -527,6 +559,14 @@
   font-size: var(--fs-xs);
   color: var(--accent);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.explorer-ai__avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .explorer-ai__msg-name {
@@ -871,4 +911,77 @@
   margin: 6px 12px 0;
   font-size: var(--fs-sm);
   color: var(--danger, #f66);
+}
+
+/* AI panel section tabs — icons only (tooltip carries the label) */
+.explorer-ai__tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-titlebar);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.explorer-ai__tab {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Pushes the memory / skills / history controls to the right of the tabs */
+.explorer-ai__tabs-spacer {
+  flex: 1;
+}
+
+.explorer-ai__tabs .ai-sessions-btn {
+  width: 26px;
+}
+
+.explorer-ai__tab:hover {
+  color: var(--text-primary);
+}
+
+.explorer-ai__tab--active {
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* FILES panel fold controls */
+.explorer-screen__tree .explorer-tree-head__actions button:first-child {
+  margin-right: 2px;
+}
+
+.files-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 28px;
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 10px 0;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.files-strip:hover {
+  color: var(--accent);
+  background: var(--accent-tint-1);
+}
+
+.files-strip span {
+  writing-mode: vertical-rl;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
 }

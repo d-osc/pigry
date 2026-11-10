@@ -1,5 +1,7 @@
 mod ai;
+mod browser;
 mod busybox;
+mod containers;
 mod gh;
 mod busybox3;
 mod busybox_extra;
@@ -100,6 +102,20 @@ pub fn run() {
             commands::gh_release_list,
             commands::gh_project_list,
             commands::gh_project_item_list,
+            browser::browser_create,
+            browser::browser_position,
+            browser::browser_set_visible,
+            browser::browser_navigate,
+            browser::browser_close,
+            containers::container_list,
+            containers::container_create,
+            containers::container_start,
+            containers::container_stop,
+            containers::container_remove,
+            containers::container_logs,
+            containers::compose_services,
+            containers::compose_service_run,
+            containers::compose_service_start,
             commands::gh_code_scanning_alerts,
             commands::gh_code_alert_dismiss,
             commands::gh_dependabot_alerts,

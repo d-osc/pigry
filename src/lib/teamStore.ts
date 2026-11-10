@@ -1,0 +1,68 @@
+/** Team/agent-scoped storage paths inside the repo — everything the agent
+ * system persists lives under `.orbit/teams/<team>/...` so it is versionable
+ * alongside the code:
+ *
+ *   .orbit/teams/<team>/chat/<id>.json                     team chat sessions
+ *   .orbit/teams/<team>/agents.json                        team agent registry
+ *   .orbit/teams/<team>/memory.vector.json                 shared team memory
+ *   .orbit/teams/<team>/agents/<username>/AGENT.md         agent definition
+ *   .orbit/teams/<team>/agents/<username>/chat/<id>.json   private chat
+ *   .orbit/teams/<team>/agents/<username>/memory.vector.json  private memory
+ */
+
+/** Reduces a team name / username to one safe path segment (keeps unicode). */
+function segment(value: string): string {
+  const cleaned = value
+    .trim()
+    .replace(/[\\/]+/g, ' ')
+    .replace(/[^\p{L}\p{N} _-]/gu, '')
+    .trim();
+  return cleaned || 'unknown';
+}
+
+export function teamRoot(team: string): string {
+  return `.orbit/teams/${segment(team)}`;
+}
+
+/** Team-wide chat sessions directory (trailing slash). */
+export function teamChatDir(team: string): string {
+  return `${teamRoot(team)}/chat/`;
+}
+
+/** Registry file listing the team's agents (same shape as localStorage). */
+export function teamAgentsFile(team: string): string {
+  return `${teamRoot(team)}/agents.json`;
+}
+
+/** Memory scope string for the memory_* Tauri commands. */
+export function teamMemoryScope(team: string): string {
+  return `teams/${segment(team)}`;
+}
+
+export function agentRoot(team: string, username: string): string {
+  return `${teamRoot(team)}/agents/${segment(username)}`;
+}
+
+/** One agent's private chat sessions directory (trailing slash). */
+export function agentChatDir(team: string, username: string): string {
+  return `${agentRoot(team, username)}/chat/`;
+}
+
+/** One agent's private vector memory store. */
+export function agentMemoryFile(team: string, username: string): string {
+  return `${agentRoot(team, username)}/memory.vector.json`;
+}
+
+/** Human-readable agent definition (markdown). */
+export function agentDefinitionFile(team: string, username: string): string {
+  return `${agentRoot(team, username)}/AGENT.md`;
+}
+
+/** Memory scope for the memory_* Tauri commands: team store, or the agent's
+ * private store when `agent` is given. Null = the project-wide store. */
+export function memoryScope(team?: string, agent?: string): string | null {
+  if (!team) return null;
+  return agent
+    ? `${teamMemoryScope(team)}/agents/${segment(agent)}`
+    : teamMemoryScope(team);
+}

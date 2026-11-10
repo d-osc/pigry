@@ -22,7 +22,16 @@ import './RepoKnowledge.css';
 const SKILLS_DIR = '.orbit/skills/';
 
 /** Vector-backed memory: list / semantic search / add / remove. */
-export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function MemoryDialog({
+  onClose,
+  notify,
+  /** Team name — scopes memories to .orbit/teams/<team>/memory.vector.json. */
+  team,
+}: {
+  onClose: () => void;
+  notify: (m: string, t?: 'success' | 'error') => void;
+  team?: string;
+}) {
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState('');
@@ -34,7 +43,7 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
 
   const load = useCallback(async () => {
     try {
-      setEntries(await memoryList());
+      setEntries(await memoryList(team));
     } catch {
       setEntries([]);
     }
@@ -46,7 +55,7 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
     let cancelled = false;
     (async () => {
       try {
-        const list = await memoryList();
+        const list = await memoryList(team);
         if (!cancelled) setEntries(list);
       } catch {
         if (!cancelled) setEntries([]);
@@ -69,7 +78,7 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
       }
       setSearching(true);
       try {
-        const hits = await memorySearch(q, 20);
+        const hits = await memorySearch(q, 20, team);
         setEntries(
           hits.map((hit) => ({
             id: hit.id,
@@ -91,7 +100,7 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
     const line = draftRef.current?.value.trim() ?? '';
     if (!line) return;
     try {
-      await memoryAdd(line);
+      await memoryAdd(line, team);
       if (draftRef.current) draftRef.current.value = '';
       notify('Memory saved', 'success');
       await load();
@@ -102,7 +111,7 @@ export function MemoryDialog({ onClose, notify }: { onClose: () => void; notify:
 
   const removeEntry = async (id: string) => {
     try {
-      await memoryRemove(id);
+      await memoryRemove(id, team);
       notify('Memory removed', 'success');
       await load();
     } catch (e) {

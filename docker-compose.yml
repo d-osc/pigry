@@ -1,0 +1,6 @@
+services:
+  web:
+    image: nginx:alpine
+    command: nginx -g "daemon off;"
+  db:
+    image: postgres:16

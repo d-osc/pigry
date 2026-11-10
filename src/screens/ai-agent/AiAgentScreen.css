@@ -682,3 +682,17 @@
   font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
+
+/* The Copilot page hosts the full AI Agent panel (Explorer's rail) filling
+   the body — width is driven by the flex layout, not the inline value. */
+.agent-screen__body .explorer-ai {
+  width: 100% !important;
+  flex: 1;
+  min-width: 0;
+  border-left: none;
+}
+
+/* A dedicated page has nowhere to collapse the panel to. */
+.agent-screen__body .explorer-ai__collapse {
+  display: none;
+}

@@ -1,5 +1,6 @@
 /** Typed wrappers around the Tauri commands defined in src-tauri/src/commands.rs. */
 import { invoke } from '@tauri-apps/api/core';
+import { memoryScope } from './teamStore';
 import type {
   AppStatePayload,
   CodeSearchHit,
@@ -847,18 +848,27 @@ export interface MemoryHit {
   createdAt: number;
 }
 
-export async function memoryList(): Promise<MemoryEntry[]> {
-  return invoke('memory_list');
+export async function memoryList(team?: string, agent?: string): Promise<MemoryEntry[]> {
+  return invoke('memory_list', { scope: memoryScope(team, agent) ?? null });
 }
 
-export async function memoryAdd(text: string): Promise<MemoryEntry> {
-  return invoke('memory_add', { text });
+export async function memoryAdd(
+  text: string,
+  team?: string,
+  agent?: string,
+): Promise<MemoryEntry> {
+  return invoke('memory_add', { scope: memoryScope(team, agent) ?? null, text });
 }
 
-export async function memoryRemove(id: string): Promise<void> {
-  return invoke('memory_remove', { id });
+export async function memoryRemove(id: string, team?: string, agent?: string): Promise<void> {
+  return invoke('memory_remove', { scope: memoryScope(team, agent) ?? null, id });
 }
 
-export async function memorySearch(query: string, limit = 5): Promise<MemoryHit[]> {
-  return invoke('memory_search', { query, limit });
+export async function memorySearch(
+  query: string,
+  limit = 5,
+  team?: string,
+  agent?: string,
+): Promise<MemoryHit[]> {
+  return invoke('memory_search', { scope: memoryScope(team, agent) ?? null, query, limit });
 }

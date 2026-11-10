@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { buildTree, type TreeNode } from '../../lib/fileTree';
 import type { FileTree as FileTreeData } from '../../types/repository';
@@ -25,6 +25,10 @@ interface FileTreeProps {
   renamingPath?: string | null;
   onRenameSubmit?: (path: string, newName: string) => void;
   onRenameCancel?: () => void;
+  /** Move a file/folder to a target folder (VS Code drag & drop). */
+  onMove?: (sourcePath: string, targetFolder: string) => void;
+  /** Bump when a file is opened externally — reveals + scrolls to its row. */
+  revealPath?: string | null;
 }
 
 /**
@@ -111,6 +115,8 @@ function TreeRow({
   renaming,
   onRenameSubmit,
   onRenameCancel,
+  onMove,
+  revealPath,
 }: {
   node: TreeNode;
   depth: number;
@@ -126,15 +132,27 @@ function TreeRow({
   renaming?: boolean;
   onRenameSubmit?: (path: string, newName: string) => void;
   onRenameCancel?: () => void;
+  onMove?: (sourcePath: string, targetFolder: string) => void;
+  revealPath?: string | null;
 }) {
+  // Drag state for DnD move (VS Code style: file/folder onto a folder row).
+  const [dropTarget, setDropTarget] = useState(false);
   const isFolder = node.kind === 'folder';
   const isOpen = isFolder && expanded.has(node.path);
   // Guards the rename input against the phantom blur that fires when the
   // context menu unmounts in the same commit.
   const hadFocus = useRef(false);
+  const rowRef = useRef<HTMLButtonElement | null>(null);
   const isSelected = !isFolder && selectedPath === node.path;
   const modified = !isFolder && changedPaths.has(node.path);
   const iconSrc = isFolder ? folderIcon(node.name) : fileIcon(node.name);
+
+  // Reveal: scroll this row into view when it is the requested reveal target.
+  useEffect(() => {
+    if (revealPath && node.path === revealPath) {
+      rowRef.current?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [revealPath, node.path]);
 
   const handleClick = () => {
     if (isFolder) {
@@ -146,11 +164,12 @@ function TreeRow({
 
   const rowIcons = (
     <>
+      {Array.from({ length: depth }).map((_, index) => (
+        <i key={index} className="tree-row__guide" aria-hidden="true" />
+      ))}
       {isFolder ? (
         isOpen ? <ChevronDown size={8.5} strokeWidth={1.5} /> : <ChevronRight size={8.5} strokeWidth={1.5} />
-      ) : (
-        depth > 0 && <i className="tree-row__guide" aria-hidden="true" />
-      )}
+      ) : null}
       <img className="tree-row__fileicon" src={iconSrc} alt="" draggable={false} />
     </>
   );
@@ -210,10 +229,33 @@ function TreeRow({
   return (
     <>
       <button
+        ref={rowRef}
         type="button"
-        className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}`}
+        className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}${dropTarget ? ' tree-row--droptarget' : ''}`}
         style={{ paddingLeft: 4 + depth * 12 }}
         onClick={handleClick}
+        draggable={onMove != null}
+        onDragStart={(event) => {
+          event.dataTransfer.setData('application/orbit-move', node.path);
+          event.dataTransfer.effectAllowed = 'move';
+        }}
+        onDragOver={(event) => {
+          if (!isFolder || !onMove) return;
+          const dragged = event.dataTransfer.getData('application/orbit-move');
+          if (!dragged || dragged === node.path || node.path.startsWith(`${dragged}/`)) return;
+          event.preventDefault();
+          setDropTarget(true);
+        }}
+        onDragLeave={() => setDropTarget(false)}
+        onDrop={(event) => {
+          setDropTarget(false);
+          if (!onMove) return;
+          const dragged = event.dataTransfer.getData('application/orbit-move');
+          if (!dragged || dragged === node.path || node.path.startsWith(`${dragged}/`)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onMove(dragged, node.path);
+        }}
         onContextMenu={(event) =>
           onContextMenu?.({ kind: isFolder ? 'folder' : 'file', path: node.path }, event)
         }
@@ -238,6 +280,8 @@ function TreeRow({
               onContextMenu={onContextMenu}
               renaming={renaming}
               onRenameSubmit={onRenameSubmit}
+              onMove={onMove}
+              revealPath={revealPath}
               onRenameCancel={onRenameCancel}
             />
           ))}
@@ -260,7 +304,25 @@ export function FileTree({
   renamingPath,
   onRenameSubmit,
   onRenameCancel,
-}: FileTreeProps) {
+  onMove,
+}: FileTreeProps & {
+  onMove?: (sourcePath: string, targetFolder: string) => void;
+}) {
+  const treeRef = useRef<HTMLDivElement | null>(null);
+
+  // VS Code-style reveal: scroll the active row into view when it changes.
+  useEffect(() => {
+    const host = treeRef.current;
+    if (!selectedPath || !host) return;
+    const timer = window.setTimeout(() => {
+      const row = host.querySelector(
+        `[data-path="${CSS.escape(selectedPath)}"]`,
+      );
+      row?.scrollIntoView({ block: 'nearest' });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [selectedPath, tree]);
+
   const visibleEntries = useMemo(() => {
     if (!filter) return tree?.entries ?? [];
     return (tree?.entries ?? []).filter((entry) => entry.toLowerCase().includes(filter));
@@ -273,7 +335,24 @@ export function FileTree({
   );
 
   return (
-    <div className="file-tree">
+    <div
+      className="file-tree"
+      ref={treeRef}
+      onDragOver={(event) => {
+        // Root drop target: dropping on empty area moves to the repo root.
+        if (!onMove) return;
+        const dragged = event.dataTransfer.getData('application/orbit-move');
+        if (!dragged || !dragged.includes('/')) return;
+        event.preventDefault();
+      }}
+      onDrop={(event) => {
+        if (!onMove) return;
+        const dragged = event.dataTransfer.getData('application/orbit-move');
+        if (!dragged || !dragged.includes('/')) return;
+        event.preventDefault();
+        onMove(dragged, '');
+      }}
+    >
       {(repoName || branch) && !filter && (
         <div className="tree-root">
           <img className="tree-row__fileicon" src="/fileicons/folder-base.svg" alt="" draggable={false} />
@@ -302,6 +381,7 @@ export function FileTree({
             renaming={node.path === renamingPath}
             onRenameSubmit={onRenameSubmit}
             onRenameCancel={onRenameCancel}
+            onMove={onMove}
           />
         ))}
     </div>

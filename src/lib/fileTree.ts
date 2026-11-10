@@ -33,7 +33,34 @@ export function buildTree(paths: string[]): TreeNode[] {
   }
 
   sortTree(root);
-  return root.children;
+  return root.children.map((child) => compactChains(child));
+}
+
+/**
+ * VS Code "compact folders": folders that contain only a single child folder
+ * are merged into one row (a/b/c). The node keeps the deepest folder's path.
+ */
+function compactChains(node: TreeNode): TreeNode {
+  let name = node.name;
+  let path = node.path;
+  let children = node.children;
+  if (node.kind === 'folder') {
+    let chain = 0;
+    while (children.length === 1 && children[0].kind === 'folder') {
+      const child = children[0];
+      name += `/${child.name}`;
+      path = child.path;
+      children = child.children;
+      chain += 1;
+      if (chain >= 8) break; // safety bound
+    }
+  }
+  return {
+    name,
+    path,
+    kind: node.kind,
+    children: children.map((child) => compactChains(child)),
+  };
 }
 
 function sortTree(node: TreeNode): void {

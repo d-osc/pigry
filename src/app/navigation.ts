@@ -41,7 +41,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'explorer', label: 'Explorer', icon: FolderTree },
   { id: 'commit-graph', label: 'Commit graph', icon: Network },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
-  { id: 'ai-agent', label: 'AI Agent', icon: Bot },
+  { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },
   { id: 'releases', label: 'Releases', icon: Tag },
   { id: 'issues', label: 'Issues', icon: CircleDot },

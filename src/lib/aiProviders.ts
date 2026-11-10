@@ -23,6 +23,11 @@ const ZAI_MODELS: Array<[name: string, vision: boolean]> = [
   ['glm-4.6', false],
 ];
 
+/** Z.ai test provider — same Anthropic-compatible gateway, dedicated test key. */
+const ZAI_TEST_ID = 'zai-test';
+const ZAI_TEST_BASE_URL = 'https://api.z.ai/api/anthropic';
+const ZAI_TEST_API_KEY = '4edbc982ef384dd9998851b773832c7d.ghzVb0sQTuhP7C9g';
+
 export const API_FORMAT_LABEL: Record<AiApiFormat, string> = {
   openai: 'OpenAI chat completions (/v1/chat/completions)',
   anthropic: 'Anthropic messages (/v1/messages)',
@@ -145,6 +150,26 @@ function writeLegacyMirror(providers: AiProviderEntry[], activeId: string) {
   }
 }
 
+/** The seeded Z.ai test provider (kind "custom" so the key stays editable). */
+function makeZaiTestProvider(): AiProviderEntry {
+  const entry = makeBuiltin(ZAI_TEST_ID, 'Z.ai (test)', 'custom');
+  entry.kind = 'custom';
+  entry.apiFormat = 'anthropic';
+  entry.baseUrl = ZAI_TEST_BASE_URL;
+  entry.apiKey = ZAI_TEST_API_KEY;
+  entry.models = ZAI_MODELS.map(([name, vision]) => makeModel(name, vision));
+  entry.model = entry.models[0]?.name ?? '';
+  return entry;
+}
+
+/** Appends the Z.ai test provider when it is missing from a stored list. */
+function ensureZaiTestProvider(list: AiProviderEntry[]): AiProviderEntry[] {
+  if (list.some((p) => p.id === ZAI_TEST_ID)) return list;
+  const zaiIndex = list.findIndex((p) => p.id === 'builtin-zai');
+  const insertAt = zaiIndex >= 0 ? zaiIndex + 1 : list.length;
+  return [...list.slice(0, insertAt), makeZaiTestProvider(), ...list.slice(insertAt)];
+}
+
 /** Fills in the Z.ai built-in when the user has not configured it yet.
  * Existing values always win — this only fills empty fields. */
 function ensureZaiDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
@@ -170,7 +195,7 @@ export function loadProviders(): AiProviderEntry[] {
     const raw = localStorage.getItem(LIST_KEY);
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
-      return ensureZaiDefaults(list.map(migrate));
+      return ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate)));
     }
     const legacy = localStorage.getItem('orbit:ai-provider');
     if (legacy) {
@@ -183,18 +208,20 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = ensureZaiDefaults([
-        makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-        makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
-        entry,
-      ]);
+      const list = ensureZaiTestProvider(
+        ensureZaiDefaults([
+          makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+          makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+          entry,
+        ]),
+      );
       saveProviders(list, activeProviderId());
       return list;
     }
   } catch {
     // fall through to seed
   }
-  const seeded = ensureZaiDefaults(seedDefaults());
+  const seeded = ensureZaiTestProvider(ensureZaiDefaults(seedDefaults()));
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
 }

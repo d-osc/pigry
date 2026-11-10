@@ -117,6 +117,9 @@ button.title-bar__brand:hover .title-bar__name {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* Above the absolutely-centered search — buttons stay usable/clickable */
+  position: relative;
+  z-index: 4;
 }
 
 .command-search {
@@ -350,6 +353,8 @@ button.title-bar__brand:hover .title-bar__name {
 .profile-wrap {
   position: relative;
   display: flex;
+  /* Above the absolutely-centered search */
+  z-index: 4;
 }
 
 .profile-button {
@@ -527,4 +532,11 @@ button.title-bar__brand:hover .title-bar__name {
   height: 1px;
   margin: 6px 4px;
   background: var(--border);
+}
+
+/* Browser button while its window is open */
+.title-bar__win-button--active {
+  background: var(--accent-tint-1);
+  border-color: var(--accent-tint-3);
+  color: var(--accent);
 }
