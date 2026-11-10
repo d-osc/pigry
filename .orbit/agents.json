@@ -65,5 +65,18 @@
     "skills": [],
     "mcpServers": [],
     "definition": "# Docs Writer (@docs-writer)\n\n\n**Team:** Explorer\n\n\n\n## Description\n\nPairs with @test-runner\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
+  },
+  {
+    "id": "agent-mwa9yv90",
+    "name": "Dev",
+    "username": "dev",
+    "role": "",
+    "team": "Explorer",
+    "description": "Senior developer. Writes clean, correct code with runnable examples and explains trade-offs briefly.",
+    "enabled": true,
+    "tools": [],
+    "skills": [],
+    "mcpServers": [],
+    "definition": "# Dev (@dev)\n\n\n**Team:** Explorer\n\n\n\n## Description\n\nSenior developer. Writes clean, correct code with runnable examples and explains trade-offs briefly.\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
   }
 ]
