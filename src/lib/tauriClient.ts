@@ -748,12 +748,26 @@ export interface MergeStatusInfo {
   conflicted: string[];
 }
 
+export interface MergePreviewCommitFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface MergePreviewFileCommit {
+  shortOid: string;
+  summary: string;
+}
+
 export interface MergePreviewCommit {
   oid: string;
   shortOid: string;
   summary: string;
+  body: string;
   authorName: string;
   timeSeconds: number;
+  files: MergePreviewCommitFile[];
 }
 
 export interface MergePreviewFile {
@@ -761,6 +775,7 @@ export interface MergePreviewFile {
   status: string;
   additions: number;
   deletions: number;
+  commits: MergePreviewFileCommit[];
 }
 
 export interface MergeFileVersions {

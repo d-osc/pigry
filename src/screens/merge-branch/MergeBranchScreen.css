@@ -248,15 +248,61 @@
   gap: 6px;
 }
 
-.merge-branch__commit {
+.merge-branch__commit-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-card);
   font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.merge-branch__commit-row:hover,
+.merge-branch__commit-row.is-open {
+  border-color: var(--accent);
+}
+
+.merge-branch__commit-detail {
+  margin: 4px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  display: grid;
+  gap: 6px;
+}
+
+.merge-branch__commit-body {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.merge-branch__commit-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.merge-branch__commit-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-xs);
+}
+
+.merge-branch__commit-file .merge-branch__file-stats {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .merge-branch__commit-sha {
@@ -290,8 +336,8 @@
 
 .merge-branch__file {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 2px;
   padding: 4px 12px;
   font-size: var(--fs-xs);
 }
@@ -299,6 +345,43 @@
 .merge-branch__file:hover {
   background: var(--bg-card);
   border-radius: var(--radius-sm);
+}
+
+.merge-branch__file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.merge-branch__file-commits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding-left: 24px;
+  color: var(--text-muted);
+}
+
+.merge-branch__file-commit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.merge-branch__file-commit-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 340px;
 }
 
 .merge-branch__file-status {

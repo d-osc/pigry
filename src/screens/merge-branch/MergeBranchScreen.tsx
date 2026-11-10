@@ -41,6 +41,9 @@ export function MergeBranchScreen() {
   const [versions, setVersions] = useState<{ ours: string; incoming: string; workdir: string } | null>(null);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
+  // Commit expanded to show its full message + files.
+  const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
+
   const toggleFile = async (filePath: string) => {
     if (expandedPath === filePath) {
       setExpandedPath(null);
@@ -230,15 +233,54 @@ export function MergeBranchScreen() {
               Commits merged in ({preview.commits.length})
             </h3>
             <ul className="merge-branch__commits">
-              {preview.commits.map((commit) => (
-                <li key={commit.oid} className="merge-branch__commit">
-                  <span className="merge-branch__commit-sha">{commit.shortOid}</span>
-                  <span className="merge-branch__commit-summary">{commit.summary}</span>
-                  <span className="merge-branch__commit-meta">
-                    {commit.authorName} · {relativeTime(commit.timeSeconds)}
-                  </span>
-                </li>
-              ))}
+              {preview.commits.map((commit) => {
+                const open = expandedCommit === commit.oid;
+                return (
+                  <li key={commit.oid} className="merge-branch__commit">
+                    <button
+                      type="button"
+                      className={`merge-branch__commit-row${open ? ' is-open' : ''}`}
+                      title="Show commit detail"
+                      onClick={() => setExpandedCommit(open ? null : commit.oid)}
+                    >
+                      <span className="merge-branch__commit-sha">{commit.shortOid}</span>
+                      <span className="merge-branch__commit-summary">{commit.summary}</span>
+                      <span className="merge-branch__commit-meta">
+                        {commit.authorName} · {relativeTime(commit.timeSeconds)}
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="merge-branch__commit-detail">
+                        {commit.body !== commit.summary && (
+                          <pre className="merge-branch__commit-body">{commit.body}</pre>
+                        )}
+                        {commit.files.length > 0 ? (
+                          <ul className="merge-branch__commit-files">
+                            {commit.files.map((entry) => (
+                              <li
+                                key={`${entry.path}:${entry.status}`}
+                                className="merge-branch__commit-file"
+                              >
+                                <span
+                                  className={`merge-branch__file-status merge-branch__file-status--${entry.status}`}
+                                >
+                                  {entry.status}
+                                </span>
+                                <span className="merge-branch__file-path">{entry.path}</span>
+                                <span className="merge-branch__file-stats">
+                                  +{entry.additions} / −{entry.deletions}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="merge-branch__empty">No file changes (merge commit).</p>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -267,6 +309,20 @@ export function MergeBranchScreen() {
                         +{file.additions} / −{file.deletions}
                       </span>
                     </button>
+                    {file.commits.length > 0 && (
+                      <div className="merge-branch__file-commits">
+                        {file.commits.map((entry) => (
+                          <span
+                            key={`${file.path}:${entry.shortOid}`}
+                            className="merge-branch__file-commit"
+                            title={`${entry.shortOid} ${entry.summary}`}
+                          >
+                            <span className="merge-branch__commit-sha">{entry.shortOid}</span>
+                            <span className="merge-branch__file-commit-summary">{entry.summary}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {expanded && (
                       <>
                         {loadingVersions && versions === null && (

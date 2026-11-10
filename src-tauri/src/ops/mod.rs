@@ -103,8 +103,28 @@ pub struct MergePreviewCommit {
     pub oid: String,
     pub short_oid: String,
     pub summary: String,
+    pub body: String,
     pub author_name: String,
     pub time_seconds: i64,
+    /// Files this commit itself changes (numstat against its parent).
+    pub files: Vec<MergePreviewCommitFile>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreviewCommitFile {
+    pub path: String,
+    pub status: String,
+    pub additions: usize,
+    pub deletions: usize,
+}
+
+/// Source commit that touched a file in the merge range.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreviewFileCommit {
+    pub short_oid: String,
+    pub summary: String,
 }
 
 #[derive(serde::Serialize)]
@@ -114,6 +134,8 @@ pub struct MergePreviewFile {
     pub status: String,
     pub additions: usize,
     pub deletions: usize,
+    /// Commits from the source branch that touched this file (oldest first).
+    pub commits: Vec<MergePreviewFileCommit>,
 }
 
 #[derive(serde::Serialize)]
@@ -125,49 +147,13 @@ pub struct MergePreview {
     pub files: Vec<MergePreviewFile>,
 }
 
-/// Computes what merging 'branch' into HEAD would bring in.
-pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
-    let repo = git2::Repository::discover(repo_path).map_err(err)?;
-    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
-    let head_oid = head.target().ok_or_else(|| String::from("HEAD not found"))?;
-    let source = repo.revparse_single(branch).map_err(|e| format!("unknown branch {branch}: {e}"))?;
-    let source_commit = source.peel_to_commit().map_err(err)?;
-    let base = repo.merge_base(head_oid, source.id()).map_err(err)?;
-    let up_to_date = base == source.id();
-
-    // Commits unique to the source branch (oldest first).
-    let mut commits: Vec<MergePreviewCommit> = Vec::new();
-    let mut walk = repo.revwalk().map_err(err)?;
-    walk.push(source.id()).map_err(err)?;
-    walk.hide(base).map_err(err)?;
-    walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
-    for oid in walk.flatten() {
-        if let Ok(commit) = repo.find_commit(oid) {
-            commits.push(MergePreviewCommit {
-                oid: commit.id().to_string(),
-                short_oid: commit
-                    .as_object()
-                    .short_id()
-                    .map(|buf| buf.as_str().map(|str| str.to_string()).unwrap_or_default())
-                    .unwrap_or_default(),
-                summary: commit.summary().unwrap_or_default().to_string(),
-                author_name: commit
-                    .author()
-                    .name()
-                    .unwrap_or_default()
-                    .to_string(),
-                time_seconds: commit.time().seconds(),
-            });
-        }
-    }
-
-    // Files: diff merge-base tree vs source tip tree with per-file line stats.
-    let mut files: Vec<MergePreviewFile> = Vec::new();
-    let base_tree = repo.find_commit(base).map_err(err)?.tree().map_err(err)?;
-    let source_tree = source_commit.tree().map_err(err)?;
-    let mut diff = repo.diff_tree_to_tree(Some(&base_tree), Some(&source_tree), None).map_err(err)?;
-    let current: std::cell::RefCell<(String, char)> =
-        std::cell::RefCell::new((String::new(), 'M'));
+/// Per-file line stats of a tree-to-tree diff, in diff order.
+fn tree_diff_stats(
+    repo: &git2::Repository,
+    old: Option<&git2::Tree>,
+    new: &git2::Tree,
+) -> Result<Vec<(String, char, usize, usize)>> {
+    let mut diff = repo.diff_tree_to_tree(old, Some(new), None).map_err(err)?;
     let mut adds: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut dels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut order: Vec<(String, char)> = Vec::new();
@@ -185,7 +171,6 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
                 git2::Delta::Renamed => 'R',
                 _ => 'M',
             };
-            *current.borrow_mut() = (path.clone(), letter);
             order.push((path.clone(), letter));
             true
         },
@@ -206,14 +191,92 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
             true
         }),
     ).map_err(err)?;
-    for (path, letter) in order {
-        files.push(MergePreviewFile {
-            additions: adds.remove(&path).unwrap_or(0),
-            deletions: dels.remove(&path).unwrap_or(0),
-            path,
-            status: letter.to_string(),
+    Ok(order
+        .into_iter()
+        .map(|(path, letter)| {
+            (
+                path.clone(),
+                letter,
+                adds.remove(&path).unwrap_or(0),
+                dels.remove(&path).unwrap_or(0),
+            )
+        })
+        .collect())
+}
+
+/// Computes what merging 'branch' into HEAD would bring in.
+pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
+    let head_oid = head.target().ok_or_else(|| String::from("HEAD not found"))?;
+    let source = repo.revparse_single(branch).map_err(|e| format!("unknown branch {branch}: {e}"))?;
+    let source_commit = source.peel_to_commit().map_err(err)?;
+    let base = repo.merge_base(head_oid, source.id()).map_err(err)?;
+    let up_to_date = base == source.id();
+
+    // Commits unique to the source branch (oldest first), each with the
+    // files it itself changes and a map of file -> touching commits.
+    let mut commits: Vec<MergePreviewCommit> = Vec::new();
+    let mut walk = repo.revwalk().map_err(err)?;
+    walk.push(source.id()).map_err(err)?;
+    walk.hide(base).map_err(err)?;
+    walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    let mut file_commits: std::collections::HashMap<String, Vec<MergePreviewFileCommit>> =
+        std::collections::HashMap::new();
+    for oid in walk.flatten() {
+        let Ok(commit) = repo.find_commit(oid) else { continue };
+        let short_oid = commit
+            .as_object()
+            .short_id()
+            .map(|buf| buf.as_str().map(|str| str.to_string()).unwrap_or_default())
+            .unwrap_or_default();
+        let summary = commit.summary().unwrap_or_default().to_string();
+        // Files of this commit vs its first parent (whole tree for roots).
+        let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
+        let tree = commit.tree().map_err(err)?;
+        let files = tree_diff_stats(&repo, parent_tree.as_ref(), &tree)?
+            .into_iter()
+            .map(|(path, letter, additions, deletions)| {
+                file_commits.entry(path.clone()).or_default().push(MergePreviewFileCommit {
+                    short_oid: short_oid.clone(),
+                    summary: summary.clone(),
+                });
+                MergePreviewCommitFile {
+                    path,
+                    status: letter.to_string(),
+                    additions,
+                    deletions,
+                }
+            })
+            .collect();
+        commits.push(MergePreviewCommit {
+            oid: commit.id().to_string(),
+            short_oid,
+            body: commit.message().unwrap_or_default().trim_end().to_string(),
+            summary,
+            author_name: commit
+                .author()
+                .name()
+                .unwrap_or_default()
+                .to_string(),
+            time_seconds: commit.time().seconds(),
+            files,
         });
     }
+
+    // Files: diff merge-base tree vs source tip tree with per-file line stats.
+    let base_tree = repo.find_commit(base).map_err(err)?.tree().map_err(err)?;
+    let source_tree = source_commit.tree().map_err(err)?;
+    let files = tree_diff_stats(&repo, Some(&base_tree), &source_tree)?
+        .into_iter()
+        .map(|(path, letter, additions, deletions)| MergePreviewFile {
+            commits: file_commits.remove(&path).unwrap_or_default(),
+            path,
+            status: letter.to_string(),
+            additions,
+            deletions,
+        })
+        .collect();
 
     Ok(MergePreview { up_to_date, commits, files })
 }
