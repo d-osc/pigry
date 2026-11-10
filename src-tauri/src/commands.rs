@@ -1891,9 +1891,9 @@ pub async fn compose_commit_message(
     git_state::compose_commit_message(&repo_path)
 }
 
-/// `scope` selects the memory store inside .orbit -- "teams/<team>" is the
+/// `scope` selects the memory store inside .pigry -- "teams/<team>" is the
 /// team-wide store, "teams/<team>/agents/<username>" an agent's private one;
-/// omitted = the project-wide store (.orbit/memory.vector.json).
+/// omitted = the project-wide store (.pigry/memory.vector.json).
 #[tauri::command]
 pub async fn memory_list(
     state: State<'_, Mutex<AppState>>,

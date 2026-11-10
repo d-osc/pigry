@@ -1,5 +1,5 @@
 /** Server containers — Docker-like managed processes backed by the
- * `container_*` Tauri commands (repo store: `.orbit/containers.json`).
+ * `container_*` Tauri commands (repo store: `.pigry/containers.json`).
  * No-ops / empty in browser preview (no backend).
  */
 import { invoke } from '@tauri-apps/api/core';

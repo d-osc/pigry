@@ -1,19 +1,19 @@
 /** Team/agent-scoped storage paths inside the repo — everything the agent
- * system persists lives under `.orbit/...` so it is versionable alongside
+ * system persists lives under `.pigry/...` so it is versionable alongside
  * the code:
  *
- *   .orbit/agents.json                                     ALL agent definitions (registry + markdown)
- *   .orbit/teams/<team>/chat/<id>.json                     team chat sessions
- *   .orbit/teams/<team>/memory.vector.json                 shared team memory
- *   .orbit/teams/<team>/agents/<username>/chat/<id>.json   private chat
- *   .orbit/teams/<team>/agents/<username>/memory.vector.json  private memory
+ *   .pigry/agents.json                                     ALL agent definitions (registry + markdown)
+ *   .pigry/teams/<team>/chat/<id>.json                     team chat sessions
+ *   .pigry/teams/<team>/memory.vector.json                 shared team memory
+ *   .pigry/teams/<team>/agents/<username>/chat/<id>.json   private chat
+ *   .pigry/teams/<team>/agents/<username>/memory.vector.json  private memory
  *
  * Legacy layout (agents.json + AGENT.md per team folder) is still read for
- * migration but new writes go to the consolidated .orbit/agents.json.
+ * migration but new writes go to the consolidated .pigry/agents.json.
  */
 
 /** Consolidated agent store — registry + definitions in one file. */
-export const AGENTS_FILE = '.orbit/agents.json';
+export const AGENTS_FILE = '.pigry/agents.json';
 
 /** Reduces a team name / username to one safe path segment (keeps unicode). */
 function segment(value: string): string {
@@ -26,7 +26,7 @@ function segment(value: string): string {
 }
 
 export function teamRoot(team: string): string {
-  return `.orbit/teams/${segment(team)}`;
+  return `.pigry/teams/${segment(team)}`;
 }
 
 /** Team-wide chat sessions directory (trailing slash). */

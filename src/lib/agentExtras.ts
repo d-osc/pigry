@@ -13,9 +13,9 @@ import {
 } from './tauriClient';
 import { AGENTS_FILE, agentDefinitionFile } from './teamStore';
 
-/* ---- Project instructions (.orbit/instructions.md) ---- */
+/* ---- Project instructions (.pigry/instructions.md) ---- */
 
-export const INSTRUCTIONS_PATH = '.orbit/instructions.md';
+export const INSTRUCTIONS_PATH = '.pigry/instructions.md';
 
 export async function readInstructions(): Promise<string> {
   try {
@@ -51,7 +51,7 @@ export interface AgentEntry {
   enabled: boolean;
   /** Tool ids (lib/agentTools) this agent may use; empty = inherits all. */
   tools: string[];
-  /** Skill names (.orbit/skills/*.md) this agent uses. */
+  /** Skill names (.pigry/skills/*.md) this agent uses. */
   skills: string[];
   /** MCP server names this agent may talk to. */
   mcpServers: string[];
@@ -169,19 +169,19 @@ function agentMarkdown(agent: AgentEntry): string {
   return lines.join('\n');
 }
 
-/** Reads ALL agent definitions from the consolidated .orbit/agents.json,
- * falling back to the legacy per-team layout (.orbit/teams/<team>/agents.json)
+/** Reads ALL agent definitions from the consolidated .pigry/agents.json,
+ * falling back to the legacy per-team layout (.pigry/teams/<team>/agents.json)
  * when the consolidated file does not exist yet. */
 async function readAllStoredAgents(): Promise<Array<Partial<AgentEntry> & { definition?: string }>> {
   try {
     const raw = await readWorktreeFile(AGENTS_FILE);
     return JSON.parse(raw.content);
   } catch {
-    // Legacy fallback: merge every .orbit/teams/*/agents.json found.
+    // Legacy fallback: merge every .pigry/teams/*/agents.json found.
     try {
       const tree = await getFileTree();
       const legacyPaths = tree.entries.filter(
-        (p) => p.startsWith('.orbit/teams/') && p.endsWith('/agents.json'),
+        (p) => p.startsWith('.pigry/teams/') && p.endsWith('/agents.json'),
       );
       const merged: Array<Partial<AgentEntry> & { definition?: string }> = [];
       for (const path of legacyPaths) {
@@ -199,7 +199,7 @@ async function readAllStoredAgents(): Promise<Array<Partial<AgentEntry> & { defi
   }
 }
 
-/** Reads the team's agents from the consolidated .orbit/agents.json;
+/** Reads the team's agents from the consolidated .pigry/agents.json;
  * null when the store has no agents for this team yet. */
 export async function hydrateTeamAgents(team: string): Promise<AgentEntry[] | null> {
   const all = await readAllStoredAgents();
@@ -225,7 +225,7 @@ export async function mirrorAgentsToRepo(agents: AgentEntry[]): Promise<void> {
   }
 }
 
-/** Reads the consolidated .orbit/agents.json. Empty when absent. */
+/** Reads the consolidated .pigry/agents.json. Empty when absent. */
 export async function hydrateAgentsFromRepo(): Promise<AgentEntry[]> {
   try {
     const raw = await readWorktreeFile(AGENTS_FILE);
@@ -251,7 +251,7 @@ export async function hydrateAgentsIfEmpty(): Promise<AgentEntry[]> {
   return fromRepo;
 }
 
-/** Consolidates the team's agents into .orbit/agents.json — registry and
+/** Consolidates the team's agents into .pigry/agents.json — registry and
  * AGENT.md definition live together as a `definition` field per agent, so
  * nothing is scattered across per-agent folders anymore. Existing agents of
  * OTHER teams in the file are preserved. */
@@ -335,7 +335,7 @@ export function loadHooks(): HookEntry[] {
   }
 }
 
-const HOOKS_FILE = '.orbit/hooks/hooks.json';
+const HOOKS_FILE = '.pigry/hooks/hooks.json';
 
 export async function hydrateHooks(): Promise<HookEntry[] | null> {
   try {
@@ -412,7 +412,7 @@ export function loadPlugins(): PluginEntry[] {
   }
 }
 
-const PLUGINS_FILE = '.orbit/plugins/plugins.json';
+const PLUGINS_FILE = '.pigry/plugins/plugins.json';
 
 export async function hydratePlugins(): Promise<PluginEntry[] | null> {
   try {

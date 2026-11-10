@@ -1,10 +1,10 @@
 /** Project knowledge dialogs — memory + skills, stored IN the working repo
  * so they are versionable with the code:
- *   memory → three vector tiers: project-wide (.orbit/memory.vector.json),
- *     team-shared (.orbit/teams/<team>/memory.vector.json) and per-agent
- *     (.orbit/teams/<team>/agents/<user>/memory.vector.json), each with a
+ *   memory → three vector tiers: project-wide (.pigry/memory.vector.json),
+ *     team-shared (.pigry/teams/<team>/memory.vector.json) and per-agent
+ *     (.pigry/teams/<team>/agents/<user>/memory.vector.json), each with a
  *     human-readable .md mirror
- *   skills → .orbit/skills/<slug>.md (one markdown file per skill)
+ *   skills → .pigry/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
@@ -23,7 +23,7 @@ import { loadAgents } from '../../lib/agentExtras';
 import type { AgentEntry } from '../../lib/agentExtras';
 import './RepoKnowledge.css';
 
-const SKILLS_DIR = '.orbit/skills/';
+const SKILLS_DIR = '.pigry/skills/';
 
 /** Memory storage tiers — main (project-wide), team-shared, agent-private. */
 type MemoryTier = 'main' | 'team' | 'agent';
@@ -35,9 +35,9 @@ const TIER_LABEL: Record<MemoryTier, string> = {
 };
 
 const TIER_PATH: Record<MemoryTier, string> = {
-  main: '.orbit/memory.vector.json',
-  team: '.orbit/teams/<team>/memory.vector.json',
-  agent: '.orbit/teams/<team>/agents/<user>/memory.vector.json',
+  main: '.pigry/memory.vector.json',
+  team: '.pigry/teams/<team>/memory.vector.json',
+  agent: '.pigry/teams/<team>/agents/<user>/memory.vector.json',
 };
 
 /** Vector-backed memory across three tiers: project-wide, team-shared and
@@ -45,7 +45,7 @@ const TIER_PATH: Record<MemoryTier, string> = {
 export function MemoryDialog({
   onClose,
   notify,
-  /** Team name — scopes team and agent tiers to .orbit/teams/<team>/. */
+  /** Team name — scopes team and agent tiers to .pigry/teams/<team>/. */
   team,
 }: {
   onClose: () => void;

@@ -41,9 +41,9 @@ export function normalizeMcpServers(list: unknown[]): McpServer[] {
     .filter((server): server is McpServer => server !== null);
 }
 
-const MCP_FILE = '.orbit/mcp/mcp.json';
+const MCP_FILE = '.pigry/mcp/mcp.json';
 
-/** Reads the repo-file store (.orbit/mcp/mcp.json); null when absent. */
+/** Reads the repo-file store (.pigry/mcp/mcp.json); null when absent. */
 export async function hydrateMcpServers(): Promise<McpServer[] | null> {
   try {
     const raw = await readWorktreeFile(MCP_FILE);

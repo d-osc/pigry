@@ -973,7 +973,7 @@ export async function ghTraffic(): Promise<GhTraffic> {
   return invoke('gh_traffic');
 }
 
-/** ---- Vector-backed project memory (.orbit/memory.vector.json) ---- */
+/** ---- Vector-backed project memory (.pigry/memory.vector.json) ---- */
 
 export interface MemoryEntry {
   id: string;

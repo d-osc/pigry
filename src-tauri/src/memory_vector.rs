@@ -1,10 +1,10 @@
-//! Vector-backed project memory — `.orbit/memory.vector.json` in the repo.
+//! Vector-backed project memory — `.pigry/memory.vector.json` in the repo.
 //!
 //! Each memory is embedded with an offline hashed n-gram embedder (works for
 //! Thai and English without any model download) and stored with its vector.
 //! Retrieval is cosine similarity (dot product — vectors are L2-normalised),
 //! so the agent can pull the *relevant* memories for a question instead of
-//! dumping the whole list. A human-readable `.orbit/memory.md` mirror is
+//! dumping the whole list. A human-readable `.pigry/memory.md` mirror is
 //! regenerated on every change so the file stays git-diff friendly.
 
 use serde::{Deserialize, Serialize};
@@ -12,8 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const DIM: usize = 256;
-const STORE_PATH: &str = ".orbit/memory.vector.json";
-const MIRROR_PATH: &str = ".orbit/memory.md";
+const STORE_PATH: &str = ".pigry/memory.vector.json";
+const MIRROR_PATH: &str = ".pigry/memory.md";
 const MIRROR_CAP: usize = 500;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -53,15 +53,15 @@ fn workdir(repo_path: &Path) -> Result<PathBuf> {
         .to_path_buf())
 }
 
-/// Resolves `.orbit/<scope>` for a team/agent scope. `scope` is a relative
+/// Resolves `.pigry/<scope>` for a team/agent scope. `scope` is a relative
 /// subpath like "teams/Explorer" (team store) or
 /// "teams/Explorer/agents/browser" (that agent's private store) -- segments
-/// are validated so nothing escapes the .orbit directory.
+/// are validated so nothing escapes the .pigry directory.
 fn orbit_scope_path(scope: Option<&str>) -> Result<PathBuf> {
     let Some(scope) = scope.map(str::trim).filter(|s| !s.is_empty()) else {
-        return Ok(PathBuf::from(".orbit"));
+        return Ok(PathBuf::from(".pigry"));
     };
-    let mut path = PathBuf::from(".orbit");
+    let mut path = PathBuf::from(".pigry");
     for segment in scope.split('/') {
         let segment = segment.trim();
         if segment.is_empty()
@@ -79,7 +79,7 @@ fn orbit_scope_path(scope: Option<&str>) -> Result<PathBuf> {
 }
 
 fn store_path(repo_path: &Path, scope: Option<&str>) -> Result<PathBuf> {
-    // orbit_scope_path already includes the .orbit prefix.
+    // orbit_scope_path already includes the .pigry prefix.
     Ok(workdir(repo_path)?
         .join(orbit_scope_path(scope)?)
         .join("memory.vector.json"))
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn seeds_from_markdown_mirror() {
         let dir = scratch("seed");
-        fs::create_dir_all(dir.join(".orbit")).unwrap();
+        fs::create_dir_all(dir.join(".pigry")).unwrap();
         fs::write(
             dir.join(MIRROR_PATH),
             "# Project memory\n\n- legacy memory one\n- legacy memory two\n",

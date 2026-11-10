@@ -1,5 +1,5 @@
 /** Copilot-style chat sessions — stored IN the working repo, scoped per
- * team (and per agent) under `.orbit/teams/...` so conversations are
+ * team (and per agent) under `.pigry/teams/...` so conversations are
  * versionable alongside the code. The active-session pointer stays in
  * localStorage (per-machine UI preference); sessions themselves travel
  * with the repo.
@@ -43,12 +43,12 @@ export interface AiChatSession {
   owner?: string;
 }
 
-const CHAT_DIR = '.orbit/chat/';
+const CHAT_DIR = '.pigry/chat/';
 const ACTIVE_KEY = 'orbit:ai-session-active';
 const MAX_MESSAGES = 100;
 
 /** Which store a chat belongs to. `team` tags the session so each team's
- * menu only shows its own chats — files all live in one .orbit/chat/ dir. */
+ * menu only shows its own chats — files all live in one .pigry/chat/ dir. */
 export interface ChatScope {
   /** Team name — sessions are tagged and filtered by this team. */
   team?: string;
@@ -67,7 +67,7 @@ function activeKeyFor(scope?: ChatScope): string {
   return `${ACTIVE_KEY}${suffix}`;
 }
 
-/** Lists sessions in .orbit/chat/, newest first. When a team scope is given
+/** Lists sessions in .pigry/chat/, newest first. When a team scope is given
  * only that team's chats are returned — groups never leak into other menus. */
 export async function listSessions(scope?: ChatScope): Promise<AiChatSession[]> {
   const tree = await getFileTree();
@@ -90,7 +90,7 @@ export async function listSessions(scope?: ChatScope): Promise<AiChatSession[]> 
   return sessions;
 }
 
-/** Writes one session file into .orbit/chat/ (images dropped, last 100
+/** Writes one session file into .pigry/chat/ (images dropped, last 100
  * messages kept). The session's `team` field drives menu filtering. */
 export async function saveSession(session: AiChatSession): Promise<void> {
   const slim: AiChatSession = {

@@ -397,7 +397,7 @@ export function McpTab() {
   );
 }
 
-/* ---- Instructions tab (.orbit/instructions.md, real repo file) ---- */
+/* ---- Instructions tab (.pigry/instructions.md, real repo file) ---- */
 
 export function InstructionsTab() {
   const { mode, notify } = useRepository();
@@ -424,7 +424,7 @@ export function InstructionsTab() {
     try {
       await saveInstructions(content);
       setSaved(content);
-      notify('Instructions saved to .orbit/instructions.md', 'success');
+      notify('Instructions saved to .pigry/instructions.md', 'success');
     } catch (error) {
       notify(`Could not save instructions: ${String(error)}`, 'error');
     }
@@ -470,12 +470,12 @@ export function InstructionsTab() {
 
 /* ---- Agents tab (sub-agent definitions announced to the model) ---- */
 
-/** Reads the repo's skill names from .orbit/skills/*.md. */
+/** Reads the repo's skill names from .pigry/skills/*.md. */
 async function listSkillNames(): Promise<string[]> {
   try {
     const tree = await getFileTree();
     return tree.entries
-      .filter((p) => p.startsWith('.orbit/skills/') && p.endsWith('.md'))
+      .filter((p) => p.startsWith('.pigry/skills/') && p.endsWith('.md'))
       .map((p) => p.split('/').pop()?.replace(/\.md$/, '') ?? '')
       .filter(Boolean);
   } catch {
@@ -514,7 +514,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const [agents, setAgents] = useState<AgentEntry[]>(() => loadAgents());
   /** Providers for the per-agent model selector (read once on mount). */
   const [providers] = useState<AiProviderEntry[]>(() => loadProviders());
-  // Repo hydration: seed localStorage from .orbit/agents.json when empty
+  // Repo hydration: seed localStorage from .pigry/agents.json when empty
   // (migrates the legacy per-team layout on first run).
   useEffect(() => {
     let cancelled = false;
@@ -1000,7 +1000,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
             </div>
 
             <div className="apanel__field">
-              <span>Skills it can use {skillNames.length === 0 && '(none in .orbit/skills/)'}</span>
+              <span>Skills it can use {skillNames.length === 0 && '(none in .pigry/skills/)'}</span>
               <div className="apanel__members">
                 {skillNames.map((skill) => (
                   <label key={skill} className="apanel__member">

@@ -1,6 +1,6 @@
 //! Server containers — a tiny Docker-like process manager built on the OS
-//! shell. Definitions live in the repo at `.orbit/containers.json`, logs in
-//! `.orbit/containers/logs/`, and spawned children are tracked in-memory so
+//! shell. Definitions live in the repo at `.pigry/containers.json`, logs in
+//! `.pigry/containers/logs/`, and spawned children are tracked in-memory so
 //! start/stop/status work without external tools.
 
 use serde::{Deserialize, Serialize};
@@ -93,7 +93,7 @@ fn children() -> &'static Mutex<HashMap<String, ChildEntry>> {
 }
 
 fn containers_dir(repo: &Path) -> PathBuf {
-    repo.join(".orbit").join("containers")
+    repo.join(".pigry").join("containers")
 }
 
 #[derive(Deserialize)]

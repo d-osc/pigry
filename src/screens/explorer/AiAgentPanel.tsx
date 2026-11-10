@@ -329,7 +329,7 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
 
 export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection }: AiAgentPanelProps) {
   const { repository, notify } = useRepository();
-  // Chats and memories live under this team's .orbit/teams/<team>/ store.
+  // Chats and memories live under this team's .pigry/teams/<team>/ store.
   const team = defaultTeam ?? 'Copilot';
   const chatScope = useMemo(() => ({ team }), [team]);
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
@@ -496,7 +496,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     return () => window.removeEventListener('focus', sync);
   }, []);
 
-  // Chat sessions (Copilot-style) stored IN the repo under .orbit/chat/:
+  // Chat sessions (Copilot-style) stored IN the repo under .pigry/chat/:
   // migrate legacy localStorage sessions, restore the active one on mount,
   // and save the file on every change. Sessions with no messages are not kept.
   const [sessionId, setSessionId] = useState(() => activeSessionId(chatScope));
@@ -763,7 +763,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
 
     let context = '';
-    // Project knowledge lives in the repo (.orbit/) — ride along every send.
+    // Project knowledge lives in the repo (.pigry/) — ride along every send.
     // Memory is a vector database: pick the semantically relevant entries.
     let memoryText = '';
     let skillsText = '';
@@ -780,7 +780,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     try {
       const tree = await getFileTree();
       const skillPaths = tree.entries
-        .filter((p) => p.startsWith('.orbit/skills/') && p.endsWith('.md'))
+        .filter((p) => p.startsWith('.pigry/skills/') && p.endsWith('.md'))
         .slice(0, 8);
       const parts: string[] = [];
       for (const skillPath of skillPaths) {
@@ -798,7 +798,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
     if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
-    // Project instructions (.orbit/instructions.md) — always ride along.
+    // Project instructions (.pigry/instructions.md) — always ride along.
     try {
       const instructions = (await readInstructions()).trim();
       if (instructions) context += `\n\n[Project instructions]\n${instructions.slice(0, 4000)}`;
@@ -1378,7 +1378,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         <button
           type="button"
           className="ai-sessions-btn"
-          title="Project memory (.orbit/memory.md)"
+          title="Project memory (.pigry/memory.md)"
           aria-label="Project memory"
           onClick={() => setKnowDialog('memory')}
         >
@@ -1387,7 +1387,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         <button
           type="button"
           className="ai-sessions-btn"
-          title="Project skills (.orbit/skills/)"
+          title="Project skills (.pigry/skills/)"
           aria-label="Project skills"
           onClick={() => setKnowDialog('skills')}
         >
