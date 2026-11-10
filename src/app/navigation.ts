@@ -15,6 +15,7 @@ import {
   GitMerge,
   ArrowUpCircle,
   Archive,
+  GitBranch,
   Cherry,
 } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export type NavId =
   | 'push-commits'
   | 'stashes'
   | 'cherry-pick'
+  | 'branches'
   | 'ai-agent'
   | 'pull-requests'
   | 'releases'
@@ -52,6 +54,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },
+  { id: 'branches', label: 'Branches', icon: GitBranch },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },

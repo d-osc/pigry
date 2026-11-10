@@ -124,6 +124,11 @@ export async function getCommitHistory(
   return invoke('get_commit_history', { includeRemotes });
 }
 
+export async function getBranchCommits(refName: string): Promise<CommitHistory> {
+  if (!isTauri()) return demoHistory;
+  return invoke('get_branch_commits', { refName });
+}
+
 export async function getFileTree(): Promise<FileTree> {
   if (!isTauri()) return demoTree;
   return invoke('get_file_tree');

@@ -836,7 +836,7 @@ pub fn stash(repo_path: &Path, message: Option<&str>) -> Result<()> {
 const MAX_HISTORY_ROWS: usize = 500;
 const MAX_REF_LABELS: usize = 3;
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitRow {
     pub oid: String,
@@ -859,7 +859,7 @@ pub struct CommitRow {
     pub refs: Vec<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CommitHistory {
     pub total: usize,
@@ -991,6 +991,52 @@ fn diff_touches_path(diff: &mut git2::Diff, path: &str) -> Result<bool> {
     )
     .map_err(err)?;
     Ok(touches)
+}
+
+/// Recent commits of one branch/ref (newest first) — a plain list, no
+/// graph lanes. Powers the Branches screen's commit pane.
+pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHistory> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let tip = repo
+        .revparse_single(ref_name)
+        .map_err(|e| format!("unknown ref {ref_name}: {}", e.message()))?
+        .peel_to_commit()
+        .map_err(err)?;
+    let mut revwalk = repo.revwalk().map_err(err)?;
+    revwalk.push(tip.id()).map_err(err)?;
+    revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    let mut commits: Vec<CommitRow> = Vec::new();
+    let mut truncated = false;
+    let mut total = 0usize;
+    for oid in revwalk {
+        let oid = oid.map_err(err)?;
+        total += 1;
+        if commits.len() >= MAX_HISTORY_ROWS {
+            truncated = true;
+            continue;
+        }
+        let commit = repo.find_commit(oid).map_err(err)?;
+        commits.push(CommitRow {
+            oid: commit.id().to_string(),
+            short_oid: commit
+                .as_object()
+                .short_id()
+                .map(|buf| buf.as_str().map(|str| str.to_string()).unwrap_or_default())
+                .unwrap_or_default(),
+            summary: commit.summary().unwrap_or_default().to_string(),
+            author_name: commit.author().name().unwrap_or_default().to_string(),
+            author_initials: initials_for(&commit.author().name().unwrap_or("")),
+            time_seconds: commit.time().seconds(),
+            lane: 0,
+            parent_lanes: Vec::new(),
+            active_before: Vec::new(),
+            active_after: Vec::new(),
+            is_head: false,
+            is_merge: commit.parent_count() > 1,
+            refs: Vec::new(),
+        });
+    }
+    Ok(CommitHistory { total, truncated, commits })
 }
 
 pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<CommitHistory> {

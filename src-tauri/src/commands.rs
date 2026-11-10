@@ -419,6 +419,18 @@ pub async fn get_commit_history(
 }
 
 #[tauri::command]
+pub async fn get_branch_commits(
+    state: State<'_, Mutex<AppState>>,
+    refName: String,
+) -> Result<git_state::CommitHistory, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::build_branch_commits(&repo_path, &refName)
+}
+
+#[tauri::command]
 pub async fn search_code(
     state: State<'_, Mutex<AppState>>,
     query: String,

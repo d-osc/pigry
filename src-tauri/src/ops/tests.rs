@@ -786,3 +786,60 @@ fn cherry_pick_conflict_then_abort_restores_branch() {
 
     fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn branch_commits_list_one_ref_only() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-branchcommits-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+
+    let commit_files = |dir: &PathBuf, message: &str, content: &str| {
+        fs::write(dir.join("a.txt"), content).unwrap();
+        let repo = Repository::open(dir).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree_oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_oid).unwrap();
+        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
+        let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
+    };
+
+    commit_files(&dir, "base", "one\n");
+    let base_branch = Repository::open(&dir)
+        .unwrap()
+        .head()
+        .unwrap()
+        .shorthand()
+        .unwrap_or("master")
+        .to_string();
+    git_cli(&dir, &["checkout", "-b", "feature"]);
+    commit_files(&dir, "feature work", "one\nfeature\n");
+    git_cli(&dir, &["checkout", &base_branch]);
+    commit_files(&dir, "main work", "one\nmain\n");
+
+    // The feature ref lists the feature tip first and never the main-only
+    // commit; the base ref lists both.
+    let feature = crate::git_state::build_branch_commits(&dir, "feature").unwrap();
+    assert_eq!(feature.total, 2);
+    assert_eq!(feature.commits[0].summary, "feature work");
+    assert!(!feature.commits.iter().any(|row| row.summary == "main work"));
+
+    let base = crate::git_state::build_branch_commits(&dir, &base_branch).unwrap();
+    assert_eq!(base.total, 2);
+    assert_eq!(base.commits[0].summary, "main work");
+
+    // Unknown ref reports a clear error.
+    let missing = crate::git_state::build_branch_commits(&dir, "nope");
+    assert!(missing.unwrap_err().contains("unknown ref"));
+
+    fs::remove_dir_all(&dir).unwrap();
+}
