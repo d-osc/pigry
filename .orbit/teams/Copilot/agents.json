@@ -1,0 +1,12 @@
+[
+  {
+    "id": "probe-agent",
+    "name": "Test Runner",
+    "username": "test-runner",
+    "team": "Copilot",
+    "enabled": true,
+    "tools": [],
+    "skills": [],
+    "mcpServers": []
+  }
+]
