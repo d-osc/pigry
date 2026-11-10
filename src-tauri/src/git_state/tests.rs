@@ -15,6 +15,10 @@ fn scratch_repo(name: &str) -> PathBuf {
     let mut config = repo.config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
     config.set_str("user.email", "test@orbit.dev").unwrap();
+    // The Windows system gitconfig sets core.autocrlf=true, which makes
+    // checkout rewrite LF fixtures to CRLF — stash/merge then compare raw
+    // bytes and report phantom conflicts. Pin LF for determinism.
+    config.set_bool("core.autocrlf", false).unwrap();
     dir
 }
 
@@ -416,9 +420,9 @@ fn file_tree_lists_tracked_and_untracked_but_not_ignored() {
     assert!(tree.entries.iter().any(|p| p == "docs/new.md"), "untracked file present");
     assert!(!tree.entries.iter().any(|p| p.starts_with("node_modules/")), "ignored dir excluded");
     assert!(!tree.entries.iter().any(|p| p.ends_with(".log")), "ignored pattern excluded");
-    assert!(tree.changed_paths.iter().any(|p| p == "readme.md"), "modified file flagged");
-    assert!(tree.changed_paths.iter().any(|p| p == "docs/new.md"), "untracked file flagged");
-    assert!(!tree.changed_paths.iter().any(|p| p.starts_with("node_modules/")));
+    assert!(tree.changed.iter().any(|c| c.path == "readme.md"), "modified file flagged");
+    assert!(tree.changed.iter().any(|c| c.path == "docs/new.md"), "untracked file flagged");
+    assert!(tree.changed.iter().all(|c| !c.path.starts_with("node_modules/")));
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -813,34 +817,40 @@ fn stash_apply_keeps_entry_pop_removes_it() {
     write(&dir, "a.txt", "base\n");
     commit_all(&dir, "base");
 
-    // Two stashes.
-    write(&dir, "a.txt", "change one\n");
-    stash(&dir, Some("first stash")).unwrap();
-    write(&dir, "a.txt", "change two\n");
-    stash(&dir, Some("second stash")).unwrap();
-
-    let state = build_state(&dir).unwrap();
-    assert_eq!(state.stashes.len(), 2);
-    assert!(state.files.is_empty(), "worktree clean after stashing");
-
-    // Apply (not pop) stash 0 restores content and keeps both entries.
-    stash_apply(&dir, 0).unwrap();
-    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
-    assert_eq!(content, "change two\n", "stash 0 is the most recent (second stash)");
-    let state = build_state(&dir).unwrap();
-    assert_eq!(state.stashes.len(), 2, "apply keeps the stash entry");
-
-    // Pop removes the entry.
-    stash_pop(&dir, 0).unwrap();
+    // Apply (not pop) restores content and keeps the entry. Every stash is
+    // applied onto its own clean base worktree, like the real UI flow —
+    // re-applying an already-applied stash makes libgit2's checkout report
+    // a phantom conflict.
+    write(&dir, "a.txt", "apply me\n");
+    stash(&dir, Some("apply stash")).unwrap();
     let state = build_state(&dir).unwrap();
     assert_eq!(state.stashes.len(), 1);
+    assert!(state.files.is_empty(), "worktree clean after stashing");
+    stash_apply(&dir, 0).unwrap();
+    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
+    assert_eq!(content, "apply me\n");
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 1, "apply keeps the stash entry");
 
-    // Drop removes the last one without touching the worktree.
+    // Pop restores the content and removes the entry.
+    write(&dir, "a.txt", "pop me\n");
+    stash(&dir, Some("pop stash")).unwrap();
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 2);
+    stash_pop(&dir, 0).unwrap();
+    let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
+    assert_eq!(content, "pop me\n", "stash 0 is the most recent");
+    let state = build_state(&dir).unwrap();
+    assert_eq!(state.stashes.len(), 1, "pop removes the stash entry");
+
+    // Drop removes the entry without touching the worktree.
+    write(&dir, "a.txt", "drop me\n");
+    stash(&dir, Some("drop stash")).unwrap();
     stash_drop(&dir, 0).unwrap();
     let state = build_state(&dir).unwrap();
-    assert_eq!(state.stashes.len(), 0);
+    assert_eq!(state.stashes.len(), 1);
     let content = fs::read_to_string(dir.join("a.txt")).unwrap().replace('\r', "");
-    assert_eq!(content, "change two\n");
+    assert_eq!(content, "base\n", "drop leaves the clean worktree alone");
 
     // Out-of-range errors are clear.
     assert!(stash_apply(&dir, 5).is_err());

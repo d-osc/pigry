@@ -2833,6 +2833,13 @@ pub fn discard_hunk(repo_path: &Path, path: &str, hunk_index: usize) -> Result<(
     }
     parts.extend(wt_lines[suffix_start..].iter().cloned());
 
+    // libgit2 mmaps workdir files while diffing; the mapping keeps the file
+    // write-locked on Windows (os error 1224), so release every handle
+    // before touching the filesystem.
+    drop(patch);
+    drop(diff);
+    drop(repo);
+
     if parts.is_empty() {
         // Nothing remains — delete the file (untracked or fully reverted).
         std::fs::remove_file(&workdir_path).map_err(|e| format!("failed to discard: {e}"))?;
