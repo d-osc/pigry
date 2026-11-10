@@ -9,6 +9,7 @@ import {
   mergeFileVersions,
   mergeStatus,
   writeWorktreeFile,
+  stagePaths,
   type MergePreview,
   type MergeStatusInfo,
 } from '../../lib/tauriClient';
@@ -386,47 +387,61 @@ export function MergeBranchScreen() {
 
         {conflict && (
           <section className="merge-branch__section merge-branch__conflict">
-            <h3 className="merge-branch__section-title">
-              <AlertTriangle size={13} strokeWidth={1.5} />
-              Conflicts ({conflict.conflicted.length})
-            </h3>
-            <p className="merge-branch__conflict-hint">
-              Every conflicted file is open below — resolve each with the accept
-              buttons, or abort to restore the branch.
-            </p>
-            <ul className="merge-branch__conflict-list">
-              {conflict.conflicted.map((file) => {
-                const collapsed = collapsedConflicts.has(file);
-                return (
-                  <li key={file} className="merge-branch__conflict-file">
-                    <button
-                      type="button"
-                      className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
-                      title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
-                      onClick={() =>
-                        setCollapsedConflicts((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(file)) next.delete(file);
-                          else next.add(file);
-                          return next;
-                        })
-                      }
-                    >
-                      {file}
-                    </button>
-                    {!collapsed && (
-                      <div className="merge-branch__conflict-editor">
-                        <ConflictEditor
-                          key={`${file}:${effectiveSource || currentBranch}`}
-                          path={file}
-                          branch={effectiveSource || currentBranch}
-                        />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            {conflict.conflicted.length === 0 ? (
+              <>
+                <h3 className="merge-branch__section-title">
+                  <CheckCircle2 size={13} strokeWidth={1.5} />
+                  Conflicts resolved
+                </h3>
+                <p className="merge-branch__conflict-resolved">
+                  Every conflicted file is staged — commit to finish the merge.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="merge-branch__section-title">
+                  <AlertTriangle size={13} strokeWidth={1.5} />
+                  Conflicts ({conflict.conflicted.length})
+                </h3>
+                <p className="merge-branch__conflict-hint">
+                  Every conflicted file is open below — resolve each with the accept
+                  buttons, or abort to restore the branch.
+                </p>
+                <ul className="merge-branch__conflict-list">
+                  {conflict.conflicted.map((file) => {
+                    const collapsed = collapsedConflicts.has(file);
+                    return (
+                      <li key={file} className="merge-branch__conflict-file">
+                        <button
+                          type="button"
+                          className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
+                          title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
+                          onClick={() =>
+                            setCollapsedConflicts((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(file)) next.delete(file);
+                              else next.add(file);
+                              return next;
+                            })
+                          }
+                        >
+                          {file}
+                        </button>
+                        {!collapsed && (
+                          <div className="merge-branch__conflict-editor">
+                            <ConflictEditor
+                              key={`${file}:${effectiveSource || currentBranch}`}
+                              path={file}
+                              branch={effectiveSource || currentBranch}
+                            />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
           </section>
         )}
 
@@ -464,6 +479,7 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
   const valueRef = useRef('');
   const [saving, setSaving] = useState(false);
   const controllerRef = useRef<ConflictController | null>(null);
+  const saveRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let alive = true;
@@ -497,7 +513,15 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
     setSaving(true);
     try {
       await writeWorktreeFile(path, valueRef.current);
-      notify('Resolved file saved — stage and commit to finish', 'success');
+      // A conflict only leaves the list once the index is updated — stage
+      // the file automatically when the markers are gone; keep it listed
+      // (and editable) while markers remain.
+      if (!valueRef.current.includes('<<<<<<<')) {
+        await stagePaths([path]);
+        notify('Conflict resolved and staged — commit to finish the merge', 'success');
+      } else {
+        notify('Saved — conflict markers remain, keep resolving', 'error');
+      }
       refresh();
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
@@ -505,6 +529,9 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
       setSaving(false);
     }
   };
+  useEffect(() => {
+    saveRef.current = () => void save();
+  });
 
   if (text === null) {
     return (
@@ -514,11 +541,28 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
     );
   }
 
+  const stageAndReport = async () => {
+    try {
+      await stagePaths([path]);
+      notify('File staged — commit to finish the merge', 'success');
+      refresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  };
+
   if (!text.includes('<<<<<<<')) {
     return (
-      <p className="merge-branch__conflict-resolved">
-        No conflict markers remain — stage the file and commit to finish.
-      </p>
+      <div className="merge-branch__conflict-editor">
+        <div className="merge-branch__conflict-editor-toolbar">
+          <p className="merge-branch__conflict-resolved">
+            No conflict markers remain — stage the file to finish.
+          </p>
+          <button type="button" className="merge-branch__save-btn" onClick={() => void stageAndReport()}>
+            Stage file
+          </button>
+        </div>
+      </div>
     );
   }
 
@@ -564,6 +608,10 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
               valueRef.current = text2;
             };
             controller.update();
+            // Ctrl+S saves + stages the resolution, like the Save button.
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+              saveRef.current();
+            });
           }}
           options={{
             fontSize: 11,
