@@ -729,15 +729,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setAttachedFiles((current) => current.filter((file) => file.path !== path));
   };
 
+  /** The menu's default agent — first enabled member of the panel's team.
+   * Answers turns that carry no @mention, with its own provider/model and
+   * its own private memory scope. */
+  const defaultAgent = loadAgents().find(
+    (agent) => agent.enabled && agent.username && agent.team === team,
+  );
+
   const send = async () => {
     const text = input.trim();
     if (!text || sending) return;
     // An @mention directs the turn at that agent — it answers in character
-    // through its own provider/model. No mention = the default acting agent.
-    const target = firstMentionedAgent(
-      text,
-      loadAgents().filter((agent) => agent.enabled && agent.username),
-    );
+    // through its own provider/model. No mention = the menu's default agent
+    // (first enabled member of the panel's team) answers.
+    const target =
+      firstMentionedAgent(
+        text,
+        loadAgents().filter((agent) => agent.enabled && agent.username),
+      ) ?? defaultAgent ?? null;
     if (!active) {
       setMessages((m) => [
         ...m,
@@ -759,7 +768,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     let memoryText = '';
     let skillsText = '';
     try {
-      const hits = await memorySearch(text, 5, team);
+      // The answering agent reads its OWN private memory when one is
+      // targeted; the team store backs teamless turns.
+      const hits = await memorySearch(text, 5, team, target?.username);
       if (hits.length > 0) {
         memoryText = hits.map((hit) => `- ${hit.text}`).join('\n').slice(0, 2000);
       }
@@ -899,11 +910,13 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const history = [...messages.slice(0, index), edited];
     setMessages(history);
     setEditingIndex(null);
-    // The retargeted mention (if any) decides who answers the re-run.
-    const target = firstMentionedAgent(
-      edited.text,
-      loadAgents().filter((agent) => agent.enabled && agent.username),
-    );
+    // The retargeted mention (if any) decides who answers the re-run;
+    // no mention defers to the menu's default agent.
+    const target =
+      firstMentionedAgent(
+        edited.text,
+        loadAgents().filter((agent) => agent.enabled && agent.username),
+      ) ?? defaultAgent ?? null;
     await doSend(history, target);
   };
 
@@ -1778,7 +1791,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           Context: {fileName}
           {activeSelection ? ` · lines ${activeSelection.startLine}–${activeSelection.endLine} selected` : ''}
           {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
-          {loadAgents().some((agent) => agent.enabled && agent.username) ? ' · @ to tag an agent' : ''}
+          {defaultAgent
+            ? ` · default @${defaultAgent.username} answers — @ to tag another agent`
+            : loadAgents().some((agent) => agent.enabled && agent.username)
+              ? ' · @ to tag an agent'
+              : ''}
         </div>
       </footer>
       </>
