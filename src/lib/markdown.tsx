@@ -5,6 +5,7 @@
  * italic / links / images. Everything is escaped (text never becomes HTML).
  */
 import type { ReactNode } from 'react';
+import { pushWithMentions } from './mentions';
 
 export interface Heading {
   text: string;
@@ -49,13 +50,16 @@ function renderInline(raw: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let rest = raw;
   let index = 0;
+  const pushPlain = (text: string, at: number) => {
+    if (text) pushWithMentions(nodes, text, `${keyBase}-p${at}`);
+  };
   while (rest) {
     const match = rest.match(INLINE_PATTERN);
     if (!match || match.index === undefined) {
-      nodes.push(rest);
+      pushPlain(rest, index);
       break;
     }
-    if (match.index > 0) nodes.push(rest.slice(0, match.index));
+    if (match.index > 0) pushPlain(rest.slice(0, match.index), index);
     const token = match[0];
     const key = `${keyBase}-${index}`;
     index += 1;

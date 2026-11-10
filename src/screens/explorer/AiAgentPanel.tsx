@@ -35,6 +35,16 @@ import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
 import { loadMcpServers } from '../../lib/mcpServers';
 import { loadAgents, readInstructions, runEventHooks } from '../../lib/agentExtras';
+import {
+  MentionMenu,
+  applyMention,
+  detectMention,
+  firstMentionedAgent,
+  mentionCandidates,
+  mentionedAgents,
+  type MentionState,
+} from '../../lib/mentions';
+import type { AgentEntry } from '../../lib/agentExtras';
 import { renderMarkdown } from '../../lib/markdown';
 import {
   AgentToolsTab,
@@ -99,6 +109,27 @@ function fmtMsgTime(time?: number): string {
   return `${day}, ${clock}`;
 }
 
+/** Identity block for a tagged agent — prepended to the payload so the
+ * model answers in character as that agent. */
+function agentProfileText(agent: AgentEntry): string {
+  const lines = [
+    `- name: ${agent.name}`,
+    agent.username ? `- handle: @${agent.username}` : '',
+    agent.role ? `- role: ${agent.role}` : '',
+    agent.team ? `- team: ${agent.team}` : '',
+    agent.description ? `- description: ${agent.description}` : '',
+    agent.tools.length > 0 ? `- tools: ${agent.tools.join(', ')}` : '',
+    agent.skills.length > 0 ? `- skills: ${agent.skills.join(', ')}` : '',
+    agent.mcpServers.length > 0 ? `- mcp: ${agent.mcpServers.join(', ')}` : '',
+  ].filter(Boolean);
+  return `${lines.join('\n')}\n\nYou are @${agent.username}. Respond in character as this agent.`;
+}
+
+/** Wall-clock stamp — wrapped so async send paths stay purity-clean. */
+function now(): number {
+  return Date.now();
+}
+
 /** Full store entry for a detected CLI agent (no HTTP config). */
 function cliEntry(id: string, name: string, type: 'claude-code' | 'codex', model: string): AiProviderEntry {
   return {
@@ -148,12 +179,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // Message being edited (index) + its draft (Copilot-style edit & resubmit).
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState('');
-  // Dismissed selection key — reset whenever a different selection arrives.
+  // Dismissed selection key — reset during render when a different
+  // selection arrives (adjust-state-on-change, no effect needed).
   const selectionKey = selection ? `${selection.path}:${selection.startLine}:${selection.endLine}` : '';
   const [dismissedKey, setDismissedKey] = useState('');
-  useEffect(() => {
+  const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
+  if (prevSelectionKey !== selectionKey) {
+    setPrevSelectionKey(selectionKey);
     setDismissedKey('');
-  }, [selectionKey]);
+  }
   const activeSelection =
     selection && selectionKey !== dismissedKey ? selection : null;
 
@@ -186,6 +220,34 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // @mention autocomplete — typing `@` opens the agent picker; the picked
+  // @username directs the message at that agent (its provider/model reply).
+  const [mention, setMention] = useState<MentionState | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const mentionList = useMemo(
+    () => (mention ? mentionCandidates(loadAgents(), mention.query) : []),
+    [mention],
+  );
+  const mentionPos = Math.min(mentionIdx, Math.max(0, mentionList.length - 1));
+
+  const closeMention = () => {
+    setMention(null);
+    setMentionIdx(0);
+  };
+
+  /** Commits the picked agent into the composer text. */
+  const pickMention = (agent: AgentEntry) => {
+    if (!mention) return;
+    const caret = textareaRef.current?.selectionStart ?? input.length;
+    const next = applyMention(input, mention, caret, agent.username);
+    setInput(next.value);
+    closeMention();
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
 
   // ZCode Cloud (GLM) — detected automatically when ZCode desktop is installed.
   const [zcodeProvider, setZcodeProvider] = useState<AiProviderEntry | null>(null);
@@ -265,7 +327,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
   const sessionsRef = useRef<HTMLDivElement | null>(null);
   /** Creation time of the current session (preserved across saves). */
-  const createdAtRef = useRef(Date.now());
+  const createdAtRef = useRef(now());
 
   // One-shot restore: active session, else the newest, else a fresh id.
   useEffect(() => {
@@ -282,7 +344,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         setActiveSessionId(id, chatScope);
       }
       if (!id) {
-        id = `chat-${Date.now().toString(36)}`;
+        id = `chat-${now().toString(36)}`;
         setActiveSessionId(id, chatScope);
       }
       setSessionId(id);
@@ -308,7 +370,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         title: groupTitle.custom ? groupTitle.name : titleFromMessages(messages),
         titleCustom: groupTitle.custom,
         createdAt: createdAtRef.current,
-        updatedAt: Date.now(),
+        updatedAt: now(),
         messages,
         team,
         agentUsername,
@@ -350,10 +412,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
 
   /** Starts a fresh conversation; the previous one stays in history. */
   const startNewChat = () => {
-    const id = `chat-${Date.now().toString(36)}`;
+    const id = `chat-${now().toString(36)}`;
     setActiveSessionId(id, chatScope);
     setSessionId(id);
-    createdAtRef.current = Date.now();
+    createdAtRef.current = now();
     setGroupTitle({ name: '', custom: false });
     setMessages([]);
     setInput('');
@@ -493,6 +555,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const send = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    // An @mention directs the turn at that agent — it answers in character
+    // through its own provider/model. No mention = the default acting agent.
+    const target = firstMentionedAgent(
+      text,
+      loadAgents().filter((agent) => agent.enabled && agent.username),
+    );
     if (!active) {
       setMessages((m) => [
         ...m,
@@ -500,7 +568,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           role: 'assistant',
           text: 'No AI provider configured — add one in Settings → AI Provider.',
           error: true,
-          time: Date.now(),
+          time: now(),
           agent: agentUsername,
           owner: ownerName,
         },
@@ -610,9 +678,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const userMessage: ChatMessage = {
       role: 'user',
       text,
-      time: Date.now(),
+      time: now(),
       owner: ownerName,
-      agent: agentUsername,
+      agent: target?.username ?? agentUsername,
       context,
       selection: activeSelection
         ? {
@@ -628,7 +696,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setMessages(history);
     setInput('');
     setImages([]);
-    await doSend(history);
+    closeMention();
+    await doSend(history, target);
   };
 
   /** Edits a sent user message and re-runs the conversation from there
@@ -636,42 +705,82 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
    * discarded and a fresh reply is generated. */
   const resendEdited = async (index: number, newText: string) => {
     if (sending || !newText.trim()) return;
-    const edited: ChatMessage = { ...messages[index], text: newText.trim(), time: Date.now() };
+    const edited: ChatMessage = { ...messages[index], text: newText.trim(), time: now() };
     const history = [...messages.slice(0, index), edited];
     setMessages(history);
     setEditingIndex(null);
-    await doSend(history);
+    // The retargeted mention (if any) decides who answers the re-run.
+    const target = firstMentionedAgent(
+      edited.text,
+      loadAgents().filter((agent) => agent.enabled && agent.username),
+    );
+    await doSend(history, target);
   };
 
-  /** Runs the provider for `history` (whose last entry is the user turn). */
-  const doSend = async (history: ChatMessage[]) => {
-    const last = history[history.length - 1];
+  /** Runs the provider for `history` (whose last entry is the user turn),
+   * appending the reply — and when the reply @mentions other agents, tags
+   * them into the thread (agent-to-agent; budget-capped, each agent speaks
+   * at most once per chain so it always ends). Returns the updated history. */
+  const doSend = async (
+    history: ChatMessage[],
+    target?: AgentEntry | null,
+    chainLeft = 3,
+  ): Promise<ChatMessage[]> => {
     setSending(true);
+    try {
+      return await runTurn(history, target ?? null, chainLeft);
+    } finally {
+      setSending(false);
+      // after-reply hooks (Hooks tab) run once the reply lands or fails.
+      try {
+        await runEventHooks('after-reply', repository?.localPath ?? '.');
+      } catch {
+        // never block the UI on a hook
+      }
+    }
+  };
 
-    if (isCliProvider(active)) {
-      const cli = active.type === 'claude-code' ? 'claude' : 'codex';
+  const runTurn = async (
+    history: ChatMessage[],
+    target: AgentEntry | null,
+    chainLeft: number,
+  ): Promise<ChatMessage[]> => {
+    const last = history[history.length - 1];
+    // A tagged agent chats through its own provider/model when configured;
+    // otherwise the globally active provider answers.
+    const provider = (() => {
+      if (target?.providerId) {
+        const found = allProviders.find((p) => p.id === target.providerId);
+        if (found) return { ...found, model: target.model || found.model };
+      }
+      return active;
+    })();
+    const repliedAs = target?.username ?? agentUsername;
+
+    if (isCliProvider(provider)) {
+      const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
+      let working = history;
       try {
         const output = await cliAgentRun(cli, last.text);
-        setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)', time: Date.now(), agent: agentUsername, owner: ownerName }]);
+        working = [...history, { role: 'assistant', text: output || '(no output)', time: now(), agent: repliedAs, owner: ownerName }];
+        setMessages(working);
       } catch (error) {
-        setMessages((m) => [
-          ...m,
-          { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: Date.now(), agent: agentUsername, owner: ownerName },
-        ]);
-      } finally {
-        setSending(false);
+        working = [...history, { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: now(), agent: repliedAs, owner: ownerName }];
+        setMessages(working);
       }
-      return;
+      return working;
     }
 
-    const isAnthropic = active.apiFormat === 'anthropic';
-    const rawEndpoint = resolveEndpoint(active);
+    const isAnthropic = provider.apiFormat === 'anthropic';
+    const rawEndpoint = resolveEndpoint(provider);
     const endpoint = isAnthropic ? anthropicEndpoint(rawEndpoint) : rawEndpoint;
     // Anthropic image blocks carry base64 without the data: URL prefix.
     const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
     const mediaTypeOf = (dataUrl: string) =>
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
-    const fullText = last.text + (last.context ?? '');
+    // The tagged agent's identity rides along so it answers in character.
+    const profile = target ? `\n\n[Your agent profile]\n${agentProfileText(target)}` : '';
+    const fullText = last.text + (last.context ?? '') + profile;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0
@@ -698,20 +807,23 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         : fullText;
     const payload = isAnthropic
       ? {
-          model: active.model || 'claude-sonnet',
+          model: provider.model || 'claude-sonnet',
           max_tokens: 4096,
           messages: [{ role: 'user', content }],
         }
       : {
-          model: active.model || 'glm-4.6',
+          model: provider.model || 'glm-4.6',
           messages: [{ role: 'user', content }],
           stream: false,
         };
 
+    let working = history;
+    let replyError = false;
+    let assistantText = '';
     try {
       const result = await aiChat(
         endpoint,
-        active.apiKey,
+        provider.apiKey,
         JSON.stringify(payload),
         isAnthropic ? 'anthropic' : 'bearer',
       );
@@ -722,7 +834,6 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           return null;
         }
       })();
-      let assistantText = '';
       if (isAnthropic) {
         const blocks = parsed?.content as Array<{ type?: string; text?: string }> | undefined;
         assistantText =
@@ -743,29 +854,52 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           | null;
         const message =
           err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`;
-        setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true, time: Date.now(), agent: agentUsername, owner: ownerName }]);
+        replyError = true;
+        assistantText = String(message);
+        working = [...history, { role: 'assistant', text: String(message), error: true, time: now(), agent: repliedAs, owner: ownerName }];
       } else {
-        setMessages((m) => [...m, { role: 'assistant', text: assistantText, time: Date.now(), agent: agentUsername, owner: ownerName }]);
+        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName }];
       }
+      setMessages(working);
     } catch (error) {
-      setMessages((m) => [
-        ...m,
+      replyError = true;
+      working = [
+        ...history,
         {
           role: 'assistant',
           text: error instanceof Error ? error.message : String(error),
           error: true,
-          time: Date.now(),
+          time: now(),
+          agent: repliedAs,
+          owner: ownerName,
         },
-      ]);
-    } finally {
-      setSending(false);
-      // after-reply hooks (Hooks tab) run once the reply lands or fails.
-      try {
-        await runEventHooks('after-reply', repository?.localPath ?? '.');
-      } catch {
-        // never block the UI on a hook
+      ];
+      setMessages(working);
+    }
+
+    // Agent-to-agent: the reply's @mentions tag other agents into the
+    // thread. Budget-capped and each agent speaks once per chain — no loops.
+    if (!replyError && chainLeft > 0 && assistantText) {
+      const registry = loadAgents().filter((agent) => agent.enabled && agent.username);
+      const spoke = new Set([repliedAs]);
+      for (const next of mentionedAgents(assistantText, registry)) {
+        if (chainLeft <= 0) break;
+        if (spoke.has(next.username)) continue;
+        spoke.add(next.username);
+        chainLeft -= 1;
+        const trigger: ChatMessage = {
+          role: 'user',
+          text: `@${next.username} was tagged by @${repliedAs} — your turn to respond.`,
+          time: now(),
+          owner: ownerName,
+          agent: next.username,
+        };
+        working = [...working, trigger];
+        setMessages(working);
+        working = await runTurn(working, next, chainLeft - 1);
       }
     }
+    return working;
   };
 
   const clearConversation = () => {
@@ -1205,22 +1339,59 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               ))}
             </div>
           )}
-          <textarea
-            ref={textareaRef}
-            className="ai-composer__input"
-            placeholder={`Ask AI to improve this file… (markdown supported, paste images)`}
-            aria-label="Ask AI"
-            value={input}
-            rows={2}
-            onChange={(event) => setInput(event.target.value)}
-            onPaste={handlePaste}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                void send();
-              }
-            }}
-          />
+          <div className="ai-composer__input-wrap">
+            {mention && (
+              <MentionMenu
+                candidates={mentionList}
+                highlighted={mentionPos}
+                onHover={setMentionIdx}
+                onPick={pickMention}
+                onOutside={closeMention}
+                anchorRef={textareaRef}
+                direction="up"
+                label="Mention an agent"
+              />
+            )}
+            <textarea
+              ref={textareaRef}
+              className="ai-composer__input"
+              placeholder={`Ask AI to improve this file… (markdown supported, paste images, @ to tag an agent)`}
+              aria-label="Ask AI"
+              value={input}
+              rows={2}
+              onChange={(event) => {
+                const { value, selectionStart } = event.target;
+                setInput(value);
+                setMention(detectMention(value, selectionStart ?? value.length));
+                setMentionIdx(0);
+              }}
+              onPaste={handlePaste}
+              onKeyDown={(event) => {
+                if (mention && mentionList.length > 0) {
+                  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    const delta = event.key === 'ArrowUp' ? -1 : 1;
+                    setMentionIdx((i) => (i + delta + mentionList.length) % mentionList.length);
+                    return;
+                  }
+                  if (event.key === 'Enter' || event.key === 'Tab') {
+                    event.preventDefault();
+                    pickMention(mentionList[mentionPos]);
+                    return;
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeMention();
+                    return;
+                  }
+                }
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  void send();
+                }
+              }}
+            />
+          </div>
           {attachError && <p className="ai-composer__error">{attachError}</p>}
           <div className="ai-composer__bar">
             <div className="ai-composer__tools">
@@ -1291,6 +1462,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           Context: {fileName}
           {activeSelection ? ` · lines ${activeSelection.startLine}–${activeSelection.endLine} selected` : ''}
           {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
+          {loadAgents().some((agent) => agent.enabled && agent.username) ? ' · @ to tag an agent' : ''}
         </div>
       </footer>
       </>

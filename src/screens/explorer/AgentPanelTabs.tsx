@@ -52,6 +52,13 @@ import {
   type PluginEntry,
 } from '../../lib/agentExtras';
 import { loadProviders, type AiProviderEntry } from '../../lib/aiProviders';
+import {
+  MentionMenu,
+  applyMention,
+  detectMention,
+  mentionCandidates,
+  type MentionState,
+} from '../../lib/mentions';
 import { useRepository } from '../../hooks/useRepository';
 import './AgentPanelTabs.css';
 
@@ -525,6 +532,28 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
   const [descPreview, setDescPreview] = useState(false);
+  // @mention autocomplete in the description — typing `@` opens the agent
+  // picker; picking inserts the `@username` tag into the markdown text.
+  const [descMention, setDescMention] = useState<MentionState | null>(null);
+  const [descMentionIdx, setDescMentionIdx] = useState(0);
+  const descMentionList = useMemo(
+    () => (descMention ? mentionCandidates(loadAgents(), descMention.query) : []),
+    [descMention],
+  );
+  const descMentionPos = Math.min(descMentionIdx, Math.max(0, descMentionList.length - 1));
+
+  const pickDescMention = (agent: AgentEntry) => {
+    if (!draft || !descMention) return;
+    const caret = descRef.current?.selectionStart ?? draft.description.length;
+    const next = applyMention(draft.description, descMention, caret, agent.username);
+    setDraft({ ...draft, description: next.value });
+    setDescMention(null);
+    setDescMentionIdx(0);
+    requestAnimationFrame(() => {
+      descRef.current?.focus();
+      descRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -907,13 +936,50 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                   )}
                 </div>
               ) : (
-                <textarea
-                  ref={descRef}
-                  rows={3}
-                  value={draft.description}
-                  placeholder={'**CI Bot** runs the test suite\n- reports failures'}
-                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                />
+                <div className="ai-composer__input-wrap">
+                  {descMention && (
+                    <MentionMenu
+                      candidates={descMentionList}
+                      highlighted={descMentionPos}
+                      onHover={setDescMentionIdx}
+                      onPick={pickDescMention}
+                      onOutside={() => {
+                        setDescMention(null);
+                        setDescMentionIdx(0);
+                      }}
+                      anchorRef={descRef}
+                      direction="down"
+                      label="Mention an agent"
+                    />
+                  )}
+                  <textarea
+                    ref={descRef}
+                    rows={3}
+                    value={draft.description}
+                    placeholder={'**CI Bot** runs the test suite\n- reports failures\n@other-agent to tag a teammate'}
+                    onChange={(event) => {
+                      const { value, selectionStart } = event.target;
+                      setDraft({ ...draft, description: value });
+                      setDescMention(detectMention(value, selectionStart ?? value.length));
+                      setDescMentionIdx(0);
+                    }}
+                    onKeyDown={(event) => {
+                      if (!descMention || descMentionList.length === 0) return;
+                      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        const delta = event.key === 'ArrowUp' ? -1 : 1;
+                        setDescMentionIdx((i) => (i + delta + descMentionList.length) % descMentionList.length);
+                      } else if (event.key === 'Enter' || event.key === 'Tab') {
+                        event.preventDefault();
+                        pickDescMention(descMentionList[descMentionPos]);
+                      } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setDescMention(null);
+                        setDescMentionIdx(0);
+                      }
+                    }}
+                  />
+                </div>
               )}
             </div>
 
