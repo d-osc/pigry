@@ -4,7 +4,7 @@
 
 fn main() {
     let path = std::env::args().nth(1).expect("pass a repository path");
-    match orbit_lib::git_state::build_state(std::path::Path::new(&path)) {
+    match pigry_lib::git_state::build_state(std::path::Path::new(&path)) {
         Ok(state) => {
             println!("OK  org={} name={} branch={}", state.organization, state.name, state.current_branch);
             println!("    files={} branches={} tags={} stashes={}",

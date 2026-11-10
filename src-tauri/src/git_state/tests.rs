@@ -1343,3 +1343,30 @@ fn submodules_list_empty_when_none() {
     assert!(sub.abs_path.ends_with("vendor/inner"));
     assert!(!sub.dirty, "freshly added submodule matches the index");
 }
+
+
+#[test]
+fn read_binary_file_returns_base64_and_mime() {
+    let dir = scratch_repo("binary-preview");
+    // PNG magic bytes
+    let png_bytes: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
+    fs::write(dir.join("pic.png"), png_bytes).unwrap();
+    fs::write(dir.join("doc.pdf"), b"%PDF-1.4 test").unwrap();
+    fs::write(dir.join("notes.txt"), b"plain").unwrap();
+
+    let png = read_binary_file(&dir, "pic.png").unwrap();
+    assert_eq!(png.mime, "image/png");
+    assert_eq!(png.size, png_bytes.len());
+    use base64::Engine as _;
+    let decoded = base64::engine::general_purpose::STANDARD.decode(&png.data).unwrap();
+    assert_eq!(decoded, png_bytes);
+
+    let pdf = read_binary_file(&dir, "doc.pdf").unwrap();
+    assert_eq!(pdf.mime, "application/pdf");
+
+    let _txt = read_binary_file(&dir, "notes.txt").unwrap();
+    assert_eq!(_txt.mime, "application/octet-stream");
+
+    assert!(read_binary_file(&dir, "../escape.png").is_err(), "traversal rejected");
+    let _ = fs::remove_dir_all(&dir);
+}

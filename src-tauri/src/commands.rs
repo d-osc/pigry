@@ -1144,6 +1144,27 @@ pub async fn read_worktree_file(
 }
 
 #[tauri::command]
+pub async fn read_binary_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<git_state::BinaryFileContent, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_binary_file(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn open_path_external(state: State<'_, Mutex<AppState>>, path: String) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::open_path_external(&repo_path, &path)
+}
+
+#[tauri::command]
 pub async fn write_worktree_file(
     state: State<'_, Mutex<AppState>>,
     path: String,

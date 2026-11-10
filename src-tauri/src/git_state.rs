@@ -1231,6 +1231,63 @@ pub struct WorktreeFileContent {
     pub language: String,
 }
 
+/// Binary file for preview viewers — base64 payload + detected mime type.
+#[derive(Serialize, Debug)]
+pub struct BinaryFileContent {
+    pub data: String,
+    pub mime: String,
+    pub size: usize,
+}
+
+const MAX_BINARY_BYTES: usize = 20_000_000;
+
+/// Mime type by extension for the preview viewers (defaults to octet-stream).
+fn mime_for(path: &str) -> &'static str {
+    let ext = path.rsplit('.').next().unwrap_or("").to_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "svg" => "image/svg+xml",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
+/// Reads a binary file (images, pdfs, office docs) as base64 for the
+/// preview viewers. Same traversal guard as the text reader.
+pub fn read_binary_file(repo_path: &Path, path: &str) -> Result<BinaryFileContent> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    let bytes = std::fs::read(&full).map_err(|e| format!("failed to read {path}: {e}"))?;
+    if bytes.len() > MAX_BINARY_BYTES {
+        return Err(format!(
+            "file too large: {path} (over {} MB)",
+            MAX_BINARY_BYTES / 1_000_000
+        ));
+    }
+    use base64::Engine as _;
+    Ok(BinaryFileContent {
+        data: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        mime: mime_for(path).to_string(),
+        size: bytes.len(),
+    })
+}
+
+/// Opens a worktree file with the OS default application (shell assoc).
+pub fn open_path_external(repo_path: &Path, path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &full.to_string_lossy()])
+        .spawn()
+        .map_err(|e| format!("failed to open {path}: {e}"))?;
+    Ok(())
+}
+
 /// Reject absolute paths and traversal outside the worktree. When the file
 /// may not exist yet (writing), only the parent directory is canonicalized.
 fn safe_worktree_path(repo: &Repository, path: &str, must_exist: bool) -> Result<std::path::PathBuf> {

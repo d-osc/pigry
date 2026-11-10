@@ -140,6 +140,8 @@ pub fn run() {
             commands::ai_chat,
             commands::search_code,
             commands::read_worktree_file,
+            commands::read_binary_file,
+            commands::open_path_external,
             commands::write_worktree_file,
             commands::delete_worktree_file,
             commands::rename_worktree_file,

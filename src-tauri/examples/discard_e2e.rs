@@ -7,7 +7,7 @@ fn main() {
     let path = "scratch-hunks.txt";
 
     // Show the two hunks the UI would list.
-    let hunks = orbit_lib::git_state::file_hunks(std::path::Path::new(repo), path, false)
+    let hunks = pigry_lib::git_state::file_hunks(std::path::Path::new(repo), path, false)
         .expect("file_hunks failed");
     println!("hunks: {}", hunks.len());
     for h in &hunks {
@@ -18,7 +18,7 @@ fn main() {
     }
 
     // Discard hunk 0 (the line-1 edit) — same as clicking its button.
-    orbit_lib::git_state::discard_hunk(std::path::Path::new(repo), path, 0)
+    pigry_lib::git_state::discard_hunk(std::path::Path::new(repo), path, 0)
         .expect("discard_hunk failed");
     println!("discarded hunk 0");
 

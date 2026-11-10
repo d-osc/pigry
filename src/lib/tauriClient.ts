@@ -508,6 +508,16 @@ $ ${command}`,
   return invoke('terminal_run', { command, cwd });
 }
 
+export async function readBinaryFile(
+  path: string,
+): Promise<{ data: string; mime: string; size: number }> {
+  return invoke('read_binary_file', { path });
+}
+
+export async function openPathExternal(path: string): Promise<void> {
+  return invoke('open_path_external', { path });
+}
+
 export async function readWorktreeFile(path: string): Promise<WorktreeFileContent> {
   if (!isTauri()) return demoFileContent;
   return invoke('read_worktree_file', { path });

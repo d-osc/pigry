@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
-import { GitCompare, History, Quote, SquareTerminal } from 'lucide-react';
-import { readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { GitCompare, History, Quote, SquareTerminal, Eye,
+} from 'lucide-react';
+import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal } from '../../lib/tauriClient';
 import { currentResolvedTheme, THEME_CHANGED_EVENT } from '../../lib/theme';
 import { useRepository } from '../../hooks/useRepository';
 import { useFileBlame } from '../../hooks/useFileBlame';
@@ -12,9 +13,11 @@ import type { WorktreeFileContent } from '../../types/repository';
 import { TerminalPanel } from '../../app/TerminalPanel';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { FileHistoryPanel } from './FileHistoryPanel';
+import { FileViewer, MarkdownViewer, SvgViewer, fileKindFor, type ViewerKind, type BinaryContent } from './FileViewers';
 import { ComparePanel } from './ComparePanel';
 import '../../editor/monacoSetup';
 import './EditorPane.css';
+import './FileViewers.css';
 
 interface EditorPaneProps {
   path: string;
@@ -104,6 +107,16 @@ export function EditorPane({
     setPrevPath(path);
     setBaseOid(null);
   }
+  // Special viewers — files that don't route into Monaco.
+  const kind: ViewerKind = fileKindFor(path);
+  const [bin, setBin] = useState<BinaryContent | null>(null);
+  const [previewOn, setPreviewOn] = useState(false);
+  const [prevPreviewPath, setPrevPreviewPath] = useState(path);
+  if (prevPreviewPath !== path) {
+    setPrevPreviewPath(path);
+    setPreviewOn(false);
+    setBin(null);
+  }
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   // Draggable panel heights; null = the CSS defaults.
   const [historyHeight, setHistoryHeight] = useState<number | null>(null);
@@ -164,10 +177,29 @@ export function EditorPane({
     [repository],
   );
   const { changes: lineChangesData } = useLineChanges(path, gutterReloadKey);
+  // Binary viewers (images/pdf/office) refresh when the watcher sees a change.
+  const binReloadKey = `${gutterReloadKey}|${repository?.files.length ?? 0}`;
 
   useEffect(() => {
     let cancelled = false;
     onBufferChange(null, path);
+    if (kind !== 'text' && kind !== 'markdown' && kind !== 'svg') {
+      // Images, PDFs and Office docs load as base64 for their viewers.
+      // md/svg stay text (code view + rendered preview from the buffer).
+      readBinaryFile(path)
+        .then((content) => {
+          if (!cancelled) {
+            setLoadError(null);
+            setBin(content);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setLoadError(`Could not load ${path}`);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     readWorktreeFile(path)
       .then((content) => {
         if (!cancelled) {
@@ -187,7 +219,7 @@ export function EditorPane({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path]);
+  }, [path, kind, binReloadKey]);
 
   // Code-search navigation: reveal + highlight the hit line once loaded.
   // Defensive: never let navigation break the editor mount.
@@ -498,30 +530,56 @@ export function EditorPane({
         {dirty && <span className="editor-pane__dirty">Unsaved changes</span>}
         {savedFlash && !dirty && <span className="editor-pane__saved">Saved</span>}
         <div className="editor-pane__toggles">
-          <button
-            type="button"
-            className={`editor-toggle${historyOn ? ' editor-toggle--on' : ''}`}
-            onClick={() => setHistoryOn((value) => !value)}
-          >
-            <History size={12} strokeWidth={1.5} />
-            History
-          </button>
-          <button
-            type="button"
-            className={`editor-toggle${compareOn ? ' editor-toggle--on' : ''}`}
-            onClick={() => setCompareOn((value) => !value)}
-          >
-            <GitCompare size={12} strokeWidth={1.5} />
-            Compare
-          </button>
-          <button
-            type="button"
-            className={`editor-toggle${blameOn ? ' editor-toggle--on' : ''}`}
-            onClick={() => setBlameOn((value) => !value)}
-          >
-            <Quote size={12} strokeWidth={1.5} />
-            Blame
-          </button>
+          {(kind === 'markdown' || kind === 'svg') && (
+            <button
+              type="button"
+              className={`editor-toggle${previewOn ? ' editor-toggle--on' : ''}`}
+              onClick={() => setPreviewOn((value) => !value)}
+            >
+              <Eye size={12} strokeWidth={1.5} />
+              Preview
+            </button>
+          )}
+          {kind === 'pptx' && (
+            <button
+              type="button"
+              className="editor-toggle"
+              onClick={() => void openPathExternal(path)}
+            >
+              <Eye size={12} strokeWidth={1.5} />
+              Open externally
+            </button>
+          )}
+          {kind === 'text' && (
+            <button
+              type="button"
+              className={`editor-toggle${historyOn ? ' editor-toggle--on' : ''}`}
+              onClick={() => setHistoryOn((value) => !value)}
+            >
+              <History size={12} strokeWidth={1.5} />
+              History
+            </button>
+          )}
+          {kind === 'text' && (
+            <button
+              type="button"
+              className={`editor-toggle${compareOn ? ' editor-toggle--on' : ''}`}
+              onClick={() => setCompareOn((value) => !value)}
+            >
+              <GitCompare size={12} strokeWidth={1.5} />
+              Compare
+            </button>
+          )}
+          {kind === 'text' && (
+            <button
+              type="button"
+              className={`editor-toggle${blameOn ? ' editor-toggle--on' : ''}`}
+              onClick={() => setBlameOn((value) => !value)}
+            >
+              <Quote size={12} strokeWidth={1.5} />
+              Blame
+            </button>
+          )}
         </div>
       </div>
 
@@ -550,8 +608,21 @@ export function EditorPane({
       <div className="editor-pane__editor">
         {loadError ? (
           <div className="editor-pane__notice">{loadError}</div>
+        ) : kind !== 'text' && kind !== 'markdown' && kind !== 'svg' ? (
+          // Images, PDFs and Office docs — dedicated viewers, no Monaco.
+          bin ? (
+            <FileViewer kind={kind} bin={bin} path={path} textContent="" />
+          ) : (
+            <div className="editor-pane__notice">Loading…</div>
+          )
         ) : !entry || entry.path !== path ? (
           <div className="editor-pane__notice">Loading…</div>
+        ) : (kind === 'markdown' || kind === 'svg') && previewOn ? (
+          kind === 'markdown' ? (
+            <MarkdownViewer text={entry.content.content} />
+          ) : (
+            <SvgViewer text={entry.content.content} />
+          )
         ) : entry.content.binary ? (
           <div className="editor-pane__notice">Binary file — cannot edit</div>
         ) : entry.content.tooLarge ? (
