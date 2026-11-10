@@ -119,3 +119,185 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* ---------- Markdown document preview (paper-style) ---------- */
+
+.file-viewer--md {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 0;
+  background: none;
+}
+
+.file-md {
+  align-self: center;
+  width: 100%;
+  max-width: 860px;
+  margin: 20px auto 40px;
+  padding: 40px 52px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.75;
+}
+
+/* Headings */
+.file-md h1,
+.file-md h2,
+.file-md h3,
+.file-md h4 {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 26px 0 12px;
+}
+
+.file-md h1 {
+  font-size: 26px;
+  margin-top: 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--border);
+}
+
+.file-md h2 {
+  font-size: 20px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-md h3 {
+  font-size: 16px;
+}
+
+.file-md h4 {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Paragraphs + links */
+.file-md p {
+  margin: 0 0 14px;
+}
+
+.file-md a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.file-md a:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* Lists */
+.file-md ul,
+.file-md ol {
+  margin: 0 0 16px;
+  padding-left: 26px;
+}
+
+.file-md li {
+  margin: 5px 0;
+}
+
+.file-md li::marker {
+  color: var(--accent);
+}
+
+.file-md li > ul,
+.file-md li > ol {
+  margin: 4px 0 0;
+}
+
+/* Inline code */
+.file-md code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 12%, transparent);
+  border-radius: var(--radius-xs);
+  padding: 2px 5px;
+}
+
+/* Fenced code blocks (renderFence emits .wiki-md__code > pre > code) */
+.file-md .wiki-md__code {
+  margin: 14px 0;
+}
+
+.file-md .wiki-md__code pre {
+  margin: 0;
+  padding: 14px 16px;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  line-height: 1.6;
+}
+
+.file-md .wiki-md__code code {
+  background: none;
+  padding: 0;
+  color: var(--text-mid);
+  font-size: var(--fs-2xs);
+}
+
+/* Blockquote */
+.file-md blockquote {
+  margin: 14px 0;
+  padding: 8px 16px;
+  border-left: 3px solid var(--purple);
+  background: color-mix(in srgb, var(--purple) 8%, transparent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text-secondary);
+}
+
+.file-md blockquote p {
+  margin: 4px 0;
+}
+
+/* Tables */
+.file-md table {
+  margin: 14px 0;
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--fs-xs);
+}
+
+.file-md th,
+.file-md td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.file-md th {
+  background: var(--bg-code);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.file-md tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-code) 50%, transparent);
+}
+
+/* Rules + images */
+.file-md hr {
+  margin: 22px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.file-md img {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.file-md > :first-child {
+  margin-top: 0;
+}
+
+.file-md > :last-child {
+  margin-bottom: 0;
+}

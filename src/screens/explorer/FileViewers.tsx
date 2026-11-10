@@ -78,7 +78,7 @@ function ImageViewer({ bin }: { bin: BinaryContent }) {
 
 export function MarkdownViewer({ text }: { text: string }) {
   return (
-    <div className="file-viewer file-viewer--md explorer-ai__msg-text">
+    <div className="file-viewer file-viewer--md">
       {text ? renderMarkdown(text) : <p className="file-viewer__meta">Empty file</p>}
     </div>
   );
