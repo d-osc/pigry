@@ -48,6 +48,23 @@ export function MergeBranchScreen() {
   // Conflicted files are ALL open at once; this set holds collapsed ones.
   const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
 
+  // git add one conflicted file straight from its row — refuses while the
+  // working file still contains conflict markers.
+  const stageOne = async (file: string) => {
+    try {
+      const versions = await mergeFileVersions(file, effectiveSource || currentBranch);
+      if ((versions.workdir ?? '').includes('<<<<<<<')) {
+        notify(`${file} still has conflict markers — resolve them first`, 'error');
+        return;
+      }
+      await stagePaths([file]);
+      notify(`Staged ${file} — commit to finish the merge`, 'success');
+      refresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  };
+
   const toggleFile = async (filePath: string) => {
     if (expandedPath === filePath) {
       setExpandedPath(null);
@@ -412,21 +429,31 @@ export function MergeBranchScreen() {
                     const collapsed = collapsedConflicts.has(file);
                     return (
                       <li key={file} className="merge-branch__conflict-file">
-                        <button
-                          type="button"
-                          className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
-                          title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
-                          onClick={() =>
-                            setCollapsedConflicts((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(file)) next.delete(file);
-                              else next.add(file);
-                              return next;
-                            })
-                          }
-                        >
-                          {file}
-                        </button>
+                        <div className="merge-branch__conflict-file-row">
+                          <button
+                            type="button"
+                            className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
+                            title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
+                            onClick={() =>
+                              setCollapsedConflicts((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(file)) next.delete(file);
+                                else next.add(file);
+                                return next;
+                              })
+                            }
+                          >
+                            {file}
+                          </button>
+                          <button
+                            type="button"
+                            className="merge-branch__git-add-btn"
+                            title={`git add ${file} — stage the resolved content`}
+                            onClick={() => void stageOne(file)}
+                          >
+                            git add
+                          </button>
+                        </div>
                         {!collapsed && (
                           <div className="merge-branch__conflict-editor">
                             <ConflictEditor
