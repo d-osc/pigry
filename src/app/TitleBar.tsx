@@ -306,7 +306,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
         <span className="title-bar__logo" aria-hidden="true">
           <OrbitMark size={20} />
         </span>
-        <span className="title-bar__name">pigry</span>
+        <span className="title-bar__name">PIGRY</span>
         <span className="title-bar__beta">GIT</span>
       </button>
 

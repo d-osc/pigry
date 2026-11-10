@@ -44,7 +44,7 @@ export function HomeScreen({
             <span className="home__brand-mark" aria-hidden="true">
               <OrbitMark size={40} />
             </span>
-            pigry <span className="home__brand-chip">GIT</span>
+            PIGRY <span className="home__brand-chip">GIT</span>
           </h1>
           <p className="home__brand-sub">Select a repository to start working.</p>
           {onBackToWorkspace && (
