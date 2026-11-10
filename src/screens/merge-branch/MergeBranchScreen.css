@@ -330,7 +330,19 @@
   background: var(--bg-card);
 }
 
-.merge-branch__commit-file .merge-branch__file-stats {
+.merge-branch__commit-file 
+.stats-add {
+  color: var(--success, #6dd6ad);
+  font-family: var(--font-mono);
+}
+
+.stats-del {
+  color: var(--danger, #e79098);
+  font-family: var(--font-mono);
+  margin-left: 4px;
+}
+
+.merge-branch__file-stats {
   flex-shrink: 0;
   margin-left: auto;
 }

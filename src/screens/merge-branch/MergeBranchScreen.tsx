@@ -337,7 +337,8 @@ export function MergeBranchScreen() {
                                     </span>
                                     <span className="merge-branch__file-path">{entry.path}</span>
                                     <span className="merge-branch__file-stats">
-                                      +{entry.additions} / −{entry.deletions}
+                                      <span className="stats-add">+{entry.additions}</span>
+                                      <span className="stats-del">−{entry.deletions}</span>
                                     </span>
                                   </button>
                                   {fileOpen && (
@@ -428,7 +429,8 @@ export function MergeBranchScreen() {
                       </span>
                       <span className="merge-branch__file-path">{file.path}</span>
                       <span className="merge-branch__file-stats">
-                        +{file.additions} / −{file.deletions}
+                        <span className="stats-add">+{file.additions}</span>
+                        <span className="stats-del">−{file.deletions}</span>
                       </span>
                     </button>
                     {file.commits.length > 0 && (

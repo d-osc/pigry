@@ -199,7 +199,8 @@ export function PushCommitsScreen() {
                                   </span>
                                   <span className="push__file-path">{file.path}</span>
                                   <span className="push__file-stats">
-                                    +{file.additions} / −{file.deletions}
+                                    <span className="stats-add">+{file.additions}</span>
+                                    <span className="stats-del">−{file.deletions}</span>
                                   </span>
                                 </button>
                                 {fileOpen && (
