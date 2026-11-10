@@ -99,7 +99,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   // FILES panel folds away — default open, remembered across restarts.
   const [filesOpen, setFilesOpen] = useState(() => {
     try {
-      return localStorage.getItem('orbit:files-open') !== '0';
+      return localStorage.getItem('pigry:files-open') !== '0';
     } catch {
       return true;
     }
@@ -411,8 +411,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
       if (detail?.query != null) setFilter(String(detail.query));
       filterInputRef.current?.focus();
     };
-    window.addEventListener('orbit:focus-file-search', onFocusSearch);
-    return () => window.removeEventListener('orbit:focus-file-search', onFocusSearch);
+    window.addEventListener('pigry:focus-file-search', onFocusSearch);
+    return () => window.removeEventListener('pigry:focus-file-search', onFocusSearch);
   }, []);
 
   // Open a file (optionally at a line) from anywhere — AI panel tool chips.
@@ -426,8 +426,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
         setRevealTarget({ path: detail.path, line: detail.line, column: 1 });
       }
     };
-    window.addEventListener('orbit:open-file', onOpenFile);
-    return () => window.removeEventListener('orbit:open-file', onOpenFile);
+    window.addEventListener('pigry:open-file', onOpenFile);
+    return () => window.removeEventListener('pigry:open-file', onOpenFile);
   }, [handleSelectFile]);
 
   // Go-to-line from the Quick Open palette (':' prefix).
@@ -441,13 +441,13 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
         column: detail.column ?? 1,
       });
     };
-    window.addEventListener('orbit:goto-line', onGotoLine);
-    return () => window.removeEventListener('orbit:goto-line', onGotoLine);
+    window.addEventListener('pigry:goto-line', onGotoLine);
+    return () => window.removeEventListener('pigry:goto-line', onGotoLine);
   }, [activePath]);
 
   // Tell the Quick Open palette which file the editor shows ('@' symbols).
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('orbit:active-editor', { detail: { path: activePath } }));
+    window.dispatchEvent(new CustomEvent('pigry:active-editor', { detail: { path: activePath } }));
   }, [activePath]);
 
   // ⌘F / Ctrl+F focuses the file filter (matches the kbd hint).
@@ -559,7 +559,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   // Remember the FILES panel fold state.
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:files-open', filesOpen ? '1' : '0');
+      localStorage.setItem('pigry:files-open', filesOpen ? '1' : '0');
     } catch {
       // storage unavailable — session-only
     }
@@ -683,7 +683,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
           <button
             type="button"
             className="primary-button"
-            onClick={() => window.dispatchEvent(new CustomEvent('orbit:save-file'))}
+            onClick={() => window.dispatchEvent(new CustomEvent('pigry:save-file'))}
           >
             Save file <kbd className="explorer-screen__kbd explorer-screen__kbd--inverted">⌘ S</kbd>
           </button>

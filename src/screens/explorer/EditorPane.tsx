@@ -57,14 +57,14 @@ function editorPrefs(): {
 } {
   try {
     return {
-      fontSize: Number(localStorage.getItem('orbit:editor-font-size') ?? 12) || 12,
-      wordWrap: (localStorage.getItem('orbit:editor-word-wrap') ?? '0') === '1',
+      fontSize: Number(localStorage.getItem('pigry:editor-font-size') ?? 12) || 12,
+      wordWrap: (localStorage.getItem('pigry:editor-word-wrap') ?? '0') === '1',
       fontFamily:
-        localStorage.getItem('orbit:editor-font-family') ?? "'Fira Code', ui-monospace, monospace",
-      ligatures: (localStorage.getItem('orbit:editor-ligatures') ?? '1') === '1',
-      tabSize: Number(localStorage.getItem('orbit:editor-tab-size') ?? 2) || 2,
-      minimap: (localStorage.getItem('orbit:editor-minimap') ?? '0') === '1',
-      lineNumbers: (localStorage.getItem('orbit:editor-line-numbers') ?? '1') === '1',
+        localStorage.getItem('pigry:editor-font-family') ?? "'Fira Code', ui-monospace, monospace",
+      ligatures: (localStorage.getItem('pigry:editor-ligatures') ?? '1') === '1',
+      tabSize: Number(localStorage.getItem('pigry:editor-tab-size') ?? 2) || 2,
+      minimap: (localStorage.getItem('pigry:editor-minimap') ?? '0') === '1',
+      lineNumbers: (localStorage.getItem('pigry:editor-line-numbers') ?? '1') === '1',
     };
   } catch {
     return {
@@ -164,8 +164,8 @@ export function EditorPane({
         lineNumbers: (detail.lineNumbers ?? true) ? 'on' : 'off',
       });
     };
-    window.addEventListener('orbit:editor-prefs', onPrefs);
-    return () => window.removeEventListener('orbit:editor-prefs', onPrefs);
+    window.addEventListener('pigry:editor-prefs', onPrefs);
+    return () => window.removeEventListener('pigry:editor-prefs', onPrefs);
   }, [editorInstance]);
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
@@ -376,10 +376,10 @@ export function EditorPane({
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('orbit:save-file', onSave);
+    window.addEventListener('pigry:save-file', onSave);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('orbit:save-file', onSave);
+      window.removeEventListener('pigry:save-file', onSave);
     };
   }, [save]);
 

@@ -14,8 +14,8 @@ export interface GhProfile {
   avatarUrl: string;
 }
 
-const CACHE_KEY = 'orbit:gh-profile';
-export const GH_PROFILE_EVENT = 'orbit:gh-profile';
+const CACHE_KEY = 'pigry:gh-profile';
+export const GH_PROFILE_EVENT = 'pigry:gh-profile';
 
 let memory: GhProfile | null = null;
 let loading: Promise<GhProfile | null> | null = null;

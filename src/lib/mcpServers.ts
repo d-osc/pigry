@@ -23,7 +23,7 @@ export interface McpServer {
   enabled: boolean;
 }
 
-const LIST_KEY = 'orbit:mcp-servers';
+const LIST_KEY = 'pigry:mcp-servers';
 
 export function loadMcpServers(): McpServer[] {
   try {

@@ -1183,7 +1183,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const clearConversation = () => {
     setMessages([]);
     try {
-      localStorage.removeItem('orbit:ai-conversation');
+      localStorage.removeItem('pigry:ai-conversation');
     } catch {
       // ignore
     }

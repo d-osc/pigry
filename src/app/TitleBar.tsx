@@ -23,7 +23,7 @@ import { updateGhProfileFromAccounts } from '../lib/ghProfile';
 import type { GhAccount } from '../types/repository';
 import './TitleBar.css';
 
-const RECENT_REPOS_KEY = 'orbit:recent-repos';
+const RECENT_REPOS_KEY = 'pigry:recent-repos';
 
 const initialsOf = (name: string) => name.slice(0, 2).toUpperCase() || 'U';
 
@@ -122,7 +122,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
   // App-level sign-in state (local Git client — persisted locally).
   const [signedIn, setSignedIn] = useState(() => {
     try {
-      return localStorage.getItem('orbit:signed-in') === '1';
+      return localStorage.getItem('pigry:signed-in') === '1';
     } catch {
       return false;
     }
@@ -138,13 +138,13 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
 
   const markSignedIn = (value: boolean) => {
     try {
-      if (value) localStorage.setItem('orbit:signed-in', '1');
-      else localStorage.removeItem('orbit:signed-in');
+      if (value) localStorage.setItem('pigry:signed-in', '1');
+      else localStorage.removeItem('pigry:signed-in');
     } catch {
       // storage unavailable — session-only sign-in
     }
     setSignedIn(value);
-    window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+    window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
   };
 
   const refreshAccounts = () => {
@@ -224,13 +224,13 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
   useEffect(() => {
     const onAuth = () => {
       try {
-        setSignedIn(localStorage.getItem('orbit:signed-in') === '1');
+        setSignedIn(localStorage.getItem('pigry:signed-in') === '1');
       } catch {
         // ignore
       }
     };
-    window.addEventListener('orbit:auth-changed', onAuth);
-    return () => window.removeEventListener('orbit:auth-changed', onAuth);
+    window.addEventListener('pigry:auth-changed', onAuth);
+    return () => window.removeEventListener('pigry:auth-changed', onAuth);
   }, []);
 
   // Check the real gh auth state at launch (and whenever the window regains

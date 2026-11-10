@@ -86,7 +86,7 @@ export function AppSettingsScreen({
   // Appearance / startup
   const [defaultScreen, setDefaultScreen] = useState<DefaultScreen>(() => {
     try {
-      const raw = localStorage.getItem('orbit:default-screen');
+      const raw = localStorage.getItem('pigry:default-screen');
       if (raw === 'commit-graph' || raw === 'working-changes') return raw;
     } catch {
       // fall through
@@ -94,37 +94,37 @@ export function AppSettingsScreen({
     return 'explorer';
   });
   const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
-  const [sidebarOnLaunch, setSidebarOnLaunch] = useState(() => !readBool('orbit:sidebar-collapsed', false));
+  const [sidebarOnLaunch, setSidebarOnLaunch] = useState(() => !readBool('pigry:sidebar-collapsed', false));
   const [fontSize, setFontSize] = useState(() => {
     try {
-      return Number(localStorage.getItem('orbit:editor-font-size') ?? 12) || 12;
+      return Number(localStorage.getItem('pigry:editor-font-size') ?? 12) || 12;
     } catch {
       return 12;
     }
   });
-  const [wordWrap, setWordWrap] = useState(() => readBool('orbit:editor-word-wrap', false));
+  const [wordWrap, setWordWrap] = useState(() => readBool('pigry:editor-word-wrap', false));
   const [fontFamily, setFontFamily] = useState(() => {
     try {
-      return localStorage.getItem('orbit:editor-font-family') ?? "'Fira Code', ui-monospace, monospace";
+      return localStorage.getItem('pigry:editor-font-family') ?? "'Fira Code', ui-monospace, monospace";
     } catch {
       return "'Fira Code', ui-monospace, monospace";
     }
   });
-  const [ligatures, setLigatures] = useState(() => readBool('orbit:editor-ligatures', true));
+  const [ligatures, setLigatures] = useState(() => readBool('pigry:editor-ligatures', true));
   const [tabSize, setTabSize] = useState(() => {
     try {
-      return Number(localStorage.getItem('orbit:editor-tab-size') ?? 2) || 2;
+      return Number(localStorage.getItem('pigry:editor-tab-size') ?? 2) || 2;
     } catch {
       return 2;
     }
   });
-  const [minimap, setMinimap] = useState(() => readBool('orbit:editor-minimap', false));
-  const [lineNumbers, setLineNumbers] = useState(() => readBool('orbit:editor-line-numbers', true));
+  const [minimap, setMinimap] = useState(() => readBool('pigry:editor-minimap', false));
+  const [lineNumbers, setLineNumbers] = useState(() => readBool('pigry:editor-line-numbers', true));
 
   // GitHub access
   const [token, setToken] = useState(() => {
     try {
-      return localStorage.getItem('orbit:github-token') ?? '';
+      return localStorage.getItem('pigry:github-token') ?? '';
     } catch {
       return '';
     }
@@ -134,7 +134,7 @@ export function AppSettingsScreen({
 
   const [scopes, setScopes] = useState<string[]>(() => {
     try {
-      const raw = localStorage.getItem('orbit:token-scopes');
+      const raw = localStorage.getItem('pigry:token-scopes');
       return raw ? raw.split(',').map((scope) => scope.trim()).filter(Boolean) : SUGGESTED_SCOPES;
     } catch {
       return [...SUGGESTED_SCOPES];
@@ -179,7 +179,7 @@ export function AppSettingsScreen({
   // Persist the clean list.
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:token-scopes', scopes.join(','));
+      localStorage.setItem('pigry:token-scopes', scopes.join(','));
     } catch {
       // session-only
     }
@@ -238,22 +238,22 @@ export function AppSettingsScreen({
         setAccounts(list);
         if (list.some((account) => account.active)) {
           try {
-            localStorage.setItem('orbit:signed-in', '1');
+            localStorage.setItem('pigry:signed-in', '1');
           } catch {
             // session-only
           }
-          window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+          window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
         }
       })
       .catch(() => setAccounts([]));
   };
-  const [signedIn, setSignedIn] = useState(() => readBool('orbit:signed-in', false));
+  const [signedIn, setSignedIn] = useState(() => readBool('pigry:signed-in', false));
 
   // Update check (compares the app version with the latest GitHub release).
   const appVersion = `v${appPackage.version}`;
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'uptodate' | 'available' | 'none' | 'error'>('idle');
   const [latestTag, setLatestTag] = useState('');
-  const [autoCheck, setAutoCheck] = useState(() => readBool('orbit:check-updates', true));
+  const [autoCheck, setAutoCheck] = useState(() => readBool('pigry:check-updates', true));
 
   const checkForUpdates = async () => {
     setUpdateStatus('checking');
@@ -283,7 +283,7 @@ export function AppSettingsScreen({
 
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:default-screen', defaultScreen);
+      localStorage.setItem('pigry:default-screen', defaultScreen);
     } catch {
       // session-only
     }
@@ -296,7 +296,7 @@ export function AppSettingsScreen({
 
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:sidebar-collapsed', sidebarOnLaunch ? '0' : '1');
+      localStorage.setItem('pigry:sidebar-collapsed', sidebarOnLaunch ? '0' : '1');
     } catch {
       // session-only
     }
@@ -304,13 +304,13 @@ export function AppSettingsScreen({
 
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:editor-font-size', String(fontSize));
-      localStorage.setItem('orbit:editor-word-wrap', wordWrap ? '1' : '0');
+      localStorage.setItem('pigry:editor-font-size', String(fontSize));
+      localStorage.setItem('pigry:editor-word-wrap', wordWrap ? '1' : '0');
     } catch {
       // session-only
     }
     window.dispatchEvent(
-      new CustomEvent('orbit:editor-prefs', {
+      new CustomEvent('pigry:editor-prefs', {
         detail: { fontSize, wordWrap, fontFamily, ligatures, tabSize, minimap, lineNumbers },
       }),
     );
@@ -318,9 +318,9 @@ export function AppSettingsScreen({
 
   // The title-bar profile menu shares this auth state.
   useEffect(() => {
-    const onAuth = () => setSignedIn(readBool('orbit:signed-in', false));
-    window.addEventListener('orbit:auth-changed', onAuth);
-    return () => window.removeEventListener('orbit:auth-changed', onAuth);
+    const onAuth = () => setSignedIn(readBool('pigry:signed-in', false));
+    window.addEventListener('pigry:auth-changed', onAuth);
+    return () => window.removeEventListener('pigry:auth-changed', onAuth);
   }, []);
 
   // gh account list on mount and whenever auth changes.
@@ -339,12 +339,12 @@ export function AppSettingsScreen({
 
   const saveToken = () => {
     try {
-      localStorage.setItem('orbit:github-token', token);
-      localStorage.setItem('orbit:signed-in', token ? '1' : '0');
+      localStorage.setItem('pigry:github-token', token);
+      localStorage.setItem('pigry:signed-in', token ? '1' : '0');
     } catch {
       // session-only
     }
-    window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+    window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
     notify(token ? 'Token saved locally' : 'Token cleared', 'success');
   };
 
@@ -355,11 +355,11 @@ export function AppSettingsScreen({
       const ok = result.loggedIn;
       setGhStatus(ok ? 'in' : 'out');
       try {
-        localStorage.setItem('orbit:signed-in', ok ? '1' : '0');
+        localStorage.setItem('pigry:signed-in', ok ? '1' : '0');
       } catch {
         // session-only
       }
-      window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+      window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
       notify(
         ok ? 'GitHub CLI: signed in' + (result.account ? ' as ' + result.account : '') : 'GitHub CLI: not signed in',
         ok ? 'success' : 'error',
@@ -406,11 +406,11 @@ export function AppSettingsScreen({
         if (result.status === 'success') {
           setFlowStatus('success');
           try {
-            localStorage.setItem('orbit:signed-in', '1');
+            localStorage.setItem('pigry:signed-in', '1');
           } catch {
             // session-only
           }
-          window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+          window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
           notify('gh scopes updated' + (result.account ? ' for ' + result.account : ''), 'success');
           window.setTimeout(() => {
             loadAccounts();
@@ -445,14 +445,14 @@ export function AppSettingsScreen({
   }, [deviceFlow]);
 
   const ghLogin = () => {
-    window.dispatchEvent(new CustomEvent('orbit:toggle-terminal'));
+    window.dispatchEvent(new CustomEvent('pigry:toggle-terminal'));
     notify('Run "gh auth login --web" in the terminal, then check status here', 'success');
   };
 
   const loginGhWithSavedToken = async () => {
     let token = '';
     try {
-      token = localStorage.getItem('orbit:github-token') ?? '';
+      token = localStorage.getItem('pigry:github-token') ?? '';
     } catch {
       // ignore
     }
@@ -791,12 +791,12 @@ export function AppSettingsScreen({
                       onClick={() => {
                         setToken('');
                         try {
-                          localStorage.setItem('orbit:github-token', '');
-                          localStorage.setItem('orbit:signed-in', '0');
+                          localStorage.setItem('pigry:github-token', '');
+                          localStorage.setItem('pigry:signed-in', '0');
                         } catch {
                           // session-only
                         }
-                        window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+                        window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
                         notify('Token cleared', 'success');
                       }}
                     >
@@ -953,11 +953,11 @@ export function AppSettingsScreen({
                       className="app-settings__button app-settings__button--ghost"
                       onClick={() => {
                         try {
-                          localStorage.setItem('orbit:signed-in', '0');
+                          localStorage.setItem('pigry:signed-in', '0');
                         } catch {
                           // session-only
                         }
-                        window.dispatchEvent(new CustomEvent('orbit:auth-changed'));
+                        window.dispatchEvent(new CustomEvent('pigry:auth-changed'));
                         notify('Signed out', 'success');
                       }}
                     >
@@ -1076,7 +1076,7 @@ export function AppSettingsScreen({
                   onChange={(event) => {
                     setAutoCheck(event.target.checked);
                     try {
-                      localStorage.setItem('orbit:check-updates', event.target.checked ? '1' : '0');
+                      localStorage.setItem('pigry:check-updates', event.target.checked ? '1' : '0');
                     } catch {
                       // session-only
                     }

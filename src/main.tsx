@@ -9,8 +9,12 @@ import './styles/tokens.css';
 import './styles/global.css';
 import { startThemeWatcher } from './lib/theme';
 import { initGhProfile } from './lib/ghProfile';
+import { migrateLegacyStorage } from './lib/storageMigration';
 import App from './App';
 
+// Move persisted orbit:* settings to their pigry:* names before anything
+// reads them.
+migrateLegacyStorage();
 startThemeWatcher();
 initGhProfile();
 

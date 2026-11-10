@@ -146,7 +146,7 @@ function renderScreen(
 function AppShellInner() {
   const [screen, setScreen] = useState<NavId>(() => {
     try {
-      const stored = localStorage.getItem('orbit:default-screen');
+      const stored = localStorage.getItem('pigry:default-screen');
       if (stored === 'explorer' || stored === 'commit-graph' || stored === 'working-changes') {
         return stored;
       }
@@ -174,7 +174,7 @@ function AppShellInner() {
   // Left side bar folds away — default open, remembered across restarts.
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
-      return localStorage.getItem('orbit:sidebar-collapsed') !== '1';
+      return localStorage.getItem('pigry:sidebar-collapsed') !== '1';
     } catch {
       return true;
     }
@@ -213,7 +213,7 @@ function AppShellInner() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('orbit:sidebar-collapsed', sidebarOpen ? '0' : '1');
+      localStorage.setItem('pigry:sidebar-collapsed', sidebarOpen ? '0' : '1');
     } catch {
       // storage unavailable — session-only state
     }
@@ -227,8 +227,8 @@ function AppShellInner() {
   // App Settings (gh sign-in) can pop the integrated terminal open.
   useEffect(() => {
     const onToggle = () => setTerminalOpen((open) => !open);
-    window.addEventListener('orbit:toggle-terminal', onToggle);
-    return () => window.removeEventListener('orbit:toggle-terminal', onToggle);
+    window.addEventListener('pigry:toggle-terminal', onToggle);
+    return () => window.removeEventListener('pigry:toggle-terminal', onToggle);
   }, []);
 
   // Editor reports its active file so the palette's '@' symbol search knows
@@ -238,8 +238,8 @@ function AppShellInner() {
       const detail = (event as CustomEvent<{ path?: string | null }>).detail;
       setActiveEditorPath(detail?.path ?? null);
     };
-    window.addEventListener('orbit:active-editor', onActiveEditor);
-    return () => window.removeEventListener('orbit:active-editor', onActiveEditor);
+    window.addEventListener('pigry:active-editor', onActiveEditor);
+    return () => window.removeEventListener('pigry:active-editor', onActiveEditor);
   }, []);
 
   const readFileForPalette = useCallback(
@@ -305,7 +305,7 @@ function AppShellInner() {
         setPaletteMode('quick');
         setPaletteOpen(false);
         window.setTimeout(
-          () => window.dispatchEvent(new CustomEvent('orbit:focus-file-search')),
+          () => window.dispatchEvent(new CustomEvent('pigry:focus-file-search')),
           150,
         );
       } else if (event.shiftKey && key === 'o') {
@@ -487,7 +487,7 @@ function AppShellInner() {
                         window.setTimeout(
                           () =>
                             window.dispatchEvent(
-                              new CustomEvent('orbit:open-file', { detail: { path, line } }),
+                              new CustomEvent('pigry:open-file', { detail: { path, line } }),
                             ),
                           400,
                         );
@@ -532,7 +532,7 @@ function AppShellInner() {
           onSearchText={(searchQuery) => {
             setScreen('explorer');
             window.setTimeout(
-              () => window.dispatchEvent(new CustomEvent('orbit:focus-file-search', { detail: { query: searchQuery } })),
+              () => window.dispatchEvent(new CustomEvent('pigry:focus-file-search', { detail: { query: searchQuery } })),
               150,
             );
           }}

@@ -149,7 +149,7 @@ export function CommandPalette({
     if (effectiveMode === 'quick') {
       const jumpTo = (line: number, column = 1) => {
         onClose();
-        window.dispatchEvent(new CustomEvent('orbit:goto-line', { detail: { line, column } }));
+        window.dispatchEvent(new CustomEvent('pigry:goto-line', { detail: { line, column } }));
       };
       // '::' → go to character offset in the active file.
       if (query.startsWith('::')) {
@@ -276,7 +276,7 @@ export function CommandPalette({
             run: () => {
               onOpenFile(sym.path);
               window.setTimeout(
-                () => window.dispatchEvent(new CustomEvent('orbit:goto-line', { detail: { line: sym.line } })),
+                () => window.dispatchEvent(new CustomEvent('pigry:goto-line', { detail: { line: sym.line } })),
                 300,
               );
             },

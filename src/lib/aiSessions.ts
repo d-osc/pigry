@@ -44,7 +44,7 @@ export interface AiChatSession {
 }
 
 const CHAT_DIR = '.pigry/chat/';
-const ACTIVE_KEY = 'orbit:ai-session-active';
+const ACTIVE_KEY = 'pigry:ai-session-active';
 const MAX_MESSAGES = 100;
 
 /** Which store a chat belongs to. `team` tags the session so each team's
@@ -123,7 +123,7 @@ export function setActiveSessionId(id: string, scope?: ChatScope) {
 /** One-time migration: localStorage sessions → repo files. */
 export async function migrateLocalSessions(): Promise<void> {
   try {
-    const raw = localStorage.getItem('orbit:ai-sessions');
+    const raw = localStorage.getItem('pigry:ai-sessions');
     if (!raw) return;
     const list = JSON.parse(raw) as AiChatSession[];
     for (const session of list) {
@@ -131,7 +131,7 @@ export async function migrateLocalSessions(): Promise<void> {
         await saveSession(session);
       }
     }
-    localStorage.removeItem('orbit:ai-sessions');
+    localStorage.removeItem('pigry:ai-sessions');
   } catch {
     // corrupt legacy data — drop silently
   }

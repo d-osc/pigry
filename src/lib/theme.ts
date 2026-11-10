@@ -8,9 +8,9 @@ export type ThemePreference = 'auto' | 'dark' | 'light';
 export type ResolvedTheme = 'dark' | 'light';
 
 /** Fired on window whenever the resolved theme changes. */
-export const THEME_CHANGED_EVENT = 'orbit:theme-changed';
+export const THEME_CHANGED_EVENT = 'pigry:theme-changed';
 
-const THEME_KEY = 'orbit:theme';
+const THEME_KEY = 'pigry:theme';
 
 /** Daytime window (local hours, start inclusive / end exclusive) for light. */
 const LIGHT_FROM = 6;

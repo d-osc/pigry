@@ -8,8 +8,8 @@ import type { AiProviderEntry, AiModelEntry, AiApiFormat } from '../types/reposi
 
 export type { AiProviderEntry, AiModelEntry, AiApiFormat };
 
-const LIST_KEY = 'orbit:ai-providers';
-const ACTIVE_KEY = 'orbit:ai-active';
+const LIST_KEY = 'pigry:ai-providers';
+const ACTIVE_KEY = 'pigry:ai-active';
 
 /** The seeded Qwen Cloud endpoint for agent testing. */
 const QWEN_BASE_URL = 'https://token-plan.maas.qwencloudapi.com/apps/anthropic';
@@ -137,7 +137,7 @@ function writeLegacyMirror(providers: AiProviderEntry[], activeId: string) {
     const active = providers.find((p) => p.id === activeId) ?? providers[0];
     if (!active) return;
     localStorage.setItem(
-      'orbit:ai-provider',
+      'pigry:ai-provider',
       JSON.stringify({
         provider: active.type === 'zcode' ? 'zcode' : active.apiFormat,
         model: active.model,
@@ -215,7 +215,7 @@ export function loadProviders(): AiProviderEntry[] {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
       return ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate)));
     }
-    const legacy = localStorage.getItem('orbit:ai-provider');
+    const legacy = localStorage.getItem('pigry:ai-provider');
     if (legacy) {
       const cfg = JSON.parse(legacy) as Partial<AiProviderEntry> & { provider?: string };
       const entry = migrate({

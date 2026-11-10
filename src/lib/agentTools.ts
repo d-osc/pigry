@@ -38,7 +38,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'Read and edit the repository wiki' },
 ];
 
-const TOOLS_KEY = 'orbit:agent-tools';
+const TOOLS_KEY = 'pigry:agent-tools';
 
 export function loadEnabledTools(): Set<string> {
   try {

@@ -57,7 +57,7 @@ export interface AgentEntry {
   mcpServers: string[];
 }
 
-const AGENTS_KEY = 'orbit:agents';
+const AGENTS_KEY = 'pigry:agents';
 
 /** The workspace agent teams — offered in the Add agent form. */
 export const AGENT_TEAMS = [
@@ -312,7 +312,7 @@ export interface HookEntry {
   enabled: boolean;
 }
 
-const HOOKS_KEY = 'orbit:hooks';
+const HOOKS_KEY = 'pigry:hooks';
 
 export function normalizeHooks(list: unknown[]): HookEntry[] {
   return (list as Partial<HookEntry>[])
@@ -387,7 +387,7 @@ export interface PluginEntry {
   hookIds: string[];
 }
 
-const PLUGINS_KEY = 'orbit:plugins';
+const PLUGINS_KEY = 'pigry:plugins';
 
 export function normalizePlugins(list: unknown[]): PluginEntry[] {
   return (list as Partial<PluginEntry>[])
