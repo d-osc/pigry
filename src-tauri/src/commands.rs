@@ -1630,6 +1630,19 @@ pub async fn merge_abort(
 }
 
 #[tauri::command]
+pub async fn merge_file_versions(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    branch: String,
+) -> Result<ops::MergeFileVersions, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::merge_file_versions(&repo_path, &path, &branch)
+}
+
+#[tauri::command]
 pub async fn merge_status(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<ops::MergeStatus, String> {

@@ -340,3 +340,63 @@
   color: var(--text-muted);
   flex-shrink: 0;
 }
+
+.merge-branch__conflict-editor {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.merge-branch__conflict-editor-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.merge-branch__save-btn {
+  padding: 4px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-branch__save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.merge-branch__conflict-editor-host {
+  height: 300px;
+}
+
+.merge-branch__conflict-resolved {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__conflict-file-btn {
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-branch__conflict-file-btn:hover,
+.merge-branch__conflict-file-btn.is-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}

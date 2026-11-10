@@ -86,7 +86,18 @@ export class ConflictController {
   constructor(
     private editor: MonacoEditorNS.editor.IStandaloneCodeEditor,
     private monaco: typeof import('monaco-editor'),
-  ) {}
+  ) {
+    // Keyboard fallback for the accept actions (works without the
+    // view-zone widget): Ctrl+Alt+1 current / 2 incoming / 3 both.
+    const bind = (key: number, kind: ApplyKind) => {
+      this.editor.addCommand(this.monaco.KeyMod.CtrlCmd | this.monaco.KeyMod.Alt | key, () => {
+        this.accept(kind);
+      });
+    };
+    bind(this.monaco.KeyCode.Digit1, 'current');
+    bind(this.monaco.KeyCode.Digit2, 'incoming');
+    bind(this.monaco.KeyCode.Digit3, 'both');
+  }
 
   /** True when the buffer contains conflict markers. */
   static hasMarkers(text: string): boolean {
@@ -157,14 +168,21 @@ export class ConflictController {
     this.decorations = this.editor.deltaDecorations([], decorations);
   }
 
-  /** Replaces the whole conflict block with the accepted side. */
-  accept(kind: ApplyKind, region: ConflictRegion): void {
+  /** Current buffer text. */
+  getValue(): string {
+    return this.editor.getModel()?.getValue() ?? '';
+  }
+
+  /** Replaces the whole conflict block with the accepted side. When no
+   * region is given, the first conflict in the buffer is resolved. */
+  accept(kind: ApplyKind, region?: Partial<ConflictRegion>): void {
     const model = this.editor.getModel();
     if (!model) return;
     const regions = computeConflicts(model.getValue());
-    // Line numbers may have shifted after prior edits — prefer the region
-    // that still starts on the same line, else the first conflict.
-    const fresh = regions.find((r) => r.startLine === region.startLine) ?? regions[0];
+    const fresh =
+      region && region.startLine !== undefined && region.startLine > 0
+        ? regions.find((r) => r.startLine === region.startLine) ?? regions[0]
+        : regions[0];
     if (!fresh) return;
     const replacement = acceptText(model.getValue(), fresh, kind);
     const endCol = model.getLineMaxColumn(fresh.endLine);

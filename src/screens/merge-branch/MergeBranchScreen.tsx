@@ -1,10 +1,20 @@
 /** Merge Branch screen — merge a branch INTO the checked-out branch with
  * strategy choice, conflict handling (file list + abort) and a result log. */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { DiffEditor, Editor } from '@monaco-editor/react';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { mergePreview, mergeStatus, type MergePreview, type MergeStatusInfo } from '../../lib/tauriClient';
+import {
+  mergePreview,
+  mergeFileVersions,
+  mergeStatus,
+  writeWorktreeFile,
+  type MergePreview,
+  type MergeStatusInfo,
+} from '../../lib/tauriClient';
+import { ConflictController } from '../../editor/conflictMarkers';
 import { relativeTime } from '../../lib/relativeTime';
+import '../../editor/monacoSetup';
 import './MergeBranchScreen.css';
 
 type MergeStrategy = 'ff' | 'no-ff' | 'squash';
@@ -25,6 +35,34 @@ export function MergeBranchScreen() {
   const [merging, setMerging] = useState(false);
   const [conflict, setConflict] = useState<MergeStatusInfo | null>(null);
   const [log, setLog] = useState<Array<{ text: string; kind: 'info' | 'success' | 'error' }>>([]);
+
+  // Expanded file viewer: compare diff or conflict-marker editor.
+  const [expandedPath, setExpandedPath] = useState<string | null>(null);
+  const [versions, setVersions] = useState<{ ours: string; incoming: string; workdir: string } | null>(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+
+  const toggleFile = async (filePath: string) => {
+    if (expandedPath === filePath) {
+      setExpandedPath(null);
+      setVersions(null);
+      return;
+    }
+    setExpandedPath(filePath);
+    setVersions(null);
+    setLoadingVersions(true);
+    try {
+      const result = await mergeFileVersions(filePath, effectiveSource || currentBranch);
+      setVersions({
+        ours: result.ours ?? '',
+        incoming: result.incoming ?? '',
+        workdir: result.workdir ?? '',
+      });
+    } catch {
+      setVersions(null);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
 
   // Auto-pick the first candidate until the user chooses one.
   const effectiveSource = source || branches[0]?.name || '';
@@ -56,7 +94,17 @@ export function MergeBranchScreen() {
       void (async () => {
         try {
           const status = await mergeStatus();
-          if (!cancelled) setConflict(status.inProgress ? status : null);
+          if (cancelled) return;
+          const next = status.inProgress ? status : null;
+          setConflict((prev) => {
+            const same =
+              (prev === null && next === null) ||
+              (prev !== null &&
+                next !== null &&
+                prev.inProgress === next.inProgress &&
+                prev.conflicted.join("|") === next.conflicted.join("|"));
+            return same ? prev : next;
+          });
         } catch {
           // merge state unreadable — keep the last known state
         }
@@ -201,17 +249,58 @@ export function MergeBranchScreen() {
               Files changed ({preview.files.length})
             </h3>
             <ul className="merge-branch__files">
-              {preview.files.map((file) => (
-                <li key={file.path} className="merge-branch__file">
-                  <span className={`merge-branch__file-status merge-branch__file-status--${file.status}`}>
-                    {file.status}
-                  </span>
-                  <span className="merge-branch__file-path">{file.path}</span>
-                  <span className="merge-branch__file-stats">
-                    +{file.additions} / −{file.deletions}
-                  </span>
-                </li>
-              ))}
+              {preview.files.map((file) => {
+                const expanded = expandedPath === file.path && versions !== null;
+                return (
+                  <li key={file.path} className="merge-branch__file">
+                    <button
+                      type="button"
+                      className="merge-branch__file-row"
+                      title={`Compare ${file.path} (ours vs incoming)`}
+                      onClick={() => void toggleFile(file.path)}
+                    >
+                      <span className={`merge-branch__file-status merge-branch__file-status--${file.status}`}>
+                        {file.status}
+                      </span>
+                      <span className="merge-branch__file-path">{file.path}</span>
+                      <span className="merge-branch__file-stats">
+                        +{file.additions} / −{file.deletions}
+                      </span>
+                    </button>
+                    {expanded && (
+                      <>
+                        {loadingVersions && versions === null && (
+                          <div className="merge-branch__conflict-editor">
+                            <p className="merge-branch__empty">Loading versions…</p>
+                          </div>
+                        )}
+                        <div className="merge-branch__file-view">
+                          <div className="merge-branch__file-view-labels">
+                            <span>OURS — {currentBranch || 'current'}</span>
+                            <span>INCOMING — {effectiveSource}</span>
+                          </div>
+                          <DiffEditor
+                            key={`${file.path}:${effectiveSource}`}
+                            original={versions?.ours ?? ''}
+                            modified={versions?.incoming ?? ''}
+                            language="plaintext"
+                            theme="orbit-dark"
+                            options={{
+                              readOnly: true,
+                              renderSideBySide: true,
+                              fontSize: 11,
+                              lineHeight: 18,
+                              minimap: { enabled: false },
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -243,13 +332,34 @@ export function MergeBranchScreen() {
               Conflicts ({conflict.conflicted.length})
             </h3>
             <p className="merge-branch__conflict-hint">
-              Resolve the conflicted files in Working changes, stage them, then commit to
-              finish the merge — or abort to restore the branch.
+              Click a file to resolve it right here with the accept buttons — or abort to
+              restore the branch.
             </p>
             <ul className="merge-branch__conflict-list">
-              {conflict.conflicted.map((file) => (
-                <li key={file}>{file}</li>
-              ))}
+              {conflict.conflicted.map((file) => {
+                const open = expandedPath === file;
+                return (
+                  <li key={file} className="merge-branch__conflict-file">
+                    <button
+                      type="button"
+                      className={`merge-branch__conflict-file-btn${open ? ' is-open' : ''}`}
+                      onClick={() => void toggleFile(file)}
+                    >
+                      {file}
+                    </button>
+                    {open && versions && versions.workdir.includes('<<<<<<<') && (
+                      <div className="merge-branch__conflict-editor">
+                        <ConflictEditor path={file} text={versions.workdir} />
+                      </div>
+                    )}
+                    {open && versions && !versions.workdir.includes('<<<<<<<') && (
+                      <p className="merge-branch__conflict-resolved">
+                        No conflict markers remain — stage the file and commit to finish.
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}
@@ -275,3 +385,94 @@ export function MergeBranchScreen() {
     </div>
   );
 }
+
+
+/** Editable conflict-marker editor for one file — the VS Code-style accept
+ * widget is attached through ConflictController; Save writes the resolved
+ * buffer back to the working file. */
+function ConflictEditor({ path, text }: { path: string; text: string }) {
+  const { refresh, notify } = useRepository();
+  const [value, setValue] = useState(text);
+  const valueRef = useRef(value);
+  const [saving, setSaving] = useState(false);
+  const controllerRef = useRef<ConflictController | null>(null);
+
+  const controllerAccept = (kind: 'current' | 'incoming' | 'both') => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    controller.accept(kind);
+    const resolved = controller.getValue();
+    setValue(resolved);
+    valueRef.current = resolved;
+  };
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await writeWorktreeFile(path, valueRef.current);
+      notify('Resolved file saved — stage and commit to finish', 'success');
+      refresh();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="merge-branch__conflict-editor">
+      <div className="merge-branch__conflict-editor-toolbar">
+        <div className="merge-branch__accept-actions">
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('current')}>
+            ✓ Accept Current
+          </button>
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('incoming')}>
+            ✓ Accept Incoming
+          </button>
+          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('both')}>
+            ⇉ Accept Both
+          </button>
+        </div>
+        <button
+          type="button"
+          className="merge-branch__save-btn"
+          disabled={saving}
+          onClick={() => void save()}
+        >
+          {saving ? 'Saving…' : 'Save resolved file'}
+        </button>
+      </div>
+      <div className="merge-branch__conflict-editor-host">
+        <Editor
+          key={path}
+          value={value}
+          language="plaintext"
+          theme="orbit-dark"
+          onChange={(next) => {
+            const nextText = next ?? '';
+            setValue(nextText);
+            valueRef.current = nextText;
+          }}
+          onMount={(editor, monaco) => {
+            const controller = new ConflictController(editor, monaco);
+            controllerRef.current = controller;
+            controller.onChange = (text2) => {
+              setValue(text2);
+              valueRef.current = text2;
+            };
+            controller.update();
+          }}
+          options={{
+            fontSize: 11,
+            lineHeight: 18,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+

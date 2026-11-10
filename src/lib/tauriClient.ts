@@ -763,6 +763,19 @@ export interface MergePreviewFile {
   deletions: number;
 }
 
+export interface MergeFileVersions {
+  ours: string | null;
+  incoming: string | null;
+  workdir: string | null;
+}
+
+export async function mergeFileVersions(
+  path: string,
+  branch: string,
+): Promise<MergeFileVersions> {
+  return invoke('merge_file_versions', { path, branch });
+}
+
 export interface MergePreview {
   upToDate: boolean;
   commits: MergePreviewCommit[];

@@ -218,6 +218,35 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
     Ok(MergePreview { up_to_date, commits, files })
 }
 
+/// Ours/HEAD, incoming/source-tip and workdir contents of one file
+/// (None when the side does not have the file — add/delete merges).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeFileVersions {
+    pub ours: Option<String>,
+    pub incoming: Option<String>,
+    pub workdir: Option<String>,
+}
+
+fn blob_content_at(repo: &git2::Repository, commit: &git2::Commit, path: &str) -> Option<String> {
+    let tree = commit.tree().ok()?;
+    let entry = tree.get_path(std::path::Path::new(path)).ok()?;
+    let blob = repo.find_blob(entry.id()).ok()?;
+    Some(String::from_utf8_lossy(blob.content()).to_string())
+}
+
+pub fn merge_file_versions(repo_path: &Path, path: &str, branch: &str) -> Result<MergeFileVersions> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
+    let head_commit = head.peel_to_commit().map_err(err)?;
+    let source = repo.revparse_single(branch).map_err(|e| format!("unknown branch {branch}: {e}"))?;
+    let source_commit = source.peel_to_commit().map_err(err)?;
+    let ours = blob_content_at(&repo, &head_commit, path);
+    let incoming = blob_content_at(&repo, &source_commit, path);
+    let full = repo.workdir().ok_or("bare repository")?.join(path);
+    let workdir = std::fs::read(&full).ok().map(|bytes| String::from_utf8_lossy(&bytes).to_string());
+    Ok(MergeFileVersions { ours, incoming, workdir })
+}
 pub fn merge_status(repo_path: &Path) -> Result<MergeStatus> {
     let repo = git2::Repository::discover(repo_path).map_err(err)?;
     let in_progress = repo.path().join("MERGE_HEAD").exists();
@@ -311,7 +340,14 @@ pub fn interactive_rebase(repo_path: &Path, base: &str, steps: &[RebaseStep]) ->
         .rev()
         .map(|s| format!("{} {}\n", s.action, s.oid.trim()))
         .collect();
-    let todo_path = std::env::temp_dir().join(format!("orbit-rebase-todo-{}.txt", std::process::id()));
+    // Unique per call: parallel tests in one process share a pid, and a
+    // shared todo path would race (one test feeding another its plan).
+    static TODO_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let todo_path = std::env::temp_dir().join(format!(
+        "orbit-rebase-todo-{}-{}.txt",
+        std::process::id(),
+        TODO_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    ));
     std::fs::write(&todo_path, todo_body).map_err(err)?;
 
     // GIT_SEQUENCE_EDITOR is executed through sh (even on Windows); it receives
