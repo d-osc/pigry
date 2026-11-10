@@ -687,6 +687,26 @@ export async function stashDrop(index: number): Promise<AppStatePayload> {
   return invoke("stash_drop", { index });
 }
 
+export interface StashPreviewFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface StashPreview {
+  index: number;
+  oid: string;
+  /** The base commit the stash applies onto (compare base). */
+  parentOid: string | null;
+  message: string;
+  files: StashPreviewFile[];
+}
+
+export async function stashPreview(index: number): Promise<StashPreview> {
+  return invoke('stash_preview', { index });
+}
+
 export async function getFileHunks(
   path: string,
   staged: boolean,

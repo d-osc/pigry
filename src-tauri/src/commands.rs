@@ -1627,6 +1627,18 @@ pub async fn push_preview(
 }
 
 #[tauri::command]
+pub async fn stash_preview(
+    state: State<'_, Mutex<AppState>>,
+    index: usize,
+) -> Result<ops::StashPreview, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::stash_preview(&repo_path, index)
+}
+
+#[tauri::command]
 pub async fn merge_abort(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,

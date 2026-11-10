@@ -676,3 +676,47 @@ fn push_preview_lists_unpushed_commits_with_files() {
     fs::remove_dir_all(&dir).unwrap();
     fs::remove_dir_all(&remote_dir).unwrap();
 }
+
+#[test]
+fn stash_preview_lists_entry_files() {
+    let dir = std::env::temp_dir().join(format!("orbit-ops-stashprev-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_bool("core.autocrlf", false).unwrap();
+    drop(config);
+
+    fs::write(dir.join("a.txt"), "one\n").unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+    index.write().unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
+
+    // Stash one change on top.
+    fs::write(dir.join("a.txt"), "one\ntwo\n").unwrap();
+    fs::write(dir.join("b.txt"), "b1\n").unwrap();
+    crate::git_state::stash(&dir, Some("wip experiment")).unwrap();
+
+    let preview = crate::ops::stash_preview(&dir, 0).unwrap();
+    assert!(preview.message.contains("wip experiment"), "git prefixes 'On <branch>: '");
+    assert_eq!(preview.files.len(), 2, "modified + added file");
+    let a = preview.files.iter().find(|f| f.path == "a.txt").unwrap();
+    assert_eq!(a.status, "M");
+    assert_eq!((a.additions, a.deletions), (1, 0));
+    let b = preview.files.iter().find(|f| f.path == "b.txt").unwrap();
+    assert_eq!(b.status, "A");
+
+    // Out-of-range previews report a clear error.
+    let missing = crate::ops::stash_preview(&dir, 5);
+    assert!(missing.is_err());
+    assert!(missing.unwrap_err().contains("does not exist"));
+
+    fs::remove_dir_all(&dir).unwrap();
+}

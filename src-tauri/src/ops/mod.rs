@@ -112,7 +112,7 @@ pub struct MergePreviewCommit {
     pub files: Vec<MergePreviewCommitFile>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MergePreviewCommitFile {
     pub path: String,
@@ -372,6 +372,64 @@ pub fn push_preview(repo_path: &Path) -> Result<PushPreview> {
 
     let ahead = commits.len();
     Ok(PushPreview { branch, upstream: upstream_name, ahead, commits })
+}
+
+/// Contents of one stash entry — the files it changes vs its base.
+#[derive(serde::Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct StashPreview {
+    pub index: usize,
+    pub oid: String,
+    /// The base commit the stash applies onto (compare base in the UI).
+    pub parent_oid: Option<String>,
+    pub message: String,
+    pub files: Vec<MergePreviewCommitFile>,
+}
+
+/// Lists the files one stash entry changes (diff vs its first parent).
+pub fn stash_preview(repo_path: &Path, index: usize) -> Result<StashPreview> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let commit = repo
+        .revparse_single(&format!("stash@{{{}}}", index))
+        .map_err(|e| format!("stash #{} does not exist: {}", index, e))?
+        .peel_to_commit()
+        .map_err(err)?;
+    let parent = commit.parent(0).ok();
+    let parent_tree = parent.as_ref().and_then(|p| p.tree().ok());
+    let tree = commit.tree().map_err(err)?;
+    let mut files: Vec<MergePreviewCommitFile> = tree_diff_stats(&repo, parent_tree.as_ref(), &tree)?
+        .into_iter()
+        .map(|(path, letter, additions, deletions)| MergePreviewCommitFile {
+            path,
+            status: letter.to_string(),
+            additions,
+            deletions,
+        })
+        .collect();
+    // Untracked files ride in the stash's third parent (git's stash model),
+    // not in the stash tree itself — surface them as additions.
+    if commit.parent_count() > 2 {
+        if let Ok(untracked) = commit.parent(2) {
+            let untracked_tree = untracked.tree().map_err(err)?;
+            for (path, letter, additions, deletions) in
+                tree_diff_stats(&repo, None, &untracked_tree)?
+            {
+                files.push(MergePreviewCommitFile {
+                    path,
+                    status: letter.to_string(),
+                    additions,
+                    deletions,
+                });
+            }
+        }
+    }
+    Ok(StashPreview {
+        index,
+        oid: commit.id().to_string(),
+        parent_oid: parent.as_ref().map(|p| p.id().to_string()),
+        message: commit.summary().unwrap_or_default().to_string(),
+        files,
+    })
 }
 
 /// Ours/HEAD, incoming/source-tip and workdir contents of one file

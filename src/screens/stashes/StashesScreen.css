@@ -1,0 +1,351 @@
+/* Stashes screen — create/view/apply/pop/drop stash entries. */
+
+.stashes-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.stashes__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stashes__title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.stashes__create {
+  display: flex;
+  gap: 8px;
+}
+
+.stashes__input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.stashes__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.stashes__input::placeholder {
+  color: var(--text-muted);
+}
+
+.stashes__stash-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.stashes__stash-btn:hover:not(:disabled) {
+  background: rgba(139, 157, 255, 0.22);
+}
+
+.stashes__stash-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stashes__quick {
+  display: flex;
+  gap: 8px;
+}
+
+.stashes__quick-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stashes__quick-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stashes__quick-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stashes__section-title {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.stashes__empty {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stashes__empty-section .stashes__empty {
+  color: var(--success, #6dd6ad);
+}
+
+.stashes__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stashes__entry-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stashes__entry-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.stashes__entry-btn:hover,
+.stashes__entry-btn.is-open {
+  border-color: var(--accent);
+}
+
+.stashes__entry-index {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.stashes__entry-message {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stashes__entry-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.stashes__action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.stashes__action-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stashes__action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stashes__action-btn--apply {
+  border-color: var(--success, #6dd6ad);
+  color: var(--success, #6dd6ad);
+}
+
+.stashes__action-btn--pop {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.stashes__action-btn--drop {
+  border-color: var(--danger, #e79098);
+  color: var(--danger, #e79098);
+}
+
+.stashes__view {
+  margin: 4px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  display: grid;
+  gap: 4px;
+}
+
+.stashes__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.stashes__file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+}
+
+.stashes__file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.stashes__file-status {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.stashes__file-status--A {
+  color: var(--success, #6dd6ad);
+}
+
+.stashes__file-status--M {
+  color: var(--warning, #edb675);
+}
+
+.stashes__file-status--D {
+  color: var(--danger, #e79098);
+}
+
+.stashes__file-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stashes__file-stats {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.stashes__file:hover {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.stashes__file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.stashes__file-view-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.stashes__file-view-labels span + span {
+  margin-left: auto;
+}
+
+.stashes__view-mode {
+  margin-left: 8px;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.stashes__view-mode button {
+  padding: 2px 9px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stashes__view-mode button.is-active {
+  background: var(--accent-tint-1, rgba(139, 157, 255, 0.15));
+  color: var(--accent);
+}
+
+.stats-add {
+  color: var(--success, #6dd6ad);
+  font-family: var(--font-mono);
+}
+
+.stats-del {
+  color: var(--danger, #e79098);
+  font-family: var(--font-mono);
+  margin-left: 4px;
+}

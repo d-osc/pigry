@@ -21,6 +21,7 @@ import {
 } from '../hooks/useRepository';
 import { MergeBranchScreen } from '../screens/merge-branch/MergeBranchScreen';
 import { PushCommitsScreen } from '../screens/push-commits/PushCommitsScreen';
+import { StashesScreen } from '../screens/stashes/StashesScreen';
 import { WorkingChangesScreen } from '../screens/working-changes/WorkingChangesScreen';
 import { AppSettingsScreen } from '../screens/settings/AppSettingsScreen';
 import { CommitGraphScreen } from '../screens/commit-graph/CommitGraphScreen';
@@ -44,6 +45,7 @@ const AI_RAIL_SCREENS: NavId[] = [
   'working-changes',
   'merge-branch',
   'push-commits',
+  'stashes',
   'actions',
   'pull-requests',
   'releases',
@@ -94,6 +96,8 @@ function renderScreen(
       return <MergeBranchScreen />;
     case 'push-commits':
       return <PushCommitsScreen />;
+    case 'stashes':
+      return <StashesScreen />;
     case 'commit-graph':
       return <CommitGraphScreen onStartRebase={startRebase} focusCommit={focusCommit} />;
     case 'explorer':

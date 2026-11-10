@@ -14,6 +14,7 @@ import {
   type LucideIcon,
   GitMerge,
   ArrowUpCircle,
+  Archive,
 } from 'lucide-react';
 
 export type NavId =
@@ -22,6 +23,7 @@ export type NavId =
   | 'working-changes'
   | 'merge-branch'
   | 'push-commits'
+  | 'stashes'
   | 'ai-agent'
   | 'pull-requests'
   | 'releases'
@@ -46,6 +48,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'commit-graph', label: 'Commit graph', icon: Network },
   { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
+  { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },
