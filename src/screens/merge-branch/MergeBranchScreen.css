@@ -459,6 +459,27 @@
   height: 300px;
 }
 
+.merge-branch__file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.merge-branch__file-view-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .merge-branch__conflict-resolved {
   margin: 0;
   padding: 8px 12px;

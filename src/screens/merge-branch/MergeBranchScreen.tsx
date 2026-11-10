@@ -44,6 +44,9 @@ export function MergeBranchScreen() {
   // Commit expanded to show its full message + files.
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
 
+  // Conflicted files are ALL open at once; this set holds collapsed ones.
+  const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
+
   const toggleFile = async (filePath: string) => {
     if (expandedPath === filePath) {
       setExpandedPath(null);
@@ -388,30 +391,37 @@ export function MergeBranchScreen() {
               Conflicts ({conflict.conflicted.length})
             </h3>
             <p className="merge-branch__conflict-hint">
-              Click a file to resolve it right here with the accept buttons — or abort to
-              restore the branch.
+              Every conflicted file is open below — resolve each with the accept
+              buttons, or abort to restore the branch.
             </p>
             <ul className="merge-branch__conflict-list">
               {conflict.conflicted.map((file) => {
-                const open = expandedPath === file;
+                const collapsed = collapsedConflicts.has(file);
                 return (
                   <li key={file} className="merge-branch__conflict-file">
                     <button
                       type="button"
-                      className={`merge-branch__conflict-file-btn${open ? ' is-open' : ''}`}
-                      onClick={() => void toggleFile(file)}
+                      className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
+                      title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
+                      onClick={() =>
+                        setCollapsedConflicts((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(file)) next.delete(file);
+                          else next.add(file);
+                          return next;
+                        })
+                      }
                     >
                       {file}
                     </button>
-                    {open && versions && versions.workdir.includes('<<<<<<<') && (
+                    {!collapsed && (
                       <div className="merge-branch__conflict-editor">
-                        <ConflictEditor path={file} text={versions.workdir} />
+                        <ConflictEditor
+                          key={`${file}:${effectiveSource || currentBranch}`}
+                          path={file}
+                          branch={effectiveSource || currentBranch}
+                        />
                       </div>
-                    )}
-                    {open && versions && !versions.workdir.includes('<<<<<<<') && (
-                      <p className="merge-branch__conflict-resolved">
-                        No conflict markers remain — stage the file and commit to finish.
-                      </p>
                     )}
                   </li>
                 );
@@ -445,13 +455,33 @@ export function MergeBranchScreen() {
 
 /** Editable conflict-marker editor for one file — the VS Code-style accept
  * widget is attached through ConflictController; Save writes the resolved
- * buffer back to the working file. */
-function ConflictEditor({ path, text }: { path: string; text: string }) {
+ * buffer back to the working file. Loads its own working-tree content so
+ * every conflicted file can stay open at once. */
+function ConflictEditor({ path, branch }: { path: string; branch: string }) {
   const { refresh, notify } = useRepository();
-  const [value, setValue] = useState(text);
-  const valueRef = useRef(value);
+  const [text, setText] = useState<string | null>(null);
+  const [value, setValue] = useState('');
+  const valueRef = useRef('');
   const [saving, setSaving] = useState(false);
   const controllerRef = useRef<ConflictController | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    mergeFileVersions(path, branch)
+      .then((versions) => {
+        if (!alive) return;
+        const workdir = versions.workdir ?? '';
+        setText(workdir);
+        setValue(workdir);
+        valueRef.current = workdir;
+      })
+      .catch(() => {
+        if (alive) setText('');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [path, branch]);
 
   const controllerAccept = (kind: 'current' | 'incoming' | 'both') => {
     const controller = controllerRef.current;
@@ -475,6 +505,22 @@ function ConflictEditor({ path, text }: { path: string; text: string }) {
       setSaving(false);
     }
   };
+
+  if (text === null) {
+    return (
+      <div className="merge-branch__conflict-editor">
+        <p className="merge-branch__empty">Loading {path}…</p>
+      </div>
+    );
+  }
+
+  if (!text.includes('<<<<<<<')) {
+    return (
+      <p className="merge-branch__conflict-resolved">
+        No conflict markers remain — stage the file and commit to finish.
+      </p>
+    );
+  }
 
   return (
     <div className="merge-branch__conflict-editor">
