@@ -35,6 +35,9 @@ interface EditorPaneProps {
   onSelectionChange?: (
     selection: { path: string; text: string; startLine: number; endLine: number } | null,
   ) => void;
+  /** Reports the history commit selected in the file-history panel (for the
+   * AI chat's "attach file history" chip). */
+  onHistorySelect?: (info: { path: string; oid: string } | null) => void;
 }
 
 function editorPrefs(): {
@@ -79,6 +82,7 @@ export function EditorPane({
   onBufferChange,
   onJumpToCommit,
   onSelectionChange,
+  onHistorySelect,
 }: EditorPaneProps) {
   const { refresh, busy, repository } = useRepository();
   const [entry, setEntry] = useState<{
@@ -93,6 +97,13 @@ export function EditorPane({
   const [historyOn, setHistoryOn] = useState(true);
   const [compareOn, setCompareOn] = useState(false);
   const [baseOid, setBaseOid] = useState<string | null>(null);
+  // Switching files drops the history selection — it belongs to the old file
+  // (adjust-state-on-change, no effect needed).
+  const [prevPath, setPrevPath] = useState(path);
+  if (prevPath !== path) {
+    setPrevPath(path);
+    setBaseOid(null);
+  }
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   // Draggable panel heights; null = the CSS defaults.
   const [historyHeight, setHistoryHeight] = useState<number | null>(null);
@@ -210,6 +221,16 @@ export function EditorPane({
   useEffect(() => {
     selectionCbRef.current = onSelectionChange;
   }, [onSelectionChange]);
+  // Report the selected history commit upward (AI chat history chip). Only
+  // real selections are reported — a transient remount (file-watcher tree
+  // refresh) must not null out the chat's attached history.
+  const historyCbRef = useRef(onHistorySelect);
+  useEffect(() => {
+    historyCbRef.current = onHistorySelect;
+  }, [onHistorySelect]);
+  useEffect(() => {
+    if (baseOid && path) historyCbRef.current?.({ path, oid: baseOid });
+  }, [baseOid, path]);
   useEffect(() => {
     if (!editorInstance) return;
     selectionCbRef.current?.(null);

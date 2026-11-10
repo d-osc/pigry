@@ -114,6 +114,11 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     startLine: number;
     endLine: number;
   } | null>(null);
+  // History commit picked in the file-history panel — chat attaches it too.
+  const [historySelection, setHistorySelection] = useState<{
+    path: string;
+    oid: string;
+  } | null>(null);
   // Folder expansion is controlled here so the header's fold button can
   // collapse everything without effects inside the tree component.
   const [treeOverrides, setTreeOverrides] = useState<{
@@ -1018,6 +1023,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               onBufferChange={handleBufferChange}
               onJumpToCommit={onJumpToCommit}
               onSelectionChange={setEditorSelection}
+              onHistorySelect={setHistorySelection}
             />
           </section>
         ) : (
@@ -1047,6 +1053,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               handleSelectFile(path);
               if (line) setRevealTarget({ path, line, column: 1 });
             }}
+            historySelection={historySelection}
           />
         ) : (
           <button

@@ -10,6 +10,7 @@ import {
   Code,
   FileText,
   Heading2,
+  History,
   ImageIcon,
   Italic,
   Link2,
@@ -29,7 +30,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -314,6 +315,8 @@ interface AiAgentPanelProps {
   defaultTeam?: string;
   /** Opens a repo file (optionally at a line) — wired to tool-event chips. */
   onOpenFile?: (path: string, line?: number) => void;
+  /** History commit picked in the file-history panel — attachable to chat. */
+  historySelection?: { path: string; oid: string } | null;
 }
 
 /** One-click prompts shown on the empty state. */
@@ -324,7 +327,7 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
 ];
 
-export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile }: AiAgentPanelProps) {
+export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection }: AiAgentPanelProps) {
   const { repository, notify } = useRepository();
   // Chats and memories live under this team's .orbit/teams/<team>/ store.
   const team = defaultTeam ?? 'Copilot';
@@ -348,6 +351,20 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   }
   const activeSelection =
     selection && selectionKey !== dismissedKey ? selection : null;
+
+  // File-history selection — same dismiss-and-reset pattern as the
+  // editor selection so a newly picked commit re-arms the chip.
+  const historyKey = historySelection
+    ? `${historySelection.path}@${historySelection.oid}`
+    : '';
+  const [dismissedHistory, setDismissedHistory] = useState('');
+  const [prevHistoryKey, setPrevHistoryKey] = useState(historyKey);
+  if (prevHistoryKey !== historyKey) {
+    setPrevHistoryKey(historyKey);
+    setDismissedHistory('');
+  }
+  const activeHistory =
+    historySelection && historyKey !== dismissedHistory ? historySelection : null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -830,6 +847,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     if (activeSelection) {
       context += `\n\n[Selected code — ${activeSelection.path}:${activeSelection.startLine}-${activeSelection.endLine}]\n${activeSelection.text.slice(0, 8000)}`;
+    }
+    if (activeHistory) {
+      // The file as it existed at the selected history commit.
+      try {
+        const at = await readFileAtCommit(activeHistory.path, activeHistory.oid);
+        if (!at.binary && !at.tooLarge) {
+          context += `\n\n[File history — ${activeHistory.path} @ ${activeHistory.oid.slice(0, 7)}]\n${at.content.slice(0, 8000)}`;
+        } else {
+          context += `\n\n[File history — ${activeHistory.path} @ ${activeHistory.oid.slice(0, 7)}]\n(${at.binary ? 'binary' : 'too large'} — content omitted)`;
+        }
+      } catch {
+        // commit content unavailable — ride along without it
+      }
     }
     for (const attached of attachedFiles) {
       context += `\n\n[Attached file: ${attached.path}]\n${attached.content.slice(0, 12000)}`;
@@ -1564,8 +1594,25 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               <Quote size={12} strokeWidth={1.5} />
             </button>
           </div>
-          {(activeSelection || attachedFiles.length > 0 || images.length > 0) && (
+          {(activeSelection || activeHistory || attachedFiles.length > 0 || images.length > 0) && (
             <div className="ai-composer__attachments">
+              {activeHistory && (
+                <span
+                  className="ai-composer__sel-chip"
+                  title={`File history: ${activeHistory.path} @ ${activeHistory.oid.slice(0, 7)} — the file at that commit is included with your next message`}
+                >
+                  <History size={10} strokeWidth={1.5} />
+                  {activeHistory.path.split('/').pop()}
+                  <span className="ai-composer__sel-range">@ {activeHistory.oid.slice(0, 7)}</span>
+                  <button
+                    type="button"
+                    aria-label="Remove file history from chat"
+                    onClick={() => setDismissedHistory(historyKey)}
+                  >
+                    <X size={9} strokeWidth={2} />
+                  </button>
+                </span>
+              )}
               {activeSelection && (
                 <span
                   className="ai-composer__sel-chip"
