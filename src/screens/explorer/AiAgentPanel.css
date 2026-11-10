@@ -1257,3 +1257,21 @@
   color: var(--accent);
   background: var(--accent-tint-1);
 }
+
+/* Tool-activity chips — file ops an agent performed this turn */
+.explorer-ai__msg-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.explorer-ai__tool-event {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cyan) 28%, transparent);
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+}

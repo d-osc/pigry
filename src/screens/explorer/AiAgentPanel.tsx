@@ -29,7 +29,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readWorktreeFile } from '../../lib/tauriClient';
+import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -123,6 +123,109 @@ function agentProfileText(agent: AgentEntry): string {
     agent.mcpServers.length > 0 ? `- mcp: ${agent.mcpServers.join(', ')}` : '',
   ].filter(Boolean);
   return `${lines.join('\n')}\n\nYou are @${agent.username}. Respond in character as this agent.`;
+}
+
+/* ---------- agent file tools (real tool-use loop) ---------- */
+
+/** A file tool the model may call. `id` matches the Agents-tab checkbox so
+ * each agent's allowlist gates what it can actually do. */
+interface ToolSpec {
+  id: string;
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  run: (input: Record<string, unknown>) => Promise<string>;
+}
+
+const FILE_TOOLS: ToolSpec[] = [
+  {
+    id: 'list_files',
+    name: 'list_files',
+    description: 'List file paths in the repository working tree (first 600).',
+    input_schema: { type: 'object', properties: {} },
+    run: async () => {
+      const tree = await getFileTree();
+      return tree.entries.slice(0, 600).join('\n');
+    },
+  },
+  {
+    id: 'read_file',
+    name: 'read_file',
+    description: 'Read a text file from the working tree (fails on binary or huge files).',
+    input_schema: {
+      type: 'object',
+      properties: { path: { type: 'string', description: 'Repo-relative file path' } },
+      required: ['path'],
+    },
+    run: async (input) => {
+      const file = await readWorktreeFile(String(input.path));
+      if (file.binary) return '(binary file)';
+      if (file.tooLarge) return '(file too large to read)';
+      return file.content.slice(0, 16000);
+    },
+  },
+  {
+    id: 'write_file',
+    name: 'write_file',
+    description:
+      'Create or overwrite a text file in the working tree. Changes land in the repo and are visible/reversible through git.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Repo-relative file path' },
+        content: { type: 'string', description: 'Full file content to write' },
+      },
+      required: ['path', 'content'],
+    },
+    run: async (input) => {
+      const path = String(input.path);
+      const content = String(input.content);
+      await writeWorktreeFile(path, content);
+      return `wrote ${path} (${content.length} chars)`;
+    },
+  },
+];
+
+/** Short label shown as a tool-activity chip in the chat bubble. */
+function toolLabel(name: string, input: Record<string, unknown>, output: string): string {
+  if (name === 'write_file') return `write_file → ${String(input.path ?? '?')}`;
+  if (name === 'read_file') return `read_file → ${String(input.path ?? '?')}`;
+  if (name === 'list_files') return `list_files (${output.split('\n').length} paths)`;
+  return name;
+}
+
+/** Executes one tool call, returning the tool_result text (never throws). */
+async function runToolCall(
+  tool: ToolSpec | undefined,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<string> {
+  if (!tool) return `error: unknown tool ${name}`;
+  try {
+    return await tool.run(input);
+  } catch (error) {
+    return `error: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+function safeParse(body: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function textFromAnthropic(parsed: Record<string, unknown> | null): string {
+  const blocks = parsed?.content as Array<{ type?: string; text?: string }> | undefined;
+  return blocks?.filter((b) => b?.type === 'text').map((b) => b.text ?? '').join('') ?? '';
+}
+
+function textFromOpenAI(parsed: Record<string, unknown> | null): string {
+  return (
+    (parsed as { choices?: Array<{ message?: { content?: string } }> })?.choices?.[0]?.message
+      ?.content ?? ''
+  );
 }
 
 /** Display name for a replying agent — resolved from its @username, falling
@@ -823,7 +926,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
     // The tagged agent's identity rides along so it answers in character.
     const profile = target ? `\n\n[Your agent profile]\n${agentProfileText(target)}` : '';
-    const fullText = last.text + (last.context ?? '') + profile;
+    const toolNudge =
+      '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
+    const fullText = last.text + (last.context ?? '') + profile + toolNudge;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0
@@ -848,62 +953,132 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             })),
           ]
         : fullText;
-    const payload = isAnthropic
-      ? {
-          model: provider.model || 'claude-sonnet',
-          max_tokens: 4096,
-          messages: [{ role: 'user', content }],
-        }
-      : {
-          model: provider.model || 'glm-4.6',
-          messages: [{ role: 'user', content }],
-          stream: false,
-        };
+    // File tools this turn may call — the tagged agent's own allowlist wins
+    // (empty list inherits everything).
+    const agentAllowed = target?.tools ?? [];
+    const tools = FILE_TOOLS.filter(
+      (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
+    );
+    const anthropicTools = tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.input_schema,
+    }));
+    const openaiTools = tools.map((tool) => ({
+      type: 'function',
+      function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+    }));
 
     let working = history;
     let replyError = false;
     let assistantText = '';
+    const toolEvents: string[] = [];
     try {
-      const result = await aiChat(
-        endpoint,
-        provider.apiKey,
-        JSON.stringify(payload),
-        isAnthropic ? 'anthropic' : 'bearer',
-      );
-      const parsed = (() => {
-        try {
-          return JSON.parse(result.body) as Record<string, unknown>;
-        } catch {
-          return null;
+      if (tools.length === 0) {
+        // No tools allowed — plain single-shot reply (legacy path).
+        const payload = isAnthropic
+          ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, messages: [{ role: 'user', content }] }
+          : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], stream: false };
+        const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
+        const parsed = safeParse(result.body);
+        const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
+        if (!result.ok) {
+          replyError = true;
+          assistantText = String(err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`);
+        } else {
+          assistantText = isAnthropic ? textFromAnthropic(parsed) : textFromOpenAI(parsed);
+          if (!assistantText) {
+            replyError = true;
+            assistantText = String(err?.error?.message ?? err?.message ?? result.error ?? 'Empty reply');
+          }
         }
-      })();
-      if (isAnthropic) {
-        const blocks = parsed?.content as Array<{ type?: string; text?: string }> | undefined;
-        assistantText =
-          blocks
-            ?.filter((block) => block?.type === 'text')
-            .map((block) => block.text ?? '')
-            .join('') ?? '';
+        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName, ...(replyError ? { error: true } : {}) }];
+        setMessages(working);
       } else {
-        assistantText =
-          (parsed as { choices?: Array<{ message?: { content?: string } }> })
-            ?.choices?.[0]?.message?.content ?? '';
+        // Agentic loop: the model may call file tools; results feed back
+        // until it produces a final text reply (max 8 tool rounds).
+        const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
+        for (let iter = 0; iter < 8; iter++) {
+          const payload = isAnthropic
+            ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, tools: anthropicTools, messages: apiMessages }
+            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, stream: false };
+          const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
+          const parsed = safeParse(result.body);
+          if (!result.ok) {
+            const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
+            replyError = true;
+            assistantText = String(err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`);
+            break;
+          }
+
+          if (isAnthropic) {
+            const blocks = (parsed?.content ?? []) as Array<{
+              type?: string;
+              text?: string;
+              id?: string;
+              name?: string;
+              input?: Record<string, unknown>;
+            }>;
+            const textPart = blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+            const calls = blocks.filter((b) => b.type === 'tool_use');
+            if (calls.length === 0) {
+              assistantText = textPart;
+              break;
+            }
+            if (textPart) assistantText += (assistantText ? '\n\n' : '') + textPart;
+            apiMessages.push({ role: 'assistant', content: blocks });
+            const results: Array<Record<string, unknown>> = [];
+            for (const call of calls) {
+              const tool = tools.find((t) => t.name === call.name);
+              const input = call.input ?? {};
+              const output = await runToolCall(tool, String(call.name), input);
+              toolEvents.push(toolLabel(String(call.name), input, output));
+              results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
+            }
+            apiMessages.push({ role: 'user', content: results });
+          } else {
+            const message = (parsed as {
+              choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>;
+            })?.choices?.[0]?.message;
+            const calls = message?.tool_calls ?? [];
+            if (calls.length === 0) {
+              assistantText = message?.content ?? '';
+              break;
+            }
+            if (message?.content) assistantText += (assistantText ? '\n\n' : '') + message.content;
+            apiMessages.push({ role: 'assistant', content: message?.content ?? '', tool_calls: calls });
+            for (const call of calls) {
+              const name = String(call.function?.name ?? '');
+              let input: Record<string, unknown> = {};
+              try {
+                input = JSON.parse(call.function?.arguments || '{}') as Record<string, unknown>;
+              } catch {
+                // malformed arguments — runToolCall reports the failure
+              }
+              const tool = tools.find((t) => t.name === name);
+              const output = await runToolCall(tool, name, input);
+              toolEvents.push(toolLabel(name, input, output));
+              apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
+            }
+          }
+        }
+        if (!replyError && !assistantText) {
+          assistantText = toolEvents.length > 0 ? 'Done — see the tool activity above.' : '(empty reply)';
+        }
+        working = [
+          ...history,
+          {
+            role: 'assistant',
+            text: assistantText,
+            time: now(),
+            agent: repliedAs,
+            owner: ownerName,
+            ...(replyError ? { error: true } : {}),
+            ...(toolEvents.length > 0 ? { toolEvents } : {}),
+          },
+        ];
+        setMessages(working);
       }
-      if (!result.ok || !assistantText) {
-        // Anthropic gateways surface errors as {code, message}, the official
-        // API as {error:{message}} — try both before falling back.
-        const err = parsed as
-          | { error?: { message?: string }; message?: string; code?: string }
-          | null;
-        const message =
-          err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`;
-        replyError = true;
-        assistantText = String(message);
-        working = [...history, { role: 'assistant', text: String(message), error: true, time: now(), agent: repliedAs, owner: ownerName }];
-      } else {
-        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName }];
-      }
-      setMessages(working);
     } catch (error) {
       replyError = true;
       working = [
@@ -915,6 +1090,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           time: now(),
           agent: repliedAs,
           owner: ownerName,
+          ...(toolEvents.length > 0 ? { toolEvents } : {}),
         },
       ];
       setMessages(working);
@@ -1293,6 +1469,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                             <pre className="explorer-ai__msg-selection-code">
                               {message.selection.text}
                             </pre>
+                          </div>
+                        )}
+                        {message.toolEvents && message.toolEvents.length > 0 && (
+                          <div className="explorer-ai__msg-tools">
+                            {message.toolEvents.map((event, i) => (
+                              <span key={i} className="explorer-ai__tool-event">
+                                {event}
+                              </span>
+                            ))}
                           </div>
                         )}
                         <div className="explorer-ai__msg-text">

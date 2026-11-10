@@ -23,6 +23,8 @@ export interface AiChatMessage {
   agent?: string;
   /** Repo-owner username that wrote this message (user side). */
   owner?: string;
+  /** Tool calls the agent made this turn (display only). */
+  toolEvents?: string[];
 }
 
 export interface AiChatSession {
