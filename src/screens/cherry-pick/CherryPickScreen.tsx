@@ -25,6 +25,7 @@ export function CherryPickScreen() {
   const { repository, refresh, notify } = useRepository();
   const headOid = repository?.headOid ?? '';
   const [rows, setRows] = useState<CommitRow[]>([]);
+  const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<CommitRow | null>(null);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -44,7 +45,7 @@ export function CherryPickScreen() {
     let cancelled = false;
     getCommitHistory(false)
       .then((history) => {
-        if (!cancelled) setRows(history.commits.slice(0, MAX_ROWS));
+        if (!cancelled) setRows(history.commits);
       })
       .catch(() => {
         if (!cancelled) setRows([]);
@@ -178,8 +179,38 @@ export function CherryPickScreen() {
 
       <section className="cherry__browse">
         <h4 className="cherry__section-title">Recent commits</h4>
+        <div className="cherry__search">
+          <input
+            type="text"
+            className="cherry__search-input"
+            placeholder="Search commits — sha or message"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {query && (
+            <button
+              type="button"
+              className="cherry__search-clear"
+              title="Clear search"
+              onClick={() => setQuery('')}
+            >
+              ×
+            </button>
+          )}
+        </div>
         <ul className="cherry__rows">
-          {rows.map((row) => {
+          {(() => {
+            const q = query.trim().toLowerCase();
+            return (q
+              ? rows.filter(
+                  (row) =>
+                    row.oid.toLowerCase().includes(q) ||
+                    row.shortOid.toLowerCase().includes(q) ||
+                    row.summary.toLowerCase().includes(q),
+                )
+              : rows.slice(0, MAX_ROWS)
+            );
+          })().map((row) => {
             const isSelected = selected?.oid === row.oid;
             return (
               <li key={row.oid} className="cherry__row-item">
@@ -197,7 +228,15 @@ export function CherryPickScreen() {
               </li>
             );
           })}
-          {rows.length === 0 && <li className="cherry__empty">Loading commits…</li>}
+          {query.trim() === '' && rows.length === 0 && (
+            <li className="cherry__empty">Loading commits…</li>
+          )}
+          {query.trim() !== '' &&
+            rows.filter(
+              (row) =>
+                row.oid.toLowerCase().includes(query.trim().toLowerCase()) ||
+                row.summary.toLowerCase().includes(query.trim().toLowerCase()),
+            ).length === 0 && <li className="cherry__empty">No commits match the search.</li>}
         </ul>
       </section>
 
