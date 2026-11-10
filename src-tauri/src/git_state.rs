@@ -1168,8 +1168,18 @@ pub(crate) fn initials_for(name: &str) -> String {
 pub struct FileTree {
     /// All visible file paths (tracked + untracked, ignored excluded).
     pub entries: Vec<String>,
-    /// Paths with pending changes, for status dots on the tree.
-    pub changed_paths: Vec<String>,
+    /// Per-file pending-change status (M/A/U/D/R/C) for the tree chips.
+    pub changed: Vec<TreeChangedFile>,
+    /// Paths touched by commits that have not been pushed yet
+    /// (only when the branch has an upstream).
+    pub unpushed_paths: Vec<String>,
+}
+
+/// One changed file with a combined index+worktree status letter.
+#[derive(Serialize, Clone)]
+pub struct TreeChangedFile {
+    pub path: String,
+    pub status: String,
 }
 
 pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
@@ -1191,7 +1201,7 @@ pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
     let mut opts = StatusOptions::new();
     opts.include_untracked(true).recurse_untracked_dirs(true);
     let statuses = repo.statuses(Some(&mut opts)).map_err(err)?;
-    let mut changed_paths = Vec::new();
+    let mut changed: Vec<TreeChangedFile> = Vec::new();
     for entry in statuses.iter() {
         let Some(path) = entry.path().map(str::to_string) else {
             continue;
@@ -1203,7 +1213,8 @@ pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
             }
         }
         if flags.intersects(
-            Status::INDEX_NEW
+            Status::CONFLICTED
+                | Status::INDEX_NEW
                 | Status::INDEX_MODIFIED
                 | Status::INDEX_DELETED
                 | Status::INDEX_RENAMED
@@ -1211,15 +1222,79 @@ pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
                 | Status::WT_MODIFIED
                 | Status::WT_DELETED
                 | Status::WT_RENAMED,
-        ) && !changed_paths.contains(&path)
-        {
-            changed_paths.push(path);
+        ) {
+            let status = if flags.contains(Status::CONFLICTED) {
+                "C"
+            } else if flags.intersects(Status::INDEX_DELETED | Status::WT_DELETED) {
+                "D"
+            } else if flags.contains(Status::INDEX_NEW) {
+                "A"
+            } else if flags.contains(Status::WT_NEW) {
+                "U"
+            } else if flags.intersects(Status::INDEX_RENAMED | Status::WT_RENAMED) {
+                "R"
+            } else {
+                "M"
+            };
+            changed.push(TreeChangedFile { path: path.clone(), status: status.to_string() });
         }
     }
 
     paths.sort();
-    changed_paths.sort();
-    Ok(FileTree { entries: paths, changed_paths })
+    changed.sort_by(|a, b| a.path.cmp(&b.path));
+
+    // Paths touched by commits ahead of the upstream (unpushed). Only
+    // computed when the branch tracks something — otherwise every file
+    // would be marked in a repo without a remote.
+    let mut unpushed_paths: Vec<String> = Vec::new();
+    if let Ok(head) = repo.head() {
+        if let Some(branch) = head
+            .shorthand()
+            .and_then(|name| repo.find_branch(name, git2::BranchType::Local).ok())
+        {
+            if let Ok(upstream) = branch.upstream() {
+                let upstream_oid = upstream.get().target();
+                if let Some(upstream_oid) = upstream_oid {
+                    let mut seen_up: std::collections::BTreeSet<String> =
+                        std::collections::BTreeSet::new();
+                    if let Some(head_oid) = head.target() {
+                        if let Ok(base_oid) = repo.merge_base(head_oid, upstream_oid) {
+                            let mut walk = repo.revwalk().map_err(err)?;
+                            walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
+                            walk.push(head_oid).map_err(err)?;
+                            walk.hide(base_oid).map_err(err)?;
+                        for oid in walk.flatten() {
+                            let Ok(commit) = repo.find_commit(oid) else { continue };
+                            let Ok(tree) = commit.tree() else { continue };
+                            let parent_tree = commit
+                                .parent(0)
+                                .and_then(|parent| parent.tree())
+                                .ok();
+                            let mut collect = |delta: git2::DiffDelta| {
+                                if let Some(p) = delta.new_file().path().or(delta.old_file().path()) {
+                                    if seen_up.insert(p.to_string_lossy().to_string()) {
+                                        unpushed_paths.push(p.to_string_lossy().to_string());
+                                    }
+                                }
+                            };
+                            if let Some(parent_tree) = parent_tree {
+                                let diff = repo
+                                    .diff_tree_to_tree(Some(&parent_tree), Some(&tree), None)
+                                    .map_err(err)?;
+                                diff.deltas().for_each(&mut collect);
+                            } else {
+                                let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), None).map_err(err)?;
+                                diff.deltas().for_each(&mut collect);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    }
+
+    Ok(FileTree { entries: paths, changed, unpushed_paths })
 }
 
 #[derive(Serialize)]

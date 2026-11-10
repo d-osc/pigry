@@ -82,3 +82,97 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* Mode tabs */
+.merge-panel__tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.merge-panel__tab {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-panel__tab.is-active {
+  background: var(--accent-tint-1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Branch merge rows */
+.merge-panel__branch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.merge-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.merge-panel__row--tight {
+  padding: 6px 12px 0;
+}
+
+.merge-panel__label {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.merge-panel__select {
+  height: 26px;
+  padding: 0 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.merge-panel__current {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+
+.merge-panel__conflict {
+  margin: 0 12px 10px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning, #edb675) 50%, transparent);
+  background: color-mix(in srgb, var(--warning, #edb675) 10%, transparent);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.merge-panel__conflict ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.merge-panel__btn--danger {
+  border-color: color-mix(in srgb, var(--danger, #e79098) 60%, transparent);
+  color: var(--danger, #e79098);
+}
+
+.merge-panel__result {
+  padding: 0 12px 10px;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}

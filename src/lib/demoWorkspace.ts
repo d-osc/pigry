@@ -133,7 +133,8 @@ export const demoTree: FileTree = {
     'src-tauri/src/ops/mod.rs',
     'tests/graph-search.test.ts',
   ],
-  changedPaths: [],
+  changed: [],
+  unpushedPaths: [],
 };
 
 export const demoFileContent: WorktreeFileContent = {

@@ -181,8 +181,10 @@ export interface CommitHistory {
 export interface FileTree {
   /** All visible file paths (tracked + untracked, ignored excluded). */
   entries: string[];
-  /** Paths with pending changes, for status dots on the tree. */
-  changedPaths: string[];
+  /** Per-file pending-change status (M/A/U/D/R/C) for the tree chips. */
+  changed: { path: string; status: string }[];
+  /** Paths touched by unpushed commits (upstream..HEAD). */
+  unpushedPaths: string[];
 }
 
 export interface WorktreeFileContent {

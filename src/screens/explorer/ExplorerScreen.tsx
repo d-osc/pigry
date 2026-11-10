@@ -945,9 +945,14 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             <span>
               {tree ? `${tree.entries.length} files · ${folderCount} folders` : ''}
             </span>
-            {tree && tree.changedPaths.length > 0 && (
+            {tree && tree.changed.length > 0 && (
               <span className="explorer-tree-foot--modified">
-                {tree.changedPaths.length} modified
+                {tree.changed.length} working changes
+              </span>
+            )}
+            {tree && tree.unpushedPaths.length > 0 && (
+              <span className="explorer-tree-foot--unpushed" title="Files touched by commits that have not been pushed">
+                ↑ {tree.unpushedPaths.length} unpushed
               </span>
             )}
           </div>

@@ -107,7 +107,8 @@ function TreeRow({
   node,
   depth,
   selectedPath,
-  changedPaths,
+  statusMap,
+  unpushedSet,
   expanded,
   onToggle,
   onSelect,
@@ -121,7 +122,8 @@ function TreeRow({
   node: TreeNode;
   depth: number;
   selectedPath: string | null;
-  changedPaths: Set<string>;
+  statusMap: Map<string, string>;
+  unpushedSet: Set<string>;
   expanded: Set<string>;
   onToggle: (path: string) => void;
   onSelect: (path: string) => void;
@@ -144,7 +146,8 @@ function TreeRow({
   const hadFocus = useRef(false);
   const rowRef = useRef<HTMLButtonElement | null>(null);
   const isSelected = !isFolder && selectedPath === node.path;
-  const modified = !isFolder && changedPaths.has(node.path);
+  const fileStatus = !isFolder ? statusMap.get(node.path) : undefined;
+  const unpushed = !isFolder && unpushedSet.has(node.path);
   const iconSrc = isFolder ? folderIcon(node.name) : fileIcon(node.name);
 
   // Reveal: scroll this row into view when it is the requested reveal target.
@@ -210,7 +213,7 @@ function TreeRow({
                 node={child}
                 depth={depth + 1}
                 selectedPath={selectedPath}
-                changedPaths={changedPaths}
+                statusMap={statusMap} unpushedSet={unpushedSet}
                 expanded={expanded}
                 onToggle={onToggle}
                 onSelect={onSelect}
@@ -263,7 +266,17 @@ function TreeRow({
       >
         {rowIcons}
         <span className="tree-row__name">{node.name}</span>
-        {modified && <span className="tree-row__modified">M</span>}
+        {fileStatus && (
+          <span
+            className={`tree-row__status tree-row__status--${fileStatus}`}
+            title={fileStatus === "M" ? "Modified" : fileStatus === "U" ? "Untracked" : fileStatus === "A" ? "Added (staged)" : fileStatus === "D" ? "Deleted" : fileStatus === "C" ? "Conflicted" : "Renamed"}
+          >
+            {fileStatus}
+          </span>
+        )}
+        {unpushed && fileStatus && (
+          <span className="tree-row__unpushed" title="In commits that have not been pushed">↑</span>
+        )}
       </button>
       {isFolder && isOpen && (
         <>
@@ -273,7 +286,7 @@ function TreeRow({
               node={child}
               depth={depth + 1}
               selectedPath={selectedPath}
-              changedPaths={changedPaths}
+              statusMap={statusMap} unpushedSet={unpushedSet}
               expanded={expanded}
               onToggle={onToggle}
               onSelect={onSelect}
@@ -329,8 +342,12 @@ export function FileTree({
   }, [tree, filter]);
 
   const nodes = useMemo(() => buildTree(visibleEntries), [visibleEntries]);
-  const changedPaths = useMemo(
-    () => new Set(tree?.changedPaths ?? []),
+  const statusMap = useMemo(
+    () => new Map((tree?.changed ?? []).map((file) => [file.path, file.status])),
+    [tree],
+  );
+  const unpushedSet = useMemo(
+    () => new Set(tree?.unpushedPaths ?? []),
     [tree],
   );
 
@@ -373,7 +390,7 @@ export function FileTree({
             node={node}
             depth={0}
             selectedPath={selectedPath}
-            changedPaths={changedPaths}
+            statusMap={statusMap} unpushedSet={unpushedSet}
             expanded={expanded}
             onToggle={onToggleFolder}
             onSelect={onSelect}

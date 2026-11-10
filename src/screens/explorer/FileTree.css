@@ -133,3 +133,35 @@
   color: var(--text-muted);
   font-size: var(--fs-xs);
 }
+
+
+/* Working-change status chips: M/A/U/D/R/C + unpushed marker */
+.tree-row__status {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tree-row__status--M { color: var(--warning, #edb675); }
+.tree-row__status--U { color: var(--success, #6dd6ad); }
+.tree-row__status--A { color: var(--success, #6dd6ad); }
+.tree-row__status--D { color: var(--danger, #e79098); }
+.tree-row__status--R { color: var(--purple, #b59aff); }
+.tree-row__status--C { color: var(--danger, #e79098); }
+
+.tree-row__unpushed {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--accent, #8b9dff);
+  flex-shrink: 0;
+}
+.tree-row__unpushed + .tree-row__status,
+.tree-row__status + .tree-row__unpushed { margin-left: 4px; }
+
+.explorer-tree-foot--unpushed {
+  color: var(--accent);
+}
