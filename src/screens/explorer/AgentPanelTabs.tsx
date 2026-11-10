@@ -51,6 +51,7 @@ import {
   type HookEvent,
   type PluginEntry,
 } from '../../lib/agentExtras';
+import { loadProviders, type AiProviderEntry } from '../../lib/aiProviders';
 import { useRepository } from '../../hooks/useRepository';
 import './AgentPanelTabs.css';
 
@@ -504,6 +505,8 @@ async function fileToAvatar(file: File): Promise<string> {
 
 export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const [agents, setAgents] = useState<AgentEntry[]>(() => loadAgents());
+  /** Providers for the per-agent model selector (read once on mount). */
+  const [providers] = useState<AiProviderEntry[]>(() => loadProviders());
   // Repo hydration: seed localStorage from .orbit/agents.json when empty
   // (migrates the legacy per-team layout on first run).
   useEffect(() => {
@@ -617,6 +620,8 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
       username: draft.username.trim().replace(/^@/, ''),
       role: draft.role.trim(),
       team: draft.team?.trim() || undefined,
+      providerId: draft.providerId || undefined,
+      model: draft.model || undefined,
       avatar: draft.avatar,
       description: draft.description.trim(),
       enabled: draft.enabled,
@@ -647,6 +652,8 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
             role: '',
             // Preselect the team of the screen the panel lives in.
             team: defaultTeam ?? '',
+            providerId: '',
+            model: '',
             description: '',
             enabled: true,
             tools: [],
@@ -808,6 +815,39 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                     {team}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="apanel__field">
+              <span>Provider</span>
+              <select
+                value={draft.providerId ?? ''}
+                onChange={(event) =>
+                  setDraft({ ...draft, providerId: event.target.value, model: '' })
+                }
+              >
+                <option value="">Global active provider</option>
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="apanel__field">
+              <span>Model</span>
+              <select
+                value={draft.model ?? ''}
+                onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+                disabled={!draft.providerId}
+              >
+                <option value="">Provider default</option>
+                {(providers.find((p) => p.id === draft.providerId)?.models ?? [])
+                  .filter((m) => m.enabled)
+                  .map((m) => (
+                    <option key={m.id} value={m.name}>
+                      {m.name}
+                    </option>
+                  ))}
               </select>
             </label>
             <div className="apanel__field">

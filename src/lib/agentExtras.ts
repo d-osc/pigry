@@ -41,6 +41,10 @@ export interface AgentEntry {
   role: string;
   /** Team the agent belongs to (optional). */
   team?: string;
+  /** Provider whose model this agent chats through (optional). */
+  providerId?: string;
+  /** Model id the agent uses (optional — falls back to the global active). */
+  model?: string;
   /** Avatar image (data URL) — optional. */
   avatar?: string;
   description: string;
@@ -102,6 +106,8 @@ export function normalizeAgents(list: unknown[]): AgentEntry[] {
       username: String(entry.username ?? ''),
       role: String(entry.role ?? ''),
       team: typeof entry.team === 'string' && entry.team ? entry.team : undefined,
+      providerId: typeof entry.providerId === 'string' && entry.providerId ? entry.providerId : undefined,
+      model: typeof entry.model === 'string' && entry.model ? entry.model : undefined,
       avatar: typeof entry.avatar === 'string' ? entry.avatar : undefined,
       description: String(entry.description ?? ''),
       enabled: entry.enabled !== false,
@@ -129,6 +135,7 @@ function agentMarkdown(agent: AgentEntry): string {
     '',
     agent.role ? `**Job title:** ${agent.role}\n` : '',
     agent.team ? `**Team:** ${agent.team}\n` : '',
+    agent.providerId && agent.model ? `**Model:** ${agent.providerId} · ${agent.model}\n` : '',
     '',
     '## Description',
     '',

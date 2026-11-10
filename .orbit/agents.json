@@ -1,28 +1,16 @@
 [
   {
-    "id": "probe-agent",
+    "id": "agent-e2e-test-runner",
     "name": "Test Runner",
     "username": "test-runner",
-    "role": "",
     "team": "Copilot",
-    "description": "",
+    "providerId": "builtin-zai",
+    "model": "glm-5.3",
+    "description": "Runs the test suite and reports failures.",
     "enabled": true,
     "tools": [],
     "skills": [],
     "mcpServers": [],
-    "definition": "# Test Runner (@test-runner)\n\n\n**Team:** Copilot\n\n\n## Description\n\n_(no description)_\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
-  },
-  {
-    "id": "agent-mwa3xgon",
-    "name": "Test Runner",
-    "username": "test-runner",
-    "role": "",
-    "team": "Explorer",
-    "description": "",
-    "enabled": true,
-    "tools": [],
-    "skills": [],
-    "mcpServers": [],
-    "definition": "# Test Runner (@test-runner)\n\n\n**Team:** Explorer\n\n\n## Description\n\n_(no description)_\n\n## Tools\n\n_inherits all tools_\n\n## Skills\n\n_none_\n\n## MCP servers\n\n_none_\n"
+    "definition": "# Test Runner (@test-runner)\n\n**Team:** Copilot\n**Model:** builtin-zai · glm-5.3\n\n## Description\n\nRuns the test suite and reports failures.\n"
   }
 ]
