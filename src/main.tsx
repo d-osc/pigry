@@ -10,11 +10,13 @@ import './styles/global.css';
 import { startThemeWatcher } from './lib/theme';
 import { initGhProfile } from './lib/ghProfile';
 import { migrateLegacyStorage } from './lib/storageMigration';
+import { ensureDefaultAgents } from './lib/agentExtras';
 import App from './App';
 
 // Move persisted orbit:* settings to their pigry:* names before anything
-// reads them.
+// reads them, then make sure every workspace menu has its default agent.
 migrateLegacyStorage();
+ensureDefaultAgents();
 startThemeWatcher();
 initGhProfile();
 

@@ -55,6 +55,8 @@ export interface AgentEntry {
   skills: string[];
   /** MCP server names this agent may talk to. */
   mcpServers: string[];
+  /** Seeded by the app as a menu's default agent (not user-created). */
+  builtIn?: boolean;
 }
 
 const AGENTS_KEY = 'pigry:agents';
@@ -126,6 +128,7 @@ export function normalizeAgents(list: unknown[]): AgentEntry[] {
       tools: Array.isArray(entry.tools) ? entry.tools.map(String) : [],
       skills: Array.isArray(entry.skills) ? entry.skills.map(String) : [],
       mcpServers: Array.isArray(entry.mcpServers) ? entry.mcpServers.map(String) : [],
+      builtIn: entry.builtIn === true,
     }));
 }
 
@@ -298,6 +301,64 @@ export function saveAgents(agents: AgentEntry[]) {
   }
   // Consolidated repo mirror — agents.json now holds registry + definitions.
   void mirrorAgentsToRepo(agents);
+}
+
+/* ---- Built-in default agents — one per workspace menu/team. Every menu
+ * answers untagged turns through its own agent without needing @mentions.
+ * Teams the user already populated are left untouched. ---- */
+
+interface DefaultAgentSpec {
+  team: string;
+  role: string;
+  description: string;
+}
+
+const DEFAULT_AGENT_SPECS: DefaultAgentSpec[] = [
+  { team: 'Explorer', role: 'Code explorer', description: 'Helps browse files, edit code and understand the workspace.' },
+  { team: 'Commit graph', role: 'History analyst', description: 'Reads the commit graph and explains history and relationships.' },
+  { team: 'Merge branch', role: 'Merge planner', description: 'Plans merges and walks through conflicts and resolution.' },
+  { team: 'Push Commits', role: 'Push reviewer', description: 'Reviews unpushed commits and prepares pushes.' },
+  { team: 'Stashes Code', role: 'Stash keeper', description: 'Manages stashes — view, apply, pop and drop.' },
+  { team: 'Cherry Pick', role: 'Commit picker', description: 'Cherry-picks commits between branches.' },
+  { team: 'Branches', role: 'Branch navigator', description: 'Oversees local and remote branches and checkouts.' },
+  { team: 'Working changes', role: 'Staging assistant', description: 'Stages, commits and reviews working changes.' },
+  { team: 'Copilot', role: 'General assistant', description: 'General-purpose assistant for the Copilot chat.' },
+  { team: 'Pull requests', role: 'PR assistant', description: 'Drafts and reviews pull requests.' },
+  { team: 'Releases', role: 'Release manager', description: 'Prepares releases and release notes.' },
+  { team: 'Issues', role: 'Issue triage', description: 'Triages and drafts issues.' },
+  { team: 'Actions', role: 'CI assistant', description: 'Watches and explains GitHub Actions runs.' },
+  { team: 'Projects', role: 'Board assistant', description: 'Manages project boards.' },
+  { team: 'Wiki', role: 'Docs writer', description: 'Maintains the repository wiki.' },
+  { team: 'Security and quality', role: 'Security analyst', description: 'Reviews security and code quality.' },
+  { team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.' },
+];
+
+function teamSlug(team: string): string {
+  return team.toLowerCase().replace(/\s+/g, '-');
+}
+
+/** Seeds a built-in default agent for every workspace team that has no
+ * agent yet. Runs at startup; user-created agents are never replaced. */
+export function ensureDefaultAgents(): void {
+  const agents = loadAgents();
+  const seeded: AgentEntry[] = [];
+  for (const spec of DEFAULT_AGENT_SPECS) {
+    if (agents.some((agent) => agent.team === spec.team)) continue;
+    seeded.push({
+      id: `agent-default-${teamSlug(spec.team)}`,
+      name: `${spec.team} Agent`,
+      username: teamSlug(spec.team),
+      role: spec.role,
+      team: spec.team,
+      description: spec.description,
+      enabled: true,
+      tools: [],
+      skills: [],
+      mcpServers: [],
+      builtIn: true,
+    });
+  }
+  if (seeded.length > 0) saveAgents([...agents, ...seeded]);
 }
 
 /* ---- Hooks (lifecycle commands run around agent sends) ---- */
