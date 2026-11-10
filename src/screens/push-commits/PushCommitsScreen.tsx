@@ -20,6 +20,7 @@ import './PushCommitsScreen.css';
 interface FileVersions {
   before: string;
   after: string;
+  language: string;
 }
 
 export function PushCommitsScreen() {
@@ -31,6 +32,7 @@ export function PushCommitsScreen() {
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [versions, setVersions] = useState<FileVersions | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [splitView, setSplitView] = useState(true);
 
   // Reload whenever HEAD moves or the screen remounts.
   useEffect(() => {
@@ -62,7 +64,11 @@ export function PushCommitsScreen() {
         commit.parentOid ? readFileAtCommit(file.path, commit.parentOid) : null,
         readFileAtCommit(file.path, commit.oid),
       ]);
-      setVersions({ before: before?.content ?? '', after: after?.content ?? '' });
+      setVersions({
+        before: before?.content ?? '',
+        after: after?.content ?? '',
+        language: after?.language || before?.language || 'plaintext',
+      });
     } catch {
       setVersions(null);
     } finally {
@@ -207,16 +213,32 @@ export function PushCommitsScreen() {
                                           BEFORE — {commit.parentOid?.slice(0, 7) ?? '(new file)'}
                                         </span>
                                         <span>COMMIT — {commit.shortOid}</span>
+                                        <div className="push__view-mode" role="group" aria-label="Diff layout">
+                                          <button
+                                            type="button"
+                                            className={splitView ? 'is-active' : ''}
+                                            onClick={() => setSplitView(true)}
+                                          >
+                                            Split
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={!splitView ? 'is-active' : ''}
+                                            onClick={() => setSplitView(false)}
+                                          >
+                                            Unified
+                                          </button>
+                                        </div>
                                       </div>
                                       <DiffEditor
                                         key={`${commit.oid}:${file.path}`}
                                         original={versions?.before ?? ''}
                                         modified={versions?.after ?? ''}
-                                        language="plaintext"
+                                        language={versions?.language ?? 'plaintext'}
                                         theme="orbit-dark"
                                         options={{
                                           readOnly: true,
-                                          renderSideBySide: true,
+                                          renderSideBySide: splitView,
                                           fontSize: 11,
                                           lineHeight: 18,
                                           minimap: { enabled: false },

@@ -472,7 +472,7 @@
 
 .merge-branch__file-view-labels {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: 8px;
   font-size: var(--fs-2xs);
   font-weight: 600;
@@ -526,4 +526,38 @@
 
 .merge-branch__git-add-btn:hover {
   background: rgba(109, 214, 173, 0.12);
+}
+
+.merge-branch__view-mode {
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.merge-branch__view-mode button {
+  padding: 2px 9px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.merge-branch__view-mode button.is-active {
+  background: var(--accent-tint-1, rgba(139, 157, 255, 0.15));
+  color: var(--accent);
+}
+
+.merge-branch__file-view-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.merge-branch__file-view-labels span + span {
+  margin-left: auto;
 }

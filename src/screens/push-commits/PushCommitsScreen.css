@@ -248,3 +248,37 @@
   letter-spacing: 0.04em;
   color: var(--text-muted);
 }
+
+.push__view-mode {
+  margin-left: auto;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.push__view-mode button {
+  padding: 2px 9px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.push__view-mode button.is-active {
+  background: var(--accent-tint-1, rgba(139, 157, 255, 0.15));
+  color: var(--accent);
+}
+
+.push__file-view-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.push__file-view-labels span + span {
+  margin-left: auto;
+}

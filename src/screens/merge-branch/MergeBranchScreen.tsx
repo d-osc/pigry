@@ -15,6 +15,7 @@ import {
 } from '../../lib/tauriClient';
 import { ConflictController } from '../../editor/conflictMarkers';
 import { relativeTime } from '../../lib/relativeTime';
+import { languageForPath } from '../../lib/ghData';
 import '../../editor/monacoSetup';
 import './MergeBranchScreen.css';
 
@@ -44,6 +45,9 @@ export function MergeBranchScreen() {
 
   // Commit expanded to show its full message + files.
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
+
+  // Compare layout for file views: side-by-side or unified.
+  const [splitView, setSplitView] = useState(true);
 
   // Conflicted files are ALL open at once; this set holds collapsed ones.
   const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
@@ -355,16 +359,32 @@ export function MergeBranchScreen() {
                           <div className="merge-branch__file-view-labels">
                             <span>OURS — {currentBranch || 'current'}</span>
                             <span>INCOMING — {effectiveSource}</span>
+                            <div className="merge-branch__view-mode" role="group" aria-label="Diff layout">
+                              <button
+                                type="button"
+                                className={splitView ? 'is-active' : ''}
+                                onClick={() => setSplitView(true)}
+                              >
+                                Split
+                              </button>
+                              <button
+                                type="button"
+                                className={!splitView ? 'is-active' : ''}
+                                onClick={() => setSplitView(false)}
+                              >
+                                Unified
+                              </button>
+                            </div>
                           </div>
                           <DiffEditor
                             key={`${file.path}:${effectiveSource}`}
                             original={versions?.ours ?? ''}
                             modified={versions?.incoming ?? ''}
-                            language="plaintext"
+                            language={languageForPath(file.path)}
                             theme="orbit-dark"
                             options={{
                               readOnly: true,
-                              renderSideBySide: true,
+                              renderSideBySide: splitView,
                               fontSize: 11,
                               lineHeight: 18,
                               minimap: { enabled: false },
