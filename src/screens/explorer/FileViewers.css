@@ -123,24 +123,43 @@
 /* ---------- Markdown document preview (paper-style) ---------- */
 
 .file-viewer--md {
+  flex: 1;
+  min-height: 0;
   align-items: stretch;
   justify-content: flex-start;
   padding: 0;
-  background: none;
+  background: var(--bg-workspace);
+  overflow-y: auto;
+}
+
+/* Themed scrollbar */
+.file-viewer--md::-webkit-scrollbar {
+  width: 10px;
+}
+.file-viewer--md::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+}
+.file-viewer--md::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+.file-viewer--md::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .file-md {
   align-self: center;
   width: 100%;
-  max-width: 860px;
-  margin: 20px auto 40px;
-  padding: 40px 52px;
+  max-width: 900px;
+  margin: 28px auto 56px;
+  padding: 48px 60px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
   color: var(--text-primary);
-  font-size: 13.5px;
-  line-height: 1.75;
+  font-size: 14px;
+  line-height: 1.8;
 }
 
 /* Headings */
@@ -155,16 +174,17 @@
 }
 
 .file-md h1 {
-  font-size: 26px;
+  font-size: 30px;
   margin-top: 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--border);
+  padding-bottom: 10px;
+  border-bottom: 3px solid var(--accent);
 }
 
 .file-md h2 {
-  font-size: 20px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
+  font-size: 22px;
+  margin-top: 34px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-strong);
 }
 
 .file-md h3 {

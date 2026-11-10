@@ -111,6 +111,9 @@
 .editor-pane__editor {
   flex: 1;
   min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .editor-pane__notice {
