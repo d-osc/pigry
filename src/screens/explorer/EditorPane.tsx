@@ -15,6 +15,7 @@ import { ResizeHandle } from '../../app/ResizeHandle';
 import { FileHistoryPanel } from './FileHistoryPanel';
 import { MergePanel } from './MergePanel';
 import './MergePanel.css';
+import { ConflictController } from '../../editor/conflictMarkers';
 import { FileViewer, MarkdownViewer, SvgViewer, fileKindFor, type ViewerKind, type BinaryContent } from './FileViewers';
 import { ComparePanel } from './ComparePanel';
 import '../../editor/monacoSetup';
@@ -125,6 +126,7 @@ export function EditorPane({
   // Draggable panel heights; null = the CSS defaults.
   const [historyHeight, setHistoryHeight] = useState<number | null>(null);
   const [compareHeight, setCompareHeight] = useState<number | null>(null);
+  const conflictRef = useRef<ConflictController | null>(null);
   const [editorInstance, setEditorInstance] =
     useState<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
   // Editor colors follow the app theme (Settings → Appearance → Theme).
@@ -704,6 +706,15 @@ export function EditorPane({
               editor.onDidChangeCursorPosition((event) =>
                 setCursor({ line: event.position.lineNumber, column: event.position.column }),
               );
+              // Conflict markers: decorate + recompute as the buffer changes.
+              const controller = new ConflictController(editor, monaco);
+              conflictRef.current = controller;
+              controller.onChange = (text) => {
+                setDraft(text);
+                draftRef.current = text;
+              };
+              editor.onDidChangeModelContent(() => controller.update());
+              controller.update();
             }}
             options={{
               fontSize: editorPrefs().fontSize,

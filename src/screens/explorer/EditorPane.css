@@ -202,3 +202,42 @@
   background: rgba(139, 157, 255, 0.16);
   outline: 1px solid rgba(139, 157, 255, 0.35);
 }
+
+/* Conflict markers (merge) — VS Code-style */
+.pigry-conflict-ours {
+  background: color-mix(in srgb, var(--success, #6dd6ad) 14%, transparent);
+}
+.pigry-conflict-theirs {
+  background: color-mix(in srgb, var(--accent, #8b9dff) 14%, transparent);
+}
+.pigry-conflict-marker {
+  background: color-mix(in srgb, var(--danger, #e79098) 30%, transparent);
+}
+.pigry-conflict-actions {
+  display: flex;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.pigry-conflict-btn {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+.pigry-conflict-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.pigry-conflict-btn--compare {
+  margin-left: auto;
+}
+.pigry-conflict-compare {
+  border: 1px solid var(--border);
+  background: var(--bg-code);
+}

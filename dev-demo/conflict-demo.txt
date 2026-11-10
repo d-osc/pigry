@@ -1,0 +1,11 @@
+const config = {
+  name: "pigry",
+<<<<<<< HEAD
+  version: "1.0",
+  author: "d-osc",
+=======
+  version: "2.0-beta",
+  license: "MIT",
+>>>>>>> merge-demo
+  debug: false,
+};
