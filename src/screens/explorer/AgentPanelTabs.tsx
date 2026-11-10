@@ -42,6 +42,7 @@ import {
   loadPlugins,
   readInstructions,
   saveAgents,
+  hydrateAgentsIfEmpty,
   saveHooks,
   saveInstructions,
   savePlugins,
@@ -503,6 +504,17 @@ async function fileToAvatar(file: File): Promise<string> {
 
 export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const [agents, setAgents] = useState<AgentEntry[]>(() => loadAgents());
+  // Repo hydration: seed localStorage from .orbit/agents.json when empty
+  // (migrates the legacy per-team layout on first run).
+  useEffect(() => {
+    let cancelled = false;
+    void hydrateAgentsIfEmpty().then((list) => {
+      if (!cancelled && list.length > 0) setAgents(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [draft, setDraft] = useState<(AgentEntry & { isNew: boolean }) | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [skillNames, setSkillNames] = useState<string[]>([]);

@@ -6,11 +6,12 @@
 import { newId } from './aiProviders';
 import {
   deleteWorktreeFile,
+  getFileTree,
   readWorktreeFile,
   writeWorktreeFile,
   terminalRun,
 } from './tauriClient';
-import { agentDefinitionFile, teamAgentsFile } from './teamStore';
+import { AGENTS_FILE, agentDefinitionFile } from './teamStore';
 
 /* ---- Project instructions (.orbit/instructions.md) ---- */
 
@@ -149,29 +150,103 @@ function agentMarkdown(agent: AgentEntry): string {
   return lines.join('\n');
 }
 
-/** Reads the team's repo-file registry (.orbit/teams/<team>/agents.json);
- * null when the file does not exist yet. */
-export async function hydrateTeamAgents(team: string): Promise<AgentEntry[] | null> {
+/** Reads ALL agent definitions from the consolidated .orbit/agents.json,
+ * falling back to the legacy per-team layout (.orbit/teams/<team>/agents.json)
+ * when the consolidated file does not exist yet. */
+async function readAllStoredAgents(): Promise<Array<Partial<AgentEntry> & { definition?: string }>> {
   try {
-    const raw = await readWorktreeFile(teamAgentsFile(team));
+    const raw = await readWorktreeFile(AGENTS_FILE);
+    return JSON.parse(raw.content);
+  } catch {
+    // Legacy fallback: merge every .orbit/teams/*/agents.json found.
+    try {
+      const tree = await getFileTree();
+      const legacyPaths = tree.entries.filter(
+        (p) => p.startsWith('.orbit/teams/') && p.endsWith('/agents.json'),
+      );
+      const merged: Array<Partial<AgentEntry> & { definition?: string }> = [];
+      for (const path of legacyPaths) {
+        try {
+          const raw = await readWorktreeFile(path);
+          merged.push(...(JSON.parse(raw.content) as Array<Partial<AgentEntry>>));
+        } catch {
+          // skip unreadable legacy file
+        }
+      }
+      return merged;
+    } catch {
+      return [];
+    }
+  }
+}
+
+/** Reads the team's agents from the consolidated .orbit/agents.json;
+ * null when the store has no agents for this team yet. */
+export async function hydrateTeamAgents(team: string): Promise<AgentEntry[] | null> {
+  const all = await readAllStoredAgents();
+  const mine = all.filter((agent) => (agent.team ?? '') === team);
+  return mine.length > 0 ? normalizeAgents(all.filter((agent) => agent.team === team)) : null;
+}
+
+/** Consolidated repo mirror: every agent (all teams) with its AGENT.md
+ * definition embedded as a `definition` field — one file, nothing scattered.
+ * Agents from other teams already in the file stay untouched. */
+export async function mirrorAgentsToRepo(agents: AgentEntry[]): Promise<void> {
+  try {
+    const existing = await readAllStoredAgents();
+    const updatedIds = new Set(agents.map((agent) => String(agent.id)));
+    const kept = existing.filter((a) => !updatedIds.has(String(a.id)));
+    const merged = agents.map((agent) => ({
+      ...agent,
+      definition: agentMarkdown(agent),
+    }));
+    await writeWorktreeFile(AGENTS_FILE, JSON.stringify([...kept, ...merged], null, 2));
+  } catch {
+    // read-only repo — localStorage remains the source of truth
+  }
+}
+
+/** Reads the consolidated .orbit/agents.json. Empty when absent. */
+export async function hydrateAgentsFromRepo(): Promise<AgentEntry[]> {
+  try {
+    const raw = await readWorktreeFile(AGENTS_FILE);
     return normalizeAgents(JSON.parse(raw.content));
   } catch {
-    return null;
+    return [];
   }
 }
 
-/** Mirrors the registry into the repo and writes each agent's AGENT.md
- * definition (one folder per agent under .orbit/teams/<team>/agents/). */
+/** Seeds localStorage from the consolidated repo file when empty (migrates
+ * the legacy per-team layout too), then returns the active list. */
+export async function hydrateAgentsIfEmpty(): Promise<AgentEntry[]> {
+  const local = loadAgents();
+  if (local.length > 0) return local;
+  let fromRepo = await hydrateAgentsFromRepo();
+  if (fromRepo.length === 0) {
+    const legacy = await readAllStoredAgents();
+    if (legacy.length === 0) return [];
+    fromRepo = normalizeAgents(legacy);
+    await mirrorAgentsToRepo(fromRepo);
+  }
+  saveAgents(fromRepo);
+  return fromRepo;
+}
+
+/** Consolidates the team's agents into .orbit/agents.json — registry and
+ * AGENT.md definition live together as a `definition` field per agent, so
+ * nothing is scattered across per-agent folders anymore. Existing agents of
+ * OTHER teams in the file are preserved. */
 export async function saveTeamAgents(team: string, agents: AgentEntry[]): Promise<void> {
-  await writeWorktreeFile(teamAgentsFile(team), JSON.stringify(agents, null, 2));
-  for (const agent of agents) {
-    const handle = agent.username || agent.name;
-    if (!handle) continue;
-    await writeWorktreeFile(agentDefinitionFile(team, handle), agentMarkdown(agent));
-  }
+  const all = await readAllStoredAgents();
+  const others = all.filter((agent) => (agent.team ?? '') !== team);
+  const consolidated = [
+    ...others,
+    ...agents.map((agent) => ({ ...agent, definition: agentMarkdown(agent) })),
+  ];
+  await writeWorktreeFile(AGENTS_FILE, JSON.stringify(consolidated, null, 2));
 }
 
-/** Removes the AGENT.md definition of agents deleted from the team. */
+/** Legacy cleanup: removes AGENT.md files left in the old per-agent folders. */
 export async function deleteTeamAgentDefinitions(
   team: string,
   handles: string[],
@@ -202,6 +277,8 @@ export function saveAgents(agents: AgentEntry[]) {
   } catch {
     // session-only
   }
+  // Consolidated repo mirror — agents.json now holds registry + definitions.
+  void mirrorAgentsToRepo(agents);
 }
 
 /* ---- Hooks (lifecycle commands run around agent sends) ---- */
