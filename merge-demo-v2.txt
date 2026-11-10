@@ -1,1 +1,4 @@
-merge demo v2
+merge demo v3
+more lines
+merge demo v4
+tail content
