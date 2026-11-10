@@ -189,10 +189,9 @@
 }
 
 .cherry__detail {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  padding: 12px 14px;
+  margin: 4px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
   display: flex;
   flex-direction: column;
   gap: 8px;

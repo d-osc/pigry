@@ -225,6 +225,129 @@ export function CherryPickScreen() {
                     {row.authorName} · {relativeTime(row.timeSeconds)}
                   </span>
                 </button>
+                {isSelected && (
+                  <div className="cherry__detail">
+                    {loadingDetail && <p className="cherry__empty">Loading commit…</p>}
+                    {detail && (
+                      <>
+                        <div className="cherry__detail-head">
+                          <div>
+                            <span className="cherry__detail-sha">{detail.shortOid}</span>
+                            <span className="cherry__detail-summary">{detail.summary}</span>
+                            <div className="cherry__detail-meta">
+                              {detail.authorName} · {relativeTime(detail.timeSeconds)}
+                              {detail.isMerge && ' · merge commit'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="cherry__pick-btn"
+                            disabled={picking || detail.isMerge}
+                            title={
+                              detail.isMerge
+                                ? 'Merge commits cannot be cherry-picked'
+                                : `Apply ${detail.shortOid} onto ${currentBranch}`
+                            }
+                            onClick={() => void doPick(selected)}
+                          >
+                            <Cherry size={13} strokeWidth={1.5} />
+                            {picking ? 'Picking…' : `Cherry-pick ${detail.shortOid}`}
+                          </button>
+                        </div>
+                        {detail.message !== detail.summary && (
+                          <pre className="cherry__detail-body">{detail.message}</pre>
+                        )}
+                        <h4 className="cherry__section-title">
+                          Files ({detail.files.length})
+                        </h4>
+                        <ul className="cherry__files">
+                          {detail.files.map((file) => {
+                            const parentOid = detail.parents[0] ?? null;
+                            const fileKey = `${detail.oid}:${file.path}`;
+                            const fileOpen = openFile === fileKey;
+                            return (
+                              <li
+                                key={`${file.path}:${file.status}`}
+                                className="cherry__file"
+                              >
+                                <button
+                                  type="button"
+                                  className="cherry__file-row"
+                                  title={`Compare ${file.path} (parent vs commit)`}
+                                  onClick={() =>
+                                    void openCompare(detail.oid, parentOid, file.path)
+                                  }
+                                >
+                                  <span
+                                    className={`cherry__file-status cherry__file-status--${file.status}`}
+                                  >
+                                    {file.status}
+                                  </span>
+                                  <span className="cherry__file-path">{file.path}</span>
+                                  <span className="cherry__file-stats">
+                                    <span className="stats-add">+{file.additions}</span>
+                                    <span className="stats-del">−{file.deletions}</span>
+                                  </span>
+                                </button>
+                                {fileOpen && (
+                                  <>
+                                    {loadingFile && (
+                                      <p className="cherry__empty">Loading versions…</p>
+                                    )}
+                                    <div className="cherry__file-view">
+                                      <div className="cherry__file-view-labels">
+                                        <span>
+                                          BEFORE — {parentOid?.slice(0, 7) ?? '(new file)'}
+                                        </span>
+                                        <span>COMMIT — {detail.shortOid}</span>
+                                        <div
+                                          className="cherry__view-mode"
+                                          role="group"
+                                          aria-label="Diff layout"
+                                        >
+                                          <button
+                                            type="button"
+                                            className={splitView ? 'is-active' : ''}
+                                            onClick={() => setSplitView(true)}
+                                          >
+                                            Split
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className={!splitView ? 'is-active' : ''}
+                                            onClick={() => setSplitView(false)}
+                                          >
+                                            Unified
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <DiffEditor
+                                        key={fileKey}
+                                        original={fileContent?.before ?? ''}
+                                        modified={fileContent?.after ?? ''}
+                                        language={fileContent?.language ?? 'plaintext'}
+                                        theme="orbit-dark"
+                                        options={{
+                                          readOnly: true,
+                                          renderSideBySide: splitView,
+                                          fontSize: 11,
+                                          lineHeight: 18,
+                                          minimap: { enabled: false },
+                                          scrollBeyondLastLine: false,
+                                          automaticLayout: true,
+                                        }}
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -240,112 +363,6 @@ export function CherryPickScreen() {
         </ul>
       </section>
 
-      {selected && (
-        <section className="cherry__detail">
-          {loadingDetail && <p className="cherry__empty">Loading commit…</p>}
-          {detail && (
-            <>
-              <div className="cherry__detail-head">
-                <div>
-                  <span className="cherry__detail-sha">{detail.shortOid}</span>
-                  <span className="cherry__detail-summary">{detail.summary}</span>
-                  <div className="cherry__detail-meta">
-                    {detail.authorName} · {relativeTime(detail.timeSeconds)}
-                    {detail.isMerge && ' · merge commit'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="cherry__pick-btn"
-                  disabled={picking || detail.isMerge}
-                  title={
-                    detail.isMerge
-                      ? 'Merge commits cannot be cherry-picked'
-                      : `Apply ${detail.shortOid} onto ${currentBranch}`
-                  }
-                  onClick={() => void doPick(selected)}
-                >
-                  <Cherry size={13} strokeWidth={1.5} />
-                  {picking ? 'Picking…' : `Cherry-pick ${detail.shortOid}`}
-                </button>
-              </div>
-              {detail.message !== detail.summary && (
-                <pre className="cherry__detail-body">{detail.message}</pre>
-              )}
-              <h4 className="cherry__section-title">Files ({detail.files.length})</h4>
-              <ul className="cherry__files">
-                {detail.files.map((file) => {
-                  const parentOid = detail.parents[0] ?? null;
-                  const fileKey = `${detail.oid}:${file.path}`;
-                  const fileOpen = openFile === fileKey;
-                  return (
-                    <li key={`${file.path}:${file.status}`} className="cherry__file">
-                      <button
-                        type="button"
-                        className="cherry__file-row"
-                        title={`Compare ${file.path} (parent vs commit)`}
-                        onClick={() => void openCompare(detail.oid, parentOid, file.path)}
-                      >
-                        <span className={`cherry__file-status cherry__file-status--${file.status}`}>
-                          {file.status}
-                        </span>
-                        <span className="cherry__file-path">{file.path}</span>
-                        <span className="cherry__file-stats">
-                          <span className="stats-add">+{file.additions}</span>
-                          <span className="stats-del">−{file.deletions}</span>
-                        </span>
-                      </button>
-                      {fileOpen && (
-                        <>
-                          {loadingFile && <p className="cherry__empty">Loading versions…</p>}
-                          <div className="cherry__file-view">
-                            <div className="cherry__file-view-labels">
-                              <span>BEFORE — {parentOid?.slice(0, 7) ?? '(new file)'}</span>
-                              <span>COMMIT — {detail.shortOid}</span>
-                              <div className="cherry__view-mode" role="group" aria-label="Diff layout">
-                                <button
-                                  type="button"
-                                  className={splitView ? 'is-active' : ''}
-                                  onClick={() => setSplitView(true)}
-                                >
-                                  Split
-                                </button>
-                                <button
-                                  type="button"
-                                  className={!splitView ? 'is-active' : ''}
-                                  onClick={() => setSplitView(false)}
-                                >
-                                  Unified
-                                </button>
-                              </div>
-                            </div>
-                            <DiffEditor
-                              key={fileKey}
-                              original={fileContent?.before ?? ''}
-                              modified={fileContent?.after ?? ''}
-                              language={fileContent?.language ?? 'plaintext'}
-                              theme="orbit-dark"
-                              options={{
-                                readOnly: true,
-                                renderSideBySide: splitView,
-                                fontSize: 11,
-                                lineHeight: 18,
-                                minimap: { enabled: false },
-                                scrollBeyondLastLine: false,
-                                automaticLayout: true,
-                              }}
-                            />
-                          </div>
-                        </>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
-          )}
-        </section>
-      )}
     </div>
   );
 }
