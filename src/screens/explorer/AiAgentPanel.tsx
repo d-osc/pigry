@@ -151,10 +151,14 @@ const FILE_TOOLS: ToolSpec[] = [
   {
     id: 'read_file',
     name: 'read_file',
-    description: 'Read a text file from the working tree (fails on binary or huge files).',
+    description:
+      'Read a text file from the working tree (fails on binary or huge files). Pass line to record the location you are interested in.',
     input_schema: {
       type: 'object',
-      properties: { path: { type: 'string', description: 'Repo-relative file path' } },
+      properties: {
+        path: { type: 'string', description: 'Repo-relative file path' },
+        line: { type: 'number', description: 'Optional line number of interest' },
+      },
       required: ['path'],
     },
     run: async (input) => {
@@ -189,9 +193,19 @@ const FILE_TOOLS: ToolSpec[] = [
 /** Short label shown as a tool-activity chip in the chat bubble. */
 function toolLabel(name: string, input: Record<string, unknown>, output: string): string {
   if (name === 'write_file') return `write_file → ${String(input.path ?? '?')}`;
-  if (name === 'read_file') return `read_file → ${String(input.path ?? '?')}`;
+  if (name === 'read_file') {
+    const path = String(input.path ?? '?');
+    return typeof input.line === 'number' ? `read_file → ${path}:${input.line}` : `read_file → ${path}`;
+  }
   if (name === 'list_files') return `list_files (${output.split('\n').length} paths)`;
   return name;
+}
+
+/** Extracts a clickable repo path (and optional :line) from a tool chip. */
+function toolEventTarget(label: string): { path: string; line?: number } | null {
+  const match = label.match(/→\s*(.+?)(?::(\d+))?$/);
+  if (!match) return null;
+  return { path: match[1].trim(), line: match[2] ? Number(match[2]) : undefined };
 }
 
 /** Executes one tool call, returning the tool_result text (never throws). */
@@ -298,6 +312,8 @@ interface AiAgentPanelProps {
   /** Team preselected in the Agents tab's "Add agent" form (from the active
    * workspace menu). */
   defaultTeam?: string;
+  /** Opens a repo file (optionally at a line) — wired to tool-event chips. */
+  onOpenFile?: (path: string, line?: number) => void;
 }
 
 /** One-click prompts shown on the empty state. */
@@ -308,7 +324,7 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
 ];
 
-export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam }: AiAgentPanelProps) {
+export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile }: AiAgentPanelProps) {
   const { repository, notify } = useRepository();
   // Chats and memories live under this team's .orbit/teams/<team>/ store.
   const team = defaultTeam ?? 'Copilot';
@@ -1473,11 +1489,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                         )}
                         {message.toolEvents && message.toolEvents.length > 0 && (
                           <div className="explorer-ai__msg-tools">
-                            {message.toolEvents.map((event, i) => (
-                              <span key={i} className="explorer-ai__tool-event">
-                                {event}
-                              </span>
-                            ))}
+                            {message.toolEvents.map((event, i) => {
+                              const fileTarget = toolEventTarget(event);
+                              return fileTarget && onOpenFile ? (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  className="explorer-ai__tool-event explorer-ai__tool-event--link"
+                                  title={`Open ${fileTarget.path}${fileTarget.line ? ` at line ${fileTarget.line}` : ''} in the editor`}
+                                  onClick={() => onOpenFile(fileTarget.path, fileTarget.line)}
+                                >
+                                  {event}
+                                </button>
+                              ) : (
+                                <span key={i} className="explorer-ai__tool-event">
+                                  {event}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
                         <div className="explorer-ai__msg-text">

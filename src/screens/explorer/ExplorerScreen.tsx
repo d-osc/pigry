@@ -410,6 +410,21 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     return () => window.removeEventListener('orbit:focus-file-search', onFocusSearch);
   }, []);
 
+  // Open a file (optionally at a line) from anywhere — AI panel tool chips.
+  // AppShell switches to this screen first, then dispatches after the mount.
+  useEffect(() => {
+    const onOpenFile = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: string; line?: number }>).detail;
+      if (!detail?.path) return;
+      handleSelectFile(detail.path);
+      if (detail.line) {
+        setRevealTarget({ path: detail.path, line: detail.line, column: 1 });
+      }
+    };
+    window.addEventListener('orbit:open-file', onOpenFile);
+    return () => window.removeEventListener('orbit:open-file', onOpenFile);
+  }, [handleSelectFile]);
+
   // Go-to-line from the Quick Open palette (':' prefix).
   useEffect(() => {
     const onGotoLine = (event: Event) => {
@@ -1028,6 +1043,10 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             selection={editorSelection}
             defaultTeam={teamForScreen('explorer')}
             onCollapse={() => setAiOpen(false)}
+            onOpenFile={(path, line) => {
+              handleSelectFile(path);
+              if (line) setRevealTarget({ path, line, column: 1 });
+            }}
           />
         ) : (
           <button

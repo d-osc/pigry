@@ -455,6 +455,20 @@ function AppShellInner() {
                       fileName={repository.repository?.name ?? 'orbit'}
                       defaultTeam={teamForScreen(screen)}
                       onCollapse={() => setRailOpen(false)}
+                      onOpenFile={(path, line) => {
+                        setScreen('explorer');
+                        setExplorerOpenPath(path);
+                        // The explorer mounts with the file open; the line
+                        // reveal is applied by its open-file listener once
+                        // the editor is ready.
+                        window.setTimeout(
+                          () =>
+                            window.dispatchEvent(
+                              new CustomEvent('orbit:open-file', { detail: { path, line } }),
+                            ),
+                          400,
+                        );
+                      }}
                     />
                   ) : (
                     <button
