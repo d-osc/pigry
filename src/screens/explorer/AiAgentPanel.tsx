@@ -176,6 +176,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const [titleDraft, setTitleDraft] = useState('');
   /** The signed-in GitHub account — real name + avatar on user messages. */
   const [ghUser, setGhUser] = useState<{ name: string; login: string; avatarUrl: string } | null>(null);
+  // Attribution stamped into every message: agent username + repo owner.
+  const actingAgent = loadAgents().find((agent) => agent.enabled);
+  const agentUsername = actingAgent?.username || 'ai-agent';
+  const ownerName = ghUser?.name || repository?.account.name || 'local-user';
   const [images, setImages] = useState<ChatImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState('');
@@ -306,13 +310,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         createdAt: createdAtRef.current,
         updatedAt: Date.now(),
         messages,
+        team,
+        agentUsername,
+        owner: ownerName,
       }, chatScope);
       if (!cancelled) setSessionList(await listSessions(chatScope));
     })();
     return () => {
       cancelled = true;
     };
-  }, [messages, sessionId, groupTitle, chatScope]);
+  }, [messages, sessionId, groupTitle, chatScope, team, agentUsername, ownerName]);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -494,6 +501,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           text: 'No AI provider configured — add one in Settings → AI Provider.',
           error: true,
           time: Date.now(),
+          agent: agentUsername,
+          owner: ownerName,
         },
       ]);
       return;
@@ -602,6 +611,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       role: 'user',
       text,
       time: Date.now(),
+      owner: ownerName,
+      agent: agentUsername,
       context,
       selection: activeSelection
         ? {
@@ -641,11 +652,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       const cli = active.type === 'claude-code' ? 'claude' : 'codex';
       try {
         const output = await cliAgentRun(cli, last.text);
-        setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)', time: Date.now() }]);
+        setMessages((m) => [...m, { role: 'assistant', text: output || '(no output)', time: Date.now(), agent: agentUsername, owner: ownerName }]);
       } catch (error) {
         setMessages((m) => [
           ...m,
-          { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: Date.now() },
+          { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: Date.now(), agent: agentUsername, owner: ownerName },
         ]);
       } finally {
         setSending(false);
@@ -732,9 +743,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           | null;
         const message =
           err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`;
-        setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true, time: Date.now() }]);
+        setMessages((m) => [...m, { role: 'assistant', text: String(message), error: true, time: Date.now(), agent: agentUsername, owner: ownerName }]);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', text: assistantText, time: Date.now() }]);
+        setMessages((m) => [...m, { role: 'assistant', text: assistantText, time: Date.now(), agent: agentUsername, owner: ownerName }]);
       }
     } catch (error) {
       setMessages((m) => [

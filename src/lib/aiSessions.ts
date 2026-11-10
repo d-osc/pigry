@@ -20,6 +20,10 @@ export interface AiChatMessage {
   error?: boolean;
   /** Wall-clock timestamp (ms) shown next to the sender name. */
   time?: number;
+  /** Agent username that produced this message (assistant side). */
+  agent?: string;
+  /** Repo-owner username that wrote this message (user side). */
+  owner?: string;
 }
 
 export interface AiChatSession {
@@ -30,6 +34,12 @@ export interface AiChatSession {
   messages: AiChatMessage[];
   /** True once the user renames the group — the auto-title stops applying. */
   titleCustom?: boolean;
+  /** Team this chat belongs to. */
+  team?: string;
+  /** Username of the agent handling this chat. */
+  agentUsername?: string;
+  /** Repo owner the chat belongs to. */
+  owner?: string;
 }
 
 const LEGACY_DIR = '.orbit/chat/';
