@@ -1,7 +1,9 @@
 /** Project knowledge dialogs — memory + skills, stored IN the working repo
  * so they are versionable with the code:
- *   memory → vector database at .orbit/memory.vector.json (embedded entries,
- *     semantic search) with a human-readable .orbit/memory.md mirror
+ *   memory → three vector tiers: project-wide (.orbit/memory.vector.json),
+ *     team-shared (.orbit/teams/<team>/memory.vector.json) and per-agent
+ *     (.orbit/teams/<team>/agents/<user>/memory.vector.json), each with a
+ *     human-readable .md mirror
  *   skills → .orbit/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,21 +19,42 @@ import {
   writeWorktreeFile,
   type MemoryEntry,
 } from '../../lib/tauriClient';
+import { loadAgents } from '../../lib/agentExtras';
+import type { AgentEntry } from '../../lib/agentExtras';
 import './RepoKnowledge.css';
 
 const SKILLS_DIR = '.orbit/skills/';
 
-/** Vector-backed memory: list / semantic search / add / remove. */
+/** Memory storage tiers — main (project-wide), team-shared, agent-private. */
+type MemoryTier = 'main' | 'team' | 'agent';
+
+const TIER_LABEL: Record<MemoryTier, string> = {
+  main: 'Main',
+  team: 'Team',
+  agent: 'Agent',
+};
+
+const TIER_PATH: Record<MemoryTier, string> = {
+  main: '.orbit/memory.vector.json',
+  team: '.orbit/teams/<team>/memory.vector.json',
+  agent: '.orbit/teams/<team>/agents/<user>/memory.vector.json',
+};
+
+/** Vector-backed memory across three tiers: project-wide, team-shared and
+ * per-agent stores — each with list / semantic search / add / remove. */
 export function MemoryDialog({
   onClose,
   notify,
-  /** Team name — scopes memories to .orbit/teams/<team>/memory.vector.json. */
+  /** Team name — scopes team and agent tiers to .orbit/teams/<team>/. */
   team,
 }: {
   onClose: () => void;
   notify: (m: string, t?: 'success' | 'error') => void;
   team?: string;
 }) {
+  const resolvedTeam = team || 'Copilot';
+  const [tier, setTier] = useState<MemoryTier>('main');
+  const [agentUser, setAgentUser] = useState('');
   const [entries, setEntries] = useState<MemoryEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [query, setQuery] = useState('');
@@ -41,21 +64,35 @@ export function MemoryDialog({
   const draftRef = useRef<HTMLInputElement | null>(null);
   const queryRef = useRef<HTMLInputElement | null>(null);
 
+  // Agents available for the agent tier (enabled ones from the Agents tab).
+  // Read synchronously from localStorage at init — no effect needed.
+  const [agents] = useState<AgentEntry[]>(() =>
+    loadAgents().filter((agent) => agent.enabled && agent.username),
+  );
+
+  const scopeArgs = useCallback((): [string?, string?] => {
+    if (tier === 'team') return [resolvedTeam, undefined];
+    if (tier === 'agent') return agentUser ? [resolvedTeam, agentUser] : [undefined, undefined];
+    return [undefined, undefined];
+  }, [tier, resolvedTeam, agentUser]);
+
   const load = useCallback(async () => {
+    const [t, a] = scopeArgs();
     try {
-      setEntries(await memoryList(team));
+      setEntries(await memoryList(t, a));
     } catch {
       setEntries([]);
     }
     setLoaded(true);
-  }, []);
+  }, [scopeArgs]);
 
-  // Initial load — reads the store, never sets state synchronously.
+  // Initial load + reload when the tier/agent scope changes.
   useEffect(() => {
     let cancelled = false;
+    const [t, a] = scopeArgs();
     (async () => {
       try {
-        const list = await memoryList(team);
+        const list = await memoryList(t, a);
         if (!cancelled) setEntries(list);
       } catch {
         if (!cancelled) setEntries([]);
@@ -65,20 +102,26 @@ export function MemoryDialog({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scopeArgs]);
 
   // Live semantic search (250 ms debounce on the raw input value).
   useEffect(() => {
     if (!loaded) return;
     const handle = window.setTimeout(async () => {
       const q = queryRef.current?.value.trim() ?? '';
+      const [t, a] = scopeArgs();
       if (!q) {
-        await load();
+        try {
+          setEntries(await memoryList(t, a));
+        } catch {
+          setEntries([]);
+        }
+        setSearching(false);
         return;
       }
       setSearching(true);
       try {
-        const hits = await memorySearch(q, 20, team);
+        const hits = await memorySearch(q, 20, t, a);
         setEntries(
           hits.map((hit) => ({
             id: hit.id,
@@ -88,19 +131,20 @@ export function MemoryDialog({
           })),
         );
       } catch {
-        await load();
+        setEntries([]);
       } finally {
         setSearching(false);
       }
     }, 250);
     return () => window.clearTimeout(handle);
-  }, [query, loaded, load]);
+  }, [query, loaded, scopeArgs]);
 
   const addEntry = async () => {
     const line = draftRef.current?.value.trim() ?? '';
     if (!line) return;
+    const [t, a] = scopeArgs();
     try {
-      await memoryAdd(line, team);
+      await memoryAdd(line, t, a);
       if (draftRef.current) draftRef.current.value = '';
       notify('Memory saved', 'success');
       await load();
@@ -110,14 +154,17 @@ export function MemoryDialog({
   };
 
   const removeEntry = async (id: string) => {
+    const [t, a] = scopeArgs();
     try {
-      await memoryRemove(id, team);
+      await memoryRemove(id, t, a);
       notify('Memory removed', 'success');
       await load();
     } catch (e) {
       notify(e instanceof Error ? e.message : String(e), 'error');
     }
   };
+
+  const agentChoices = agents.length > 0 ? agents : [];
 
   return (
     <div
@@ -132,8 +179,8 @@ export function MemoryDialog({
           <div>
             <strong className="know-dlg__title">Project memory</strong>
             <p className="know-dlg__sub">
-              Semantic vector database — stored in <code>.orbit/memory.vector.json</code>{' '}
-              (mirrored to <code>.orbit/memory.md</code>) and versioned with the code.
+              Semantic vector database in three tiers — main, team-shared and per-agent.
+              Stored in the repo and versioned with the code.
             </p>
           </div>
           <button type="button" className="know-dlg__close" onClick={onClose} aria-label="Close memory">
@@ -141,6 +188,42 @@ export function MemoryDialog({
           </button>
         </header>
         <div className="know-dlg__body">
+          <div className="know-tier-row">
+            {(['main', 'team', 'agent'] as MemoryTier[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`know-tier-btn${tier === t ? ' know-tier-btn--on' : ''}`}
+                onClick={() => {
+                  setTier(t);
+                  setLoaded(false);
+                }}
+              >
+                {TIER_LABEL[t]}
+              </button>
+            ))}
+          </div>
+          {tier === 'agent' && (
+            <label className="know-dlg__field know-dlg__field--row">
+              <span className="know-dlg__label">Agent</span>
+              <select
+                className="know-dlg__input"
+                value={agentUser}
+                onChange={(event) => setAgentUser(event.target.value)}
+                aria-label="Agent memory store"
+              >
+                <option value="">Select an agent…</option>
+                {agentChoices.map((agent) => (
+                  <option key={agent.id} value={agent.username}>
+                    {agent.name} (@{agent.username})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="know-dlg__store-path">
+            <code>{TIER_PATH[tier].replace('<team>', resolvedTeam).replace('<user>', agentUser || '<user>')}</code>
+          </p>
           <input
             ref={queryRef}
             className="know-dlg__input know-dlg__search"
@@ -150,6 +233,9 @@ export function MemoryDialog({
             onChange={(event) => setQuery(event.target.value)}
           />
           {!loaded && <p className="know-dlg__empty">Loading…</p>}
+          {loaded && tier === 'agent' && !agentUser && (
+            <p className="know-dlg__empty">Pick an agent above to browse its memory.</p>
+          )}
           {loaded && entries.length === 0 && (
             <p className="know-dlg__empty">No memories yet — add one below.</p>
           )}
@@ -190,9 +276,7 @@ export function MemoryDialog({
       </div>
     </div>
   );
-}
-
-export function SkillsDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
+}export function SkillsDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [skills, setSkills] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   /** Uncontrolled new-skill name (read from the DOM on submit). */
