@@ -407,6 +407,15 @@ textarea {
 .ai-composer__input-wrap {
   position: relative;
   min-width: 0;
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+/* The wrap sits between the flex/field container and the textarea, so the
+   textarea loses the container's stretch — re-declare it explicitly. */
+.ai-composer__input-wrap > textarea {
+  display: block;
+  width: 100%;
 }
 
 .mention-menu {
