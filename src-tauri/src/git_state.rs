@@ -1631,8 +1631,13 @@ pub fn read_file_at_commit(
     oid: &str,
 ) -> Result<WorktreeFileContent> {
     let repo = Repository::discover(repo_path).map_err(err)?;
-    let commit_oid = git2::Oid::from_str(oid).map_err(|e| format!("invalid commit id: {e}"))?;
-    let commit = repo.find_commit(commit_oid).map_err(err)?;
+    // Commit detail callers pass SHORT parent ids (7 chars), so resolve via
+    // revparse instead of requiring a full 40-char object id.
+    let commit = repo
+        .revparse_single(oid)
+        .map_err(|e| format!("invalid commit id {oid}: {}", e.message()))?
+        .peel_to_commit()
+        .map_err(err)?;
     let tree = commit.tree().map_err(err)?;
     let entry = tree
         .get_path(Path::new(path))
