@@ -135,6 +135,35 @@ function agentDisplayName(username?: string): string {
   return 'AI Agent';
 }
 
+/** Deterministic avatar tint per agent handle — each agent gets its own
+ * circle color (same palette family as the design tokens). */
+const AVATAR_TINTS = ['#8b9dff', '#6dd6ad', '#edb675', '#62cee7', '#b59aff', '#e79098'];
+function agentTint(username: string): string {
+  let hash = 0;
+  for (let i = 0; i < username.length; i += 1) hash = (hash * 31 + username.charCodeAt(i)) >>> 0;
+  return AVATAR_TINTS[hash % AVATAR_TINTS.length];
+}
+
+/** The agent's monogram — first letter of its display name. */
+function agentMonogram(username?: string): string {
+  if (username) {
+    const agent = loadAgents().find((entry) => entry.username === username);
+    if (agent?.name) return agent.name.trim().charAt(0).toUpperCase() || 'AI';
+  }
+  return 'AI';
+}
+
+/** Inline avatar style tinting an agent's circle with its own color. */
+function agentAvatarStyle(username?: string): React.CSSProperties | undefined {
+  if (!username) return undefined;
+  const tint = agentTint(username);
+  return {
+    background: `color-mix(in srgb, ${tint} 20%, transparent)`,
+    borderColor: tint,
+    color: tint,
+  };
+}
+
 /** Wall-clock stamp — wrapped so async send paths stay purity-clean. */
 function now(): number {
   return Date.now();
@@ -1179,11 +1208,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                   className={`explorer-ai__card explorer-ai__msg ${isUser ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}
                 >
                     <div className="explorer-ai__msg-meta">
-                      <span className="explorer-ai__avatar">
+                      <span
+                        className="explorer-ai__avatar"
+                        style={replyAgent ? agentAvatarStyle(replyAgent.username) : undefined}
+                      >
                         {isUser && ghUser?.avatarUrl ? (
                           <img src={ghUser.avatarUrl} alt={ghUser.name} />
                         ) : replyAgent?.avatar ? (
                           <img src={replyAgent.avatar} alt={replyAgent.name} />
+                        ) : replyAgent ? (
+                          agentMonogram(message.agent)
                         ) : (
                           isUser ? 'You' : 'AI'
                         )}
@@ -1272,7 +1306,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               {sending && (
                 <div className="explorer-ai__card explorer-ai__msg">
                   <div className="explorer-ai__msg-meta">
-                    <span className="explorer-ai__avatar">AI</span>
+                    <span className="explorer-ai__avatar" style={agentAvatarStyle(replyingAs)}>
+                      {agentMonogram(replyingAs)}
+                    </span>
                     <span className="explorer-ai__msg-name">{agentDisplayName(replyingAs)}</span>
                   </div>
                   <span className="ai-typing" aria-label="AI is thinking">
