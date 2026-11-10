@@ -81,6 +81,7 @@ const SCREEN_TEAM: Record<string, string> = {
   explorer: 'Explorer',
   'commit-graph': 'Commit graph',
   'working-changes': 'Working changes',
+  'merge-branch': 'Merge branch',
   'ai-agent': 'Copilot',
   'pull-requests': 'Pull requests',
   releases: 'Releases',

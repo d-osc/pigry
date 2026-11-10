@@ -1,0 +1,206 @@
+/** Merge Branch screen — merge a branch INTO the checked-out branch with
+ * strategy choice, conflict handling (file list + abort) and a result log. */
+import { useEffect, useState } from 'react';
+import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useRepository } from '../../hooks/useRepository';
+import { mergeStatus, type MergeStatusInfo } from '../../lib/tauriClient';
+import './MergeBranchScreen.css';
+
+type MergeStrategy = 'ff' | 'no-ff' | 'squash';
+
+const STRATEGIES: Array<{ id: MergeStrategy; title: string; detail: string }> = [
+  { id: 'ff', title: 'Fast-forward only', detail: 'Moves the branch pointer when possible — fails when both branches diverged.' },
+  { id: 'no-ff', title: 'Always merge commit', detail: 'Creates a merge commit even when a fast-forward is possible.' },
+  { id: 'squash', title: 'Squash', detail: 'Stages the branch changes as one set — you commit to finish.' },
+];
+
+export function MergeBranchScreen() {
+  const { repository, refresh, notify, mergeBranch, mergeAbort } = useRepository();
+  const currentBranch = repository?.currentBranch ?? '';
+  const branches = (repository?.branches ?? []).filter((b) => !b.isHead && b.name !== currentBranch);
+
+  const [source, setSource] = useState('');
+  const [strategy, setStrategy] = useState<MergeStrategy>('no-ff');
+  const [merging, setMerging] = useState(false);
+  const [conflict, setConflict] = useState<MergeStatusInfo | null>(null);
+  const [log, setLog] = useState<Array<{ text: string; kind: 'info' | 'success' | 'error' }>>([]);
+
+  // Auto-pick the first candidate until the user chooses one.
+  const effectiveSource = source || branches[0]?.name || '';
+
+  // Poll merge state while the screen is open (conflicts show live).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      mergeStatus()
+        .then((status) => {
+          if (!cancelled) setConflict(status.inProgress ? status : null);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const addLog = (text: string, kind: 'info' | 'success' | 'error') => {
+    setLog((entries) => [...entries, { text, kind }]);
+  };
+
+  const doMerge = async () => {
+    if (!effectiveSource || merging) return;
+    setMerging(true);
+    try {
+      await mergeBranch(effectiveSource, strategy);
+      addLog(`Merged ${effectiveSource} into ${currentBranch}.`, 'success');
+      setConflict(null);
+      refresh();
+      notify(`Merged ${effectiveSource} into ${currentBranch}`, 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.toUpperCase().includes('CONFLICT')) {
+        addLog('Merge conflict — resolve in Working changes, then commit.', 'error');
+        const status = await mergeStatus().catch(() => null);
+        if (status) setConflict(status);
+        notify('Merge conflict — resolve in Working changes', 'error');
+      } else {
+        addLog(message, 'error');
+        notify(message, 'error');
+      }
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const doAbort = async () => {
+    try {
+      await mergeAbort();
+      addLog('Merge aborted — repository restored.', 'info');
+      setConflict(null);
+      refresh();
+      notify('Merge aborted', 'success');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  };
+
+  return (
+    <div className="merge-branch">
+      <header className="merge-branch__head">
+        <h2 className="merge-branch__title">
+          <GitMerge size={18} strokeWidth={1.5} />
+          Merge branch
+        </h2>
+        <p className="merge-branch__sub">
+          Merge a branch into the checked-out branch
+          {currentBranch ? (
+            <>
+              {' — '}
+              <span className="merge-branch__current">{currentBranch}</span>
+            </>
+          ) : null}
+        </p>
+      </header>
+
+      <div className="merge-branch__body">
+        <section className="merge-branch__section">
+          <h3 className="merge-branch__section-title">Source branch</h3>
+          {branches.length === 0 ? (
+            <p className="merge-branch__empty">No other branches to merge from.</p>
+          ) : (
+            <div className="merge-branch__branches">
+              {branches.map((branch) => (
+                <button
+                  key={branch.name}
+                  type="button"
+                  className={`merge-branch__branch${effectiveSource === branch.name ? ' is-selected' : ''}`}
+                  onClick={() => setSource(branch.name)}
+                >
+                  <GitBranch size={13} strokeWidth={1.5} />
+                  <span className="merge-branch__branch-name">{branch.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="merge-branch__section">
+          <h3 className="merge-branch__section-title">Strategy</h3>
+          <div className="merge-branch__strategies">
+            {STRATEGIES.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className={`merge-branch__strategy${strategy === entry.id ? ' is-selected' : ''}`}
+                onClick={() => setStrategy(entry.id)}
+              >
+                <span className="merge-branch__strategy-title">{entry.title}</span>
+                <span className="merge-branch__strategy-detail">{entry.detail}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <div className="merge-branch__run">
+          <button
+            type="button"
+            className="merge-branch__run-btn"
+            disabled={!effectiveSource || merging}
+            onClick={() => void doMerge()}
+          >
+            <GitMerge size={14} strokeWidth={1.5} />
+            {merging ? 'Merging…' : `Merge ${effectiveSource || '…'} into ${currentBranch || '…'}`}
+          </button>
+          {conflict && (
+            <button
+              type="button"
+              className="merge-branch__abort-btn"
+              onClick={() => void doAbort()}
+            >
+              Abort merge
+            </button>
+          )}
+        </div>
+
+        {conflict && (
+          <section className="merge-branch__section merge-branch__conflict">
+            <h3 className="merge-branch__section-title">
+              <AlertTriangle size={13} strokeWidth={1.5} />
+              Conflicts ({conflict.conflicted.length})
+            </h3>
+            <p className="merge-branch__conflict-hint">
+              Resolve the conflicted files in Working changes, stage them, then commit to
+              finish the merge — or abort to restore the branch.
+            </p>
+            <ul className="merge-branch__conflict-list">
+              {conflict.conflicted.map((file) => (
+                <li key={file}>{file}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {log.length > 0 && (
+          <section className="merge-branch__section">
+            <h3 className="merge-branch__section-title">Log</h3>
+            <ul className="merge-branch__log">
+              {log
+                .slice()
+                .reverse()
+                .map((entry, index) => (
+                  <li key={index} className={`merge-branch__log-row merge-branch__log-row--${entry.kind}`}>
+                    {entry.kind === 'success' && <CheckCircle2 size={12} strokeWidth={1.5} />}
+                    {entry.kind === 'error' && <AlertTriangle size={12} strokeWidth={1.5} />}
+                    <span>{entry.text}</span>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}

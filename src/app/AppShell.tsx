@@ -19,6 +19,7 @@ import {
   RepositoryProvider,
   type RepositoryContextValue,
 } from '../hooks/useRepository';
+import { MergeBranchScreen } from '../screens/merge-branch/MergeBranchScreen';
 import { WorkingChangesScreen } from '../screens/working-changes/WorkingChangesScreen';
 import { AppSettingsScreen } from '../screens/settings/AppSettingsScreen';
 import { CommitGraphScreen } from '../screens/commit-graph/CommitGraphScreen';
@@ -40,6 +41,7 @@ import './AppShell.css';
  * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS: NavId[] = [
   'working-changes',
+  'merge-branch',
   'actions',
   'pull-requests',
   'releases',
@@ -86,6 +88,8 @@ function renderScreen(
   switch (screen) {
     case 'working-changes':
       return <WorkingChangesScreen />;
+    case 'merge-branch':
+      return <MergeBranchScreen />;
     case 'commit-graph':
       return <CommitGraphScreen onStartRebase={startRebase} focusCommit={focusCommit} />;
     case 'explorer':

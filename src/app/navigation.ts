@@ -12,12 +12,14 @@ import {
   BookOpen,
   Zap,
   type LucideIcon,
+  GitMerge,
 } from 'lucide-react';
 
 export type NavId =
   | 'explorer'
   | 'commit-graph'
   | 'working-changes'
+  | 'merge-branch'
   | 'ai-agent'
   | 'pull-requests'
   | 'releases'
@@ -40,6 +42,7 @@ export interface NavItem {
 export const workspaceNav: NavItem[] = [
   { id: 'explorer', label: 'Explorer', icon: FolderTree },
   { id: 'commit-graph', label: 'Commit graph', icon: Network },
+  { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },
