@@ -232,3 +232,111 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* Preview: commits + files the merge brings in */
+.merge-branch__up-to-date {
+  font-size: var(--fs-sm);
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__commits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.merge-branch__commit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  font-size: var(--fs-xs);
+}
+
+.merge-branch__commit-sha {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.merge-branch__commit-summary {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-branch__commit-meta {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.merge-branch__files {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.merge-branch__file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  font-size: var(--fs-xs);
+}
+
+.merge-branch__file:hover {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.merge-branch__file-status {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.merge-branch__file-status--A {
+  color: var(--success, #6dd6ad);
+}
+
+.merge-branch__file-status--M {
+  color: var(--warning, #edb675);
+}
+
+.merge-branch__file-status--D {
+  color: var(--danger, #e79098);
+}
+
+.merge-branch__file-status--R {
+  color: var(--purple, #b59aff);
+}
+
+.merge-branch__file-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-branch__file-stats {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}

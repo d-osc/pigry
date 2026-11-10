@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { mergeStatus, type MergeStatusInfo } from '../../lib/tauriClient';
+import { mergePreview, mergeStatus, type MergePreview, type MergeStatusInfo } from '../../lib/tauriClient';
+import { relativeTime } from '../../lib/relativeTime';
 import './MergeBranchScreen.css';
 
 type MergeStrategy = 'ff' | 'no-ff' | 'squash';
@@ -28,15 +29,38 @@ export function MergeBranchScreen() {
   // Auto-pick the first candidate until the user chooses one.
   const effectiveSource = source || branches[0]?.name || '';
 
+  // Load the merge preview whenever the source branch changes.
+  const [preview, setPreview] = useState<MergePreview | null>(null);
+  useEffect(() => {
+    if (!effectiveSource) {
+      void Promise.resolve().then(() => setPreview(null));
+      return;
+    }
+    let cancelled = false;
+    mergePreview(effectiveSource)
+      .then((result) => {
+        if (!cancelled) setPreview(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      })
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSource]);
+
   // Poll merge state while the screen is open (conflicts show live).
   useEffect(() => {
     let cancelled = false;
     const tick = () => {
-      mergeStatus()
-        .then((status) => {
+      void (async () => {
+        try {
+          const status = await mergeStatus();
           if (!cancelled) setConflict(status.inProgress ? status : null);
-        })
-        .catch(() => {});
+        } catch {
+          // merge state unreadable — keep the last known state
+        }
+      })();
     };
     tick();
     const timer = window.setInterval(tick, 2000);
@@ -144,6 +168,53 @@ export function MergeBranchScreen() {
           </div>
         </section>
 
+        {preview?.upToDate && (
+          <section className="merge-branch__section merge-branch__up-to-date">
+            <p className="merge-branch__empty">
+              {effectiveSource} is already part of {currentBranch || 'the current branch'} — nothing to merge.
+            </p>
+          </section>
+        )}
+
+        {preview && !preview.upToDate && preview.commits.length > 0 && (
+          <section className="merge-branch__section">
+            <h3 className="merge-branch__section-title">
+              Commits merged in ({preview.commits.length})
+            </h3>
+            <ul className="merge-branch__commits">
+              {preview.commits.map((commit) => (
+                <li key={commit.oid} className="merge-branch__commit">
+                  <span className="merge-branch__commit-sha">{commit.shortOid}</span>
+                  <span className="merge-branch__commit-summary">{commit.summary}</span>
+                  <span className="merge-branch__commit-meta">
+                    {commit.authorName} · {relativeTime(commit.timeSeconds)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {preview && !preview.upToDate && preview.files.length > 0 && (
+          <section className="merge-branch__section">
+            <h3 className="merge-branch__section-title">
+              Files changed ({preview.files.length})
+            </h3>
+            <ul className="merge-branch__files">
+              {preview.files.map((file) => (
+                <li key={file.path} className="merge-branch__file">
+                  <span className={`merge-branch__file-status merge-branch__file-status--${file.status}`}>
+                    {file.status}
+                  </span>
+                  <span className="merge-branch__file-path">{file.path}</span>
+                  <span className="merge-branch__file-stats">
+                    +{file.additions} / −{file.deletions}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <div className="merge-branch__run">
           <button
             type="button"

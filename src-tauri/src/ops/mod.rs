@@ -96,6 +96,128 @@ pub struct MergeStatus {
     pub conflicted: Vec<String>,
 }
 
+/// Preview of what a branch merge would bring in — commits + files.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreviewCommit {
+    pub oid: String,
+    pub short_oid: String,
+    pub summary: String,
+    pub author_name: String,
+    pub time_seconds: i64,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreviewFile {
+    pub path: String,
+    pub status: String,
+    pub additions: usize,
+    pub deletions: usize,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePreview {
+    /// True when the source is already contained in HEAD.
+    pub up_to_date: bool,
+    pub commits: Vec<MergePreviewCommit>,
+    pub files: Vec<MergePreviewFile>,
+}
+
+/// Computes what merging 'branch' into HEAD would bring in.
+pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
+    let head_oid = head.target().ok_or_else(|| String::from("HEAD not found"))?;
+    let source = repo.revparse_single(branch).map_err(|e| format!("unknown branch {branch}: {e}"))?;
+    let source_commit = source.peel_to_commit().map_err(err)?;
+    let base = repo.merge_base(head_oid, source.id()).map_err(err)?;
+    let up_to_date = base == source.id();
+
+    // Commits unique to the source branch (oldest first).
+    let mut commits: Vec<MergePreviewCommit> = Vec::new();
+    let mut walk = repo.revwalk().map_err(err)?;
+    walk.push(source.id()).map_err(err)?;
+    walk.hide(base).map_err(err)?;
+    walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
+    for oid in walk.flatten() {
+        if let Ok(commit) = repo.find_commit(oid) {
+            commits.push(MergePreviewCommit {
+                oid: commit.id().to_string(),
+                short_oid: commit
+                    .as_object()
+                    .short_id()
+                    .map(|buf| buf.as_str().map(|str| str.to_string()).unwrap_or_default())
+                    .unwrap_or_default(),
+                summary: commit.summary().unwrap_or_default().to_string(),
+                author_name: commit
+                    .author()
+                    .name()
+                    .unwrap_or_default()
+                    .to_string(),
+                time_seconds: commit.time().seconds(),
+            });
+        }
+    }
+
+    // Files: diff merge-base tree vs source tip tree with per-file line stats.
+    let mut files: Vec<MergePreviewFile> = Vec::new();
+    let base_tree = repo.find_commit(base).map_err(err)?.tree().map_err(err)?;
+    let source_tree = source_commit.tree().map_err(err)?;
+    let mut diff = repo.diff_tree_to_tree(Some(&base_tree), Some(&source_tree), None).map_err(err)?;
+    let current: std::cell::RefCell<(String, char)> =
+        std::cell::RefCell::new((String::new(), 'M'));
+    let mut adds: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut dels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut order: Vec<(String, char)> = Vec::new();
+    diff.foreach(
+        &mut |delta, _| {
+            let path = delta
+                .new_file()
+                .path()
+                .or(delta.old_file().path())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let letter = match delta.status() {
+                git2::Delta::Added => 'A',
+                git2::Delta::Deleted => 'D',
+                git2::Delta::Renamed => 'R',
+                _ => 'M',
+            };
+            *current.borrow_mut() = (path.clone(), letter);
+            order.push((path.clone(), letter));
+            true
+        },
+        None,
+        None,
+        Some(&mut |delta, _, line| {
+            let path = delta
+                .new_file()
+                .path()
+                .or(delta.old_file().path())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            match line.origin() {
+                '+' => { adds.entry(path.clone()).and_modify(|v| *v += 1).or_insert(1); },
+                '-' => { dels.entry(path.clone()).and_modify(|v| *v += 1).or_insert(1); },
+                _ => {}
+            }
+            true
+        }),
+    ).map_err(err)?;
+    for (path, letter) in order {
+        files.push(MergePreviewFile {
+            additions: adds.remove(&path).unwrap_or(0),
+            deletions: dels.remove(&path).unwrap_or(0),
+            path,
+            status: letter.to_string(),
+        });
+    }
+
+    Ok(MergePreview { up_to_date, commits, files })
+}
+
 pub fn merge_status(repo_path: &Path) -> Result<MergeStatus> {
     let repo = git2::Repository::discover(repo_path).map_err(err)?;
     let in_progress = repo.path().join("MERGE_HEAD").exists();

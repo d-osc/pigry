@@ -173,6 +173,7 @@ pub fn run() {
             commands::cherry_pick,
             commands::merge_branch,
             commands::merge_abort,
+            commands::merge_preview,
             commands::merge_status,
             commands::get_line_changes,
             commands::get_user_info,

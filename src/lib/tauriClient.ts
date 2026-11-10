@@ -748,6 +748,31 @@ export interface MergeStatusInfo {
   conflicted: string[];
 }
 
+export interface MergePreviewCommit {
+  oid: string;
+  shortOid: string;
+  summary: string;
+  authorName: string;
+  timeSeconds: number;
+}
+
+export interface MergePreviewFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface MergePreview {
+  upToDate: boolean;
+  commits: MergePreviewCommit[];
+  files: MergePreviewFile[];
+}
+
+export async function mergePreview(branch: string): Promise<MergePreview> {
+  return invoke('merge_preview', { branch });
+}
+
 export async function mergeStatus(): Promise<MergeStatusInfo> {
   return invoke('merge_status');
 }
