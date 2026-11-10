@@ -10,6 +10,7 @@ import {
   mergeStatus,
   writeWorktreeFile,
   stagePaths,
+  readFileAtCommit,
   type MergePreview,
   type MergeStatusInfo,
 } from '../../lib/tauriClient';
@@ -48,6 +49,40 @@ export function MergeBranchScreen() {
 
   // Compare layout for file views: side-by-side or unified.
   const [splitView, setSplitView] = useState(true);
+  // Per-commit file compare inside "Commits merged in" detail rows.
+  const [commitCompare, setCommitCompare] = useState<
+    { key: string; before: string; after: string; language: string } | null
+  >(null);
+  const [loadingCommitCompare, setLoadingCommitCompare] = useState(false);
+
+  const openCommitCompare = async (
+    commit: { oid: string; parentOid: string | null },
+    filePath: string,
+  ) => {
+    const key = commit.oid + ':' + filePath;
+    if (commitCompare?.key === key) {
+      setCommitCompare(null);
+      return;
+    }
+    setCommitCompare(null);
+    setLoadingCommitCompare(true);
+    try {
+      const [before, after] = await Promise.all([
+        commit.parentOid ? readFileAtCommit(filePath, commit.parentOid) : null,
+        readFileAtCommit(filePath, commit.oid),
+      ]);
+      setCommitCompare({
+        key,
+        before: before?.content ?? '',
+        after: after?.content ?? '',
+        language: after?.language || before?.language || 'plaintext',
+      });
+    } catch {
+      setCommitCompare(null);
+    } finally {
+      setLoadingCommitCompare(false);
+    }
+  };
 
   // Conflicted files are ALL open at once; this set holds collapsed ones.
   const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
@@ -281,22 +316,84 @@ export function MergeBranchScreen() {
                         )}
                         {commit.files.length > 0 ? (
                           <ul className="merge-branch__commit-files">
-                            {commit.files.map((entry) => (
-                              <li
-                                key={`${entry.path}:${entry.status}`}
-                                className="merge-branch__commit-file"
-                              >
-                                <span
-                                  className={`merge-branch__file-status merge-branch__file-status--${entry.status}`}
+                            {commit.files.map((entry) => {
+                              const compareKey = `${commit.oid}:${entry.path}`;
+                              const fileOpen = commitCompare?.key === compareKey;
+                              return (
+                                <li
+                                  key={`${entry.path}:${entry.status}`}
+                                  className="merge-branch__commit-file"
                                 >
-                                  {entry.status}
-                                </span>
-                                <span className="merge-branch__file-path">{entry.path}</span>
-                                <span className="merge-branch__file-stats">
-                                  +{entry.additions} / −{entry.deletions}
-                                </span>
-                              </li>
-                            ))}
+                                  <button
+                                    type="button"
+                                    className="merge-branch__commit-file-btn"
+                                    title={`Compare ${entry.path} (parent vs this commit)`}
+                                    onClick={() => void openCommitCompare(commit, entry.path)}
+                                  >
+                                    <span
+                                      className={`merge-branch__file-status merge-branch__file-status--${entry.status}`}
+                                    >
+                                      {entry.status}
+                                    </span>
+                                    <span className="merge-branch__file-path">{entry.path}</span>
+                                    <span className="merge-branch__file-stats">
+                                      +{entry.additions} / −{entry.deletions}
+                                    </span>
+                                  </button>
+                                  {fileOpen && (
+                                    <>
+                                      {loadingCommitCompare && (
+                                        <p className="merge-branch__empty">Loading versions…</p>
+                                      )}
+                                      <div className="merge-branch__commit-file-view">
+                                        <div className="merge-branch__file-view-labels">
+                                          <span>
+                                            BEFORE — {commit.parentOid?.slice(0, 7) ?? '(new file)'}
+                                          </span>
+                                          <span>COMMIT — {commit.shortOid}</span>
+                                          <div
+                                            className="merge-branch__view-mode"
+                                            role="group"
+                                            aria-label="Diff layout"
+                                          >
+                                            <button
+                                              type="button"
+                                              className={splitView ? 'is-active' : ''}
+                                              onClick={() => setSplitView(true)}
+                                            >
+                                              Split
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={!splitView ? 'is-active' : ''}
+                                              onClick={() => setSplitView(false)}
+                                            >
+                                              Unified
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <DiffEditor
+                                          key={compareKey}
+                                          original={commitCompare?.before ?? ''}
+                                          modified={commitCompare?.after ?? ''}
+                                          language={commitCompare?.language ?? 'plaintext'}
+                                          theme="orbit-dark"
+                                          options={{
+                                            readOnly: true,
+                                            renderSideBySide: splitView,
+                                            fontSize: 11,
+                                            lineHeight: 18,
+                                            minimap: { enabled: false },
+                                            scrollBeyondLastLine: false,
+                                            automaticLayout: true,
+                                          }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         ) : (
                           <p className="merge-branch__empty">No file changes (merge commit).</p>

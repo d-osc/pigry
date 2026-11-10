@@ -767,6 +767,8 @@ export interface MergePreviewCommit {
   body: string;
   authorName: string;
   timeSeconds: number;
+  /** First parent (null for root commits) — the compare base. */
+  parentOid: string | null;
   files: MergePreviewCommitFile[];
 }
 

@@ -300,6 +300,35 @@
   font-size: var(--fs-xs);
 }
 
+.merge-branch__commit-file-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.merge-branch__commit-file-btn:hover .merge-branch__file-path {
+  color: var(--accent);
+}
+
+.merge-branch__commit-file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
 .merge-branch__commit-file .merge-branch__file-stats {
   flex-shrink: 0;
   margin-left: auto;

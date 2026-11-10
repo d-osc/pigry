@@ -106,6 +106,8 @@ pub struct MergePreviewCommit {
     pub body: String,
     pub author_name: String,
     pub time_seconds: i64,
+    /// First parent (None for root commits) — the compare base in the UI.
+    pub parent_oid: Option<String>,
     /// Files this commit itself changes (numstat against its parent).
     pub files: Vec<MergePreviewCommitFile>,
 }
@@ -232,7 +234,8 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
             .unwrap_or_default();
         let summary = commit.summary().unwrap_or_default().to_string();
         // Files of this commit vs its first parent (whole tree for roots).
-        let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
+        let parent = commit.parent(0).ok();
+        let parent_tree = parent.as_ref().and_then(|p| p.tree().ok());
         let tree = commit.tree().map_err(err)?;
         let files = tree_diff_stats(&repo, parent_tree.as_ref(), &tree)?
             .into_iter()
@@ -260,6 +263,7 @@ pub fn merge_preview(repo_path: &Path, branch: &str) -> Result<MergePreview> {
                 .unwrap_or_default()
                 .to_string(),
             time_seconds: commit.time().seconds(),
+            parent_oid: parent.as_ref().map(|p| p.id().to_string()),
             files,
         });
     }
