@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, type Monaco } from '@monaco-editor/react';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
-import { GitCompare, History, Quote, SquareTerminal, Eye,
+import { GitCompare, GitMerge, History, Quote, SquareTerminal, Eye,
 } from 'lucide-react';
 import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal } from '../../lib/tauriClient';
 import { currentResolvedTheme, THEME_CHANGED_EVENT } from '../../lib/theme';
@@ -13,6 +13,8 @@ import type { WorktreeFileContent } from '../../types/repository';
 import { TerminalPanel } from '../../app/TerminalPanel';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { FileHistoryPanel } from './FileHistoryPanel';
+import { MergePanel } from './MergePanel';
+import './MergePanel.css';
 import { FileViewer, MarkdownViewer, SvgViewer, fileKindFor, type ViewerKind, type BinaryContent } from './FileViewers';
 import { ComparePanel } from './ComparePanel';
 import '../../editor/monacoSetup';
@@ -99,6 +101,7 @@ export function EditorPane({
   const [blameOn, setBlameOn] = useState(false);
   const [historyOn, setHistoryOn] = useState(true);
   const [compareOn, setCompareOn] = useState(false);
+  const [mergeOn, setMergeOn] = useState(false);
   const [baseOid, setBaseOid] = useState<string | null>(null);
   // Switching files drops the history selection — it belongs to the old file
   // (adjust-state-on-change, no effect needed).
@@ -109,6 +112,7 @@ export function EditorPane({
   }
   // Special viewers — files that don't route into Monaco.
   const kind: ViewerKind = fileKindFor(path);
+  const isEditableText = kind === 'text' || kind === 'markdown' || kind === 'svg';
   const [bin, setBin] = useState<BinaryContent | null>(null);
   const [previewOn, setPreviewOn] = useState(false);
   const [prevPreviewPath, setPrevPreviewPath] = useState(path);
@@ -303,6 +307,34 @@ export function EditorPane({
       );
     }
   };
+
+  /** Merge code — writes the merged buffer into the working file and
+   * refreshes the editor buffer (the file watcher handles the tree). */
+  const applyMerged = useCallback(
+    async (merged: string) => {
+      if (busy) return;
+      try {
+        await writeWorktreeFile(path, merged);
+        setDraft(merged);
+        draftRef.current = merged;
+        setEntry((current) =>
+          current && current.path === path
+            ? { ...current, content: { ...current.content, content: merged } }
+            : current,
+        );
+        onBufferChange(
+          { content: merged, language: entry?.content.language ?? 'plaintext', dirty: true },
+          path,
+        );
+        setSavedFlash(true);
+        window.setTimeout(() => setSavedFlash(false), 1600);
+        void refresh();
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [path, entry, busy, refresh],
+  );
 
   const save = useCallback(async () => {
     if (saving || busy) return;
@@ -550,7 +582,7 @@ export function EditorPane({
               Open externally
             </button>
           )}
-          {kind === 'text' && (
+          {isEditableText && (
             <button
               type="button"
               className={`editor-toggle${historyOn ? ' editor-toggle--on' : ''}`}
@@ -560,7 +592,7 @@ export function EditorPane({
               History
             </button>
           )}
-          {kind === 'text' && (
+          {isEditableText && (
             <button
               type="button"
               className={`editor-toggle${compareOn ? ' editor-toggle--on' : ''}`}
@@ -570,7 +602,17 @@ export function EditorPane({
               Compare
             </button>
           )}
-          {kind === 'text' && (
+          {isEditableText && (
+            <button
+              type="button"
+              className={`editor-toggle${mergeOn ? ' editor-toggle--on' : ''}`}
+              onClick={() => setMergeOn((value) => !value)}
+            >
+              <GitMerge size={12} strokeWidth={1.5} />
+              Merge
+            </button>
+          )}
+          {isEditableText && (
             <button
               type="button"
               className={`editor-toggle${blameOn ? ' editor-toggle--on' : ''}`}
@@ -705,6 +747,16 @@ export function EditorPane({
             />
           </div>
         </>
+      )}
+
+      {mergeOn && entry && (
+        <MergePanel
+          path={path}
+          workingContent={draft}
+          language={entry.content.language}
+          baseOid={baseOid}
+          onApply={(merged) => void applyMerged(merged)}
+        />
       )}
 
       {terminalOpen && (

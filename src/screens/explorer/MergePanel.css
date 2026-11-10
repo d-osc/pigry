@@ -1,0 +1,84 @@
+/* Merge code panel — merge editor over the file history base */
+
+.merge-panel {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+}
+
+.merge-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+}
+
+.merge-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.merge-panel__file {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.merge-panel__mode {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.merge-panel__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.merge-panel__btn {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+}
+
+.merge-panel__btn:hover {
+  border-color: var(--border-hover);
+}
+
+.merge-panel__btn--apply {
+  border-color: var(--accent);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.merge-panel__btn--apply:hover {
+  background: var(--accent-tint-2);
+}
+
+.merge-panel__status {
+  padding: 3px 12px 6px;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.merge-panel__editor {
+  height: 300px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.merge-panel__empty {
+  padding: 14px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
