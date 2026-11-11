@@ -110,8 +110,22 @@ export interface AiModelEntry {
   name: string;
   /** Capability badge, e.g. "1M" / "128K" — display only. */
   context?: string;
+  /** Context window in tokens. */
+  contextWindow?: number;
+  /** Max output tokens — sent as the request's max_tokens when set. */
+  maxOutputTokens?: number;
   /** Supports image attachments. */
   vision: boolean;
+  /** Input kinds the model accepts: 'text' (always) | 'image' | 'video' | 'pdf'. */
+  inputTypes?: string[];
+  /** Capability flags: 'structured-output' | 'native-web-search' | 'mid-conversation-system'. */
+  capabilities?: string[];
+  /** Reasoning levels, ordered low → high. */
+  reasoningLevels?: string[];
+  /** JSON mapping reasoning level → provider parameter value. */
+  reasoningMapping?: string;
+  /** Metadata auto-filled from the built-in model registry. */
+  smartConfig?: boolean;
   /** Selectable during chat. */
   enabled: boolean;
 }

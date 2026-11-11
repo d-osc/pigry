@@ -204,6 +204,27 @@ const FILE_TOOLS: ToolSpec[] = [
  * conversation as visible image blocks after the tool result. */
 let pendingImages: string[] = [];
 
+/** Whether the CURRENT turn's model accepts image input. Set per turn from
+ * the active AiModelEntry — explicit inputTypes govern; entries without them
+ * (legacy/built-in) keep the old always-send behavior. */
+let imageGate = true;
+function setImageGate(spec: { inputTypes?: string[] } | null | undefined) {
+  imageGate = !spec?.inputTypes || spec.inputTypes.includes('image');
+}
+
+/** max_tokens for the current turn's model (model metadata wins over 4096). */
+function maxTokensFor(spec: { maxOutputTokens?: number } | null | undefined): number {
+  return spec?.maxOutputTokens ?? 4096;
+}
+
+/** Resolves the AiModelEntry matching the provider's active model name. */
+function modelSpecOf(provider: { model?: string; models?: Array<{ name?: string; inputTypes?: string[]; maxOutputTokens?: number }> }):
+  | { inputTypes?: string[]; maxOutputTokens?: number }
+  | null {
+  const entry = provider.models?.find((m) => m.name === provider.model);
+  return entry ? { inputTypes: entry.inputTypes, maxOutputTokens: entry.maxOutputTokens } : null;
+}
+
 const READ_IMAGE_TOOL: ToolSpec = {
   id: 'read_image',
   name: 'read_image',
@@ -1399,6 +1420,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       }
       return active;
     })();
+    const spec = modelSpecOf(provider);
+    setImageGate(spec);
     const repliedAs = target.username;
     if (isCliProvider(provider)) {
       const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
@@ -1474,7 +1497,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
     for (let iter = 0; iter < 8; iter++) {
       const payload = isAnthropic
-        ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, tools: anthropicTools, messages: apiMessages }
+        ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages }
         : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, stream: false };
       const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
       const parsed = safeParse(result.body);
@@ -1509,7 +1532,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
         }
         apiMessages.push({ role: 'user', content: results });
-        if (pendingImages.length > 0) {
+        if (imageGate && pendingImages.length > 0) {
           const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
           apiMessages.push({
             role: 'user',
@@ -1549,7 +1572,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           const output = await runToolCall(tool, name, input);
           toolEvents.push(toolLabel(name, input, output));
           apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
-          if (pendingImages.length > 0) {
+          if (imageGate && pendingImages.length > 0) {
             const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
             apiMessages.push({
               role: 'user',
@@ -1594,6 +1617,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       }
       return active;
     })();
+    const spec = modelSpecOf(provider);
+    setImageGate(spec);
     const repliedAs = target?.username ?? agentUsername;
     setReplyingAs(repliedAs);
 
@@ -1682,8 +1707,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       if (tools.length === 0) {
         // No tools allowed — plain single-shot reply (legacy path).
         const payload = isAnthropic
-          ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, messages: [{ role: 'user', content }] }
-          : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], stream: false };
+          ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), messages: [{ role: 'user', content }] }
+        : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), stream: false };
         const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
         const parsed = safeParse(result.body);
         const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
@@ -1705,8 +1730,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
         for (let iter = 0; iter < 8; iter++) {
           const payload = isAnthropic
-            ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, tools: anthropicTools, messages: apiMessages }
-            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, stream: false };
+            ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages }
+            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), stream: false };
           const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
           const parsed = safeParse(result.body);
           if (!result.ok) {
@@ -1741,7 +1766,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
             }
             apiMessages.push({ role: 'user', content: results });
-            if (pendingImages.length > 0) {
+            if (imageGate && pendingImages.length > 0) {
               const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
               apiMessages.push({
                 role: 'user',
@@ -1781,7 +1806,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               const output = await runToolCall(tool, name, input);
               toolEvents.push(toolLabel(name, input, output));
               apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
-              if (pendingImages.length > 0) {
+              if (imageGate && pendingImages.length > 0) {
                 const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
                 apiMessages.push({
                   role: 'user',

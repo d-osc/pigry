@@ -36,6 +36,7 @@ import {
   type AiModelEntry,
   type AiProviderEntry,
 } from '../../lib/aiProviders';
+import { AddModelDialog } from './AddModelDialog';
 import './ProviderManager.css';
 
 type ModelTestState = 'running' | 'ok' | 'fail';
@@ -58,12 +59,10 @@ export function ProviderManager() {
   const [keyVisible, setKeyVisible] = useState(false);
   const [nameEditing, setNameEditing] = useState(false);
   const [modelAdding, setModelAdding] = useState(false);
-  const [modelName, setModelName] = useState('');
   const [modelEditingId, setModelEditingId] = useState('');
   const [modelRename, setModelRename] = useState('');
   const [tests, setTests] = useState<Record<string, ModelTestState>>({});
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const newModelInputRef = useRef<HTMLInputElement | null>(null);
 
   const reload = () => {
     const list = loadProviders();
@@ -128,24 +127,12 @@ export function ProviderManager() {
     notify(`Provider "${entry.name}" deleted`, 'success');
   };
 
-  const addModel = () => {
-    const name = modelName.trim();
-    if (!selected || !name) {
-      // Empty submit closes the row instead of leaving it stuck open.
-      setModelAdding(false);
-      setModelName('');
-      return;
-    }
-    const model: AiModelEntry = {
-      id: newId('m'),
-      name,
-      vision: false,
-      enabled: true,
-    };
+  const saveNewModel = (model: AiModelEntry) => {
+    if (!selected) return;
     const models = [...selected.models, model];
-    patch(selected.id, { models, model: selected.model || name });
-    setModelName('');
+    patch(selected.id, { models, model: selected.model || model.name });
     setModelAdding(false);
+    notify(`Model "${model.name}" added`, 'success');
   };
 
   /** Sends a 1-token ping with this model through the provider's wire format. */
@@ -211,10 +198,6 @@ export function ProviderManager() {
   useEffect(() => {
     if (nameEditing) nameInputRef.current?.focus();
   }, [nameEditing]);
-
-  useEffect(() => {
-    if (modelAdding) newModelInputRef.current?.focus();
-  }, [modelAdding]);
 
   if (!selected) {
     return (
@@ -421,10 +404,7 @@ export function ProviderManager() {
             <button
               type="button"
               className="prov-mgr__ghost-btn"
-              onClick={() => {
-                setModelAdding(true);
-                setModelName('');
-              }}
+              onClick={() => setModelAdding(true)}
               disabled={modelAdding}
             >
               <Plus size={12} strokeWidth={1.75} />
@@ -433,25 +413,7 @@ export function ProviderManager() {
           </div>
 
           <div className="prov-mgr__models">
-            {modelAdding && (
-              <div className="prov-mgr__model prov-mgr__model--adding">
-                <input
-                  ref={newModelInputRef}
-                  className="prov-mgr__control prov-mgr__model-name-input"
-                  value={modelName}
-                  onChange={(event) => setModelName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') addModel();
-                    if (event.key === 'Escape') setModelAdding(false);
-                  }}
-                  onBlur={addModel}
-                  placeholder="model name, e.g. qwen3.8-max"
-                  aria-label="New model name"
-                  spellCheck={false}
-                />
-              </div>
-            )}
-            {selected.models.length === 0 && !modelAdding && (
+            {selected.models.length === 0 && (
               <p className="prov-mgr__models-empty">No models — add one above.</p>
             )}
             {selected.models.map((model) => {
@@ -552,6 +514,8 @@ export function ProviderManager() {
           </p>
         </section>
       </div>
+
+      {modelAdding && <AddModelDialog onCancel={() => setModelAdding(false)} onSave={saveNewModel} />}
     </div>
   );
 }

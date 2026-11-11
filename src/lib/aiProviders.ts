@@ -120,6 +120,25 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
         enabled: item.enabled !== false,
       };
       if (typeof item.context === 'string' && item.context) model.context = item.context;
+      if (typeof item.contextWindow === 'number' && item.contextWindow > 0) {
+        model.contextWindow = item.contextWindow;
+      }
+      if (typeof item.maxOutputTokens === 'number' && item.maxOutputTokens > 0) {
+        model.maxOutputTokens = item.maxOutputTokens;
+      }
+      if (Array.isArray(item.inputTypes)) {
+        model.inputTypes = item.inputTypes.map(String).filter(Boolean);
+      }
+      if (Array.isArray(item.capabilities)) {
+        model.capabilities = item.capabilities.map(String).filter(Boolean);
+      }
+      if (Array.isArray(item.reasoningLevels)) {
+        model.reasoningLevels = item.reasoningLevels.map(String).filter(Boolean);
+      }
+      if (typeof item.reasoningMapping === 'string' && item.reasoningMapping) {
+        model.reasoningMapping = item.reasoningMapping;
+      }
+      if (item.smartConfig === true) model.smartConfig = true;
       return model;
     })
     .filter((m): m is AiModelEntry => m !== null);
@@ -288,6 +307,54 @@ export function newId(prefix: string): string {
 
 export function newModel(name: string): AiModelEntry {
   return makeModel(name, false);
+}
+
+/** Known-model metadata used by the Add-model dialog's smart configuration. */
+export interface KnownModelSpec {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  inputTypes?: string[];
+  capabilities?: string[];
+  reasoningLevels?: string[];
+}
+
+/** Best-effort registry of common model families — matched by substring. */
+const KNOWN_MODEL_SPECS: Array<[pattern: string, spec: KnownModelSpec]> = [
+  ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['glm-4.5-air', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['glm-4.5', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['glm-4-flash', { contextWindow: 128_000, maxOutputTokens: 4_096, inputTypes: ['text'] }],
+  ['claude-opus-4', { contextWindow: 200_000, maxOutputTokens: 32_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
+  ['claude-sonnet-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
+  ['claude-haiku-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
+  ['claude-3-7', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: ['low', 'high'] }],
+  ['claude-3-5', { contextWindow: 200_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
+  ['gpt-4.1', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['gpt-4o', { contextWindow: 128_000, maxOutputTokens: 16_384, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['o4-mini', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'] }],
+  ['o3', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'] }],
+  ['qwen3-coder', { contextWindow: 1_000_000, maxOutputTokens: 65_536, inputTypes: ['text'] }],
+  ['qwen3', { contextWindow: 262_144, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['qwen-max', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text'] }],
+  ['qwen-plus', { contextWindow: 1_000_000, maxOutputTokens: 16_384, inputTypes: ['text'] }],
+  ['deepseek-r1', { contextWindow: 128_000, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['deepseek', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
+  ['gemini-2.5-pro', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'] }],
+  ['gemini-2.5-flash', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'] }],
+  ['gemini', { contextWindow: 1_000_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['llama', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
+  ['mistral', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
+];
+
+/** Looks up known-model metadata for a model id (longest pattern wins). */
+export function matchModelSpec(name: string): KnownModelSpec | null {
+  const lower = name.trim().toLowerCase();
+  if (!lower) return null;
+  let hit: [string, KnownModelSpec] | null = null;
+  for (const entry of KNOWN_MODEL_SPECS) {
+    if (lower.includes(entry[0]) && (!hit || entry[0].length > hit[0].length)) hit = entry;
+  }
+  return hit ? { ...hit[1] } : null;
 }
 
 /** The URL the agent should POST to for this provider. */
