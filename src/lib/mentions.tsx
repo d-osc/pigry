@@ -190,12 +190,14 @@ export function MentionMenu({
 
 /** Metadata for one skill (.pigry/skills/<id>.md). */
 export interface SkillEntry {
-  /** File slug — the stable id. */
+  /** File slug (or built-in id) — the stable identifier. */
   id: string;
   /** Human name (heading or frontmatter); falls back to the id. */
   name: string;
   /** First paragraph / frontmatter description. */
   description: string;
+  /** Base skill hard-coded in the app — not stored in .pigry/skills/. */
+  builtIn?: boolean;
 }
 
 /** An active #token being typed: where it starts + the fragment after #. */

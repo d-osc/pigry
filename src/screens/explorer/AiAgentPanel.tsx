@@ -34,7 +34,7 @@ import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCo
 import {
   AGENT_TEAMS, allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
-import { listSkills } from '../../lib/skills';
+import { listSkills, getSkillContent } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
 import { browserDevtools, openInBrowser, type DevtoolsAction } from '../../lib/tauriClient';
 import mammoth from 'mammoth';
@@ -1165,9 +1165,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         );
         for (const skill of matches) {
           try {
-            const md = (
-              await readWorktreeFile(`.pigry/skills/${skill.id}.md`)
-            ).content;
+            const md = await getSkillContent(skill.id);
             context += `\n\n[Skill: ${skill.name || skill.id}]\n${md.slice(0, 4000)}`;
           } catch {
             // unreadable skill file — skip
@@ -1419,10 +1417,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
     const mediaTypeOf = (dataUrl: string) =>
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
-    const profile = '\n\n[Your agent profile]\n' + agentProfileText(target);
+    let skillContext = '';
+    try {
+      for (const skillId of target.skills ?? []) {
+        const content = await getSkillContent(skillId);
+        skillContext += '\n\n[Skill: ' + skillId + ']\n' + content.slice(0, 2000);
+      }
+    } catch {
+      // skill content unavailable
+    }
+    const profile = '\n\n[Your agent profile]\n' + agentProfileText(target) + skillContext;
     const toolNudge =
       '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
-    const fullText = last.text + (last.context ?? '') + profile + toolNudge;
+    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0
@@ -1613,9 +1620,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
     // The tagged agent's identity rides along so it answers in character.
     const profile = target ? `\n\n[Your agent profile]\n${agentProfileText(target)}` : '';
+    // The answering agent's assigned skills ride along as full instructions.
+    let skillContext = '';
+    try {
+      for (const skillId of target?.skills ?? []) {
+        const content = await getSkillContent(skillId);
+        skillContext += `\n\n[Skill: ${skillId}]\n${content.slice(0, 2000)}`;
+      }
+    } catch {
+      // skill content unavailable
+    }
     const toolNudge =
       '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
-    const fullText = last.text + (last.context ?? '') + profile + toolNudge;
+    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0

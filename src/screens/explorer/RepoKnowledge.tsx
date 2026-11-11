@@ -7,11 +7,12 @@
  *   skills → .pigry/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { listSkills } from '../../lib/skills';
+import type { SkillEntry } from '../../lib/mentions';
 import { Check, Heading2, Italic, Link2, List, Pencil, Plus, Quote, SquareCode, Strikethrough, Trash2, X } from 'lucide-react';
 import { renderMarkdown } from '../../lib/markdown';
 import {
   deleteWorktreeFile,
-  getFileTree,
   memoryAdd,
   memoryList,
   memoryRemove,
@@ -278,7 +279,7 @@ export function MemoryDialog({
     </div>
   );
 }export function SkillsDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
-  const [skills, setSkills] = useState<string[]>([]);
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
   const [loaded, setLoaded] = useState(false);
   /** New-skill form — id/name/description defined by the user. */
   const [newId, setNewId] = useState('');
@@ -328,12 +329,7 @@ export function MemoryDialog({
 
   const reload = useCallback(async () => {
     try {
-      const tree = await getFileTree();
-      const names = tree.entries
-        .filter((p) => p.startsWith(SKILLS_DIR) && p.endsWith('.md'))
-        .map((p) => p.slice(SKILLS_DIR.length, -3))
-        .sort();
-      setSkills(names);
+      setSkills(await listSkills());
     } catch {
       setSkills([]);
     }
@@ -345,14 +341,8 @@ export function MemoryDialog({
     let cancelled = false;
     (async () => {
       try {
-        const tree = await getFileTree();
-        if (cancelled) return;
-        setSkills(
-          tree.entries
-            .filter((p) => p.startsWith(SKILLS_DIR) && p.endsWith('.md'))
-            .map((p) => p.slice(SKILLS_DIR.length, -3))
-            .sort(),
-        );
+        const list = await listSkills();
+        if (!cancelled) setSkills(list);
       } catch {
         if (!cancelled) setSkills([]);
       }
@@ -488,27 +478,42 @@ export function MemoryDialog({
               {loaded && skills.length === 0 && (
                 <p className="know-dlg__empty">No skills yet — add one below.</p>
               )}
-              {skills.map((name) => (
-                <div key={name} className="know-row">
-                  <button type="button" className="know-row__text know-row__text--btn" onClick={() => void openSkill(name)}>
-                    {name}
-                  </button>
-                  <button
-                    type="button"
-                    className="know-row__del"
-                    aria-label={`Edit skill: ${name}`}
-                    onClick={() => void openSkill(name)}
-                  >
-                    <Pencil size={11} strokeWidth={1.5} />
-                  </button>
-                  <button
-                    type="button"
-                    className="know-row__del"
-                    aria-label={`Delete skill: ${name}`}
-                    onClick={() => void removeSkill(name)}
-                  >
-                    <Trash2 size={11} strokeWidth={1.5} />
-                  </button>
+              {skills.map((skill) => (
+                <div key={skill.id} className="know-row">
+                  {skill.builtIn ? (
+                    <>
+                      <span className="know-row__builtin">built-in</span>
+                      <span className="know-row__text">{skill.name}</span>
+                      {skill.description && (
+                        <span className="know-row__desc">{skill.description}</span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" className="know-row__text know-row__text--btn" onClick={() => void openSkill(skill.id)}>
+                        {skill.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="know-row__del"
+                        aria-label={`Edit skill: ${skill.id}`}
+                        onClick={() => void openSkill(skill.id)}
+                      >
+                        <Pencil size={11} strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        className="know-row__del"
+                        aria-label={`Delete skill: ${skill.id}`}
+                        onClick={() => void removeSkill(skill.id)}
+                      >
+                        <Trash2 size={11} strokeWidth={1.5} />
+                      </button>
+                    </>
+                  )}
+                  {skill.description && (
+                    <span className="know-row__desc">{skill.description}</span>
+                  )}
                 </div>
               ))}
             </div>

@@ -26,7 +26,6 @@ import {
   saveEnabledTools,
   TOOL_GROUPS,
 } from '../../lib/agentTools';
-import { getFileTree } from '../../lib/tauriClient';
 import { renderMarkdown } from '../../lib/markdown';
 import {
   loadMcpServers,
@@ -485,11 +484,7 @@ export function InstructionsTab() {
 /** Reads the repo's skill names from .pigry/skills/*.md. */
 async function listSkillNames(): Promise<string[]> {
   try {
-    const tree = await getFileTree();
-    return tree.entries
-      .filter((p) => p.startsWith('.pigry/skills/') && p.endsWith('.md'))
-      .map((p) => p.split('/').pop()?.replace(/\.md$/, '') ?? '')
-      .filter(Boolean);
+    return (await listSkills()).map((skill) => skill.id);
   } catch {
     return [];
   }

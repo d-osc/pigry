@@ -97,6 +97,28 @@
   border: 1px solid var(--border);
 }
 
+.know-row__builtin {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: rgb(139 157 255 / 12%);
+  color: var(--accent);
+  border: 1px solid rgb(139 157 255 / 35%);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+}
+
+.know-row__desc {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 .know-row__text {
   flex: 1;
   min-width: 0;
