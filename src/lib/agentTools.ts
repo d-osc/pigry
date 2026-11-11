@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Agents';
   description: string;
 }
 
@@ -44,6 +44,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'doc-pdf', name: 'read_pdf', group: 'Files', description: 'Extract the text of a PDF in the working tree' },
   { id: 'doc-word', name: 'read_word', group: 'Files', description: 'Extract the text of a .docx Word document' },
   { id: 'doc-excel', name: 'read_excel', group: 'Files', description: 'Extract every sheet of an .xlsx as CSV rows' },
+
+  // Agents (agent_lookup — registry introspection for the agent itself)
+  { id: 'agents-lookup', name: 'agent_lookup', group: 'Agents', description: "Look up agent profiles — list every agent or read one agent's full details by @username" },
   { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'Read and edit the repository wiki' },
 ];
 
@@ -69,7 +72,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Agents'];
 
 /** One-line-per-tool block announced to the model on every agent send. */
 export function enabledToolsSummary(enabled: Set<string>): string {

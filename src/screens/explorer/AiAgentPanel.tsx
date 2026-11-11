@@ -43,7 +43,7 @@ import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
 import { loadMcpServers } from '../../lib/mcpServers';
-import { loadAgents, readInstructions, runEventHooks } from '../../lib/agentExtras';
+import { loadAgents, readInstructions, runEventHooks, type AgentEntry } from '../../lib/agentExtras';
 import {
   MentionMenu,
   applyMention,
@@ -52,8 +52,7 @@ import {
   mentionCandidates,
   mentionedAgents,
   type MentionState,
-} from '../../lib/mentions';
-import type { AgentEntry } from '../../lib/agentExtras';
+  } from '../../lib/mentions';
 import { renderMarkdown } from '../../lib/markdown';
 import {
   AgentToolsTab,
@@ -304,6 +303,50 @@ const DOC_TOOLS: ToolSpec[] = [
     },
   },
 ];
+
+/** Formats one agent as a readable profile block for the model. */
+function agentProfileBlock(agent: AgentEntry): string {
+  const parts: string[] = [`@${agent.username} — ${agent.name}`];
+  if (agent.role) parts.push(`role: ${agent.role}`);
+  if (agent.team) parts.push(`team: ${agent.team}`);
+  if (agent.tier) parts.push(`tier: ${agent.tier}`);
+  if (agent.description) parts.push(`about: ${agent.description}`);
+  if (agent.tools.length > 0) parts.push(`tools: ${agent.tools.join(', ')}`);
+  if (agent.skills.length > 0) parts.push(`skills: ${agent.skills.join(', ')}`);
+  if (agent.mcpServers.length > 0) parts.push(`mcp: ${agent.mcpServers.join(', ')}`);
+  parts.push(`enabled: ${agent.enabled ? 'yes' : 'no'}`);
+  return parts.join('\n');
+}
+
+/** AGENT_LOOKUP_TOOL — the agent introspects the registry itself. */
+const AGENT_LOOKUP_TOOL: ToolSpec = {
+  id: 'agent_lookup',
+  name: 'agent_lookup',
+  description:
+    'Look up agents in this workspace. Without arguments: a one-line profile of every agent (all tiers). With @username: the full profile of that agent — use it to decide who to tag or hand a task to.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      username: { type: 'string', description: 'Optional @username (without the @) of one agent' },
+    },
+  },
+  run: async (input) => {
+    const username = String(input.username ?? '').replace(/^@/, '').trim().toLowerCase();
+    const agents = allAgents().filter((agent) => agent.enabled);
+    if (username) {
+      const agent = agents.find(
+        (agent) => agent.username.toLowerCase() === username || agent.name.toLowerCase() === username,
+      );
+      if (!agent) {
+        const known = agents.map((agent) => `@${agent.username}`).join(' ');
+        return `no agent @${username} — known agents: ${known}`;
+      }
+      return agentProfileBlock(agent);
+    }
+    if (agents.length === 0) return '(no agents registered)';
+    return agents.map((agent) => agentProfileBlock(agent)).join('\n\n');
+  },
+};
 
 /** Web tools — search + headless browser (backend curls/launches, no CORS). */
 const WEB_TOOLS: ToolSpec[] = [
@@ -1312,7 +1355,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_LOOKUP_TOOL].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({
