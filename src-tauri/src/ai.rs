@@ -180,6 +180,28 @@ pub struct CliAppInfo {
     pub model: String,
     /// Default reasoning effort read from the app's own config, if any.
     pub effort: String,
+    /// The app's known model catalog (config default first).
+    pub models: Vec<String>,
+}
+
+/// Known model catalogs per app family — the config default is prepended.
+fn read_app_catalog(binary: &str, default_model: &str) -> Vec<String> {
+    let mut catalog: Vec<String> = match binary {
+        "claude" => vec![
+            "claude-opus-4-5".into(),
+            "claude-sonnet-4-5".into(),
+            "claude-haiku-4-5".into(),
+        ],
+        "codex" => vec!["gpt-5.1-codex".into(), "gpt-5.1".into(), "gpt-5.1-codex-mini".into()],
+        "gemini" => vec!["gemini-2.5-pro".into(), "gemini-2.5-flash".into()],
+        "zcode" => vec!["GLM-5.3".into(), "GLM-5.2".into(), "GLM-4.6".into()],
+        _ => Vec::new(),
+    };
+    if !default_model.is_empty() {
+        catalog.retain(|m| m != default_model);
+        catalog.insert(0, default_model.to_string());
+    }
+    catalog
 }
 
 /// The CLI coding agents pigry knows how to detect — (binary, display name).
@@ -427,12 +449,15 @@ pub fn cli_detect() -> CliDetectResult {
             continue;
         }
         seen.push(binary.to_string());
+        let model = read_app_model(binary);
+        let models = read_app_catalog(binary, &model);
         apps.push(CliAppInfo {
             binary: binary.to_string(),
             name: name.to_string(),
             version,
-            model: read_app_model(binary),
+            model: model.clone(),
             effort: read_app_effort(binary),
+            models,
         });
     }
     CliDetectResult {
@@ -451,8 +476,9 @@ pub fn cli_detect() -> CliDetectResult {
 /// Runs a prompt through an installed CLI coding agent (blocking; these take
 /// up to a few minutes — the frontend shows a Thinking state while waiting).
 /// claude/codex read the prompt from STDIN so multi-line chat text survives
-/// cmd's argv quoting; copilot takes it as a (newline-flattened) argument.
-pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, String> {
+/// cmd's argv quoting; copilot/gemini take it as a (newline-flattened) argument.
+/// A chosen model is forwarded to CLIs with a documented model flag.
+pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str, model: Option<&str>) -> Result<String, String> {
     // npm-installed CLIs are .cmd shims — spawn through cmd /C so PATH resolution works.
     let mut cmd = Command::new("cmd");
     cmd.arg("/C").arg(cli);
@@ -460,9 +486,16 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, Strin
     match cli {
         "claude" => {
             cmd.args(["-p", "--output-format", "text"]);
+            if let Some(m) = model.filter(|m| !m.is_empty()) {
+                cmd.args(["--model", m]);
+            }
         }
         "codex" => {
-            cmd.args(["exec", "-"]);
+            cmd.args(["exec"]);
+            if let Some(m) = model.filter(|m| !m.is_empty()) {
+                cmd.args(["-m", m]);
+            }
+            cmd.arg("-");
         }
         "copilot" => {
             prompt_via_stdin = false;
@@ -474,7 +507,8 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, Strin
             let flat = prompt.replace(['\r', '\n'], " ");
             cmd.args(["-p", &flat]);
         }
-        // Generic CLI coding agent — flattened prompt as the sole argument.
+        // Generic CLI coding agent — flattened prompt as the sole argument
+        // (no model flag: unknown CLIs may not support one).
         other => {
             prompt_via_stdin = false;
             let flat = prompt.replace(['\r', '\n'], " ");

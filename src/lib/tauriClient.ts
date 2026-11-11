@@ -432,6 +432,8 @@ export interface CliAppInfo {
   model: string;
   /** Default reasoning effort read from the app's own config, if any. */
   effort: string;
+  /** The app's known model catalog (config default first). */
+  models: string[];
 }
 
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
@@ -472,10 +474,11 @@ export async function cliDetect(): Promise<CliDetectResult> {
   };
 }
 
-/** Runs a prompt through an installed CLI coding agent (blocking until it finishes). */
-export async function cliAgentRun(cli: string, prompt: string): Promise<string> {
+/** Runs a prompt through an installed CLI coding agent (blocking until it finishes).
+ * `model` is forwarded to CLIs with a documented model flag (claude/codex). */
+export async function cliAgentRun(cli: string, prompt: string, model?: string): Promise<string> {
   if (!isTauri()) throw new Error('CLI agents require the desktop app');
-  return invoke<string>('cli_agent_run', { cli, prompt });
+  return invoke<string>('cli_agent_run', { cli, prompt, model: model ?? null });
 }
 
 export interface ZcodeEntry {

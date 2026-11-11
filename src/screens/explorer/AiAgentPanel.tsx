@@ -1555,7 +1555,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           : provider.type === 'zcode-cli'
             ? 'zcode'
             : provider.type;
-      const output = await cliAgentRun(cli, last.text);
+      const output = await cliAgentRun(cli, last.text, provider.model || undefined);
       return {
         role: 'assistant',
         text: output || '(no output)',
@@ -1779,7 +1779,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             : provider.type;
       let working = history;
       try {
-        const output = await cliAgentRun(cli, last.text);
+        const output = await cliAgentRun(cli, last.text, provider.model || undefined);
         working = [...history, { role: 'assistant', text: output || '(no output)', time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}) }];
         setMessages(working);
       } catch (error) {

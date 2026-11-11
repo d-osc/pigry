@@ -217,25 +217,43 @@ export function ProviderManager() {
         effort = '',
         baseUrl = '',
         apiKey = '',
+        catalog: string[] = [],
       ) => {
+        // Catalog: config default first, then the app's known models.
+        const modelNames = model
+          ? [model, ...catalog.filter((m) => m !== model)]
+          : catalog.length > 0
+            ? [...catalog]
+            : [];
+        const buildModels = () =>
+          modelNames.map((m) => ({
+            id: newId('m'),
+            name: m,
+            vision: false,
+            enabled: true,
+            ...(m === model && effort ? { effort } : {}),
+          }));
         const existing = next.find((p) => p.type === type);
         if (existing) {
-          // Backfill the app's config model/effort onto a provider that was
-          // added before the app's config was known.
-          if (model && !existing.model && (existing.models?.length ?? 0) === 0) {
+          // Backfill the app's config model/catalog/effort onto a provider
+          // that was added before the app's config was known.
+          const have = new Set(existing.models.map((m) => m.name));
+          const missing = modelNames.filter((m) => !have.has(m));
+          if (missing.length > 0) {
+            // Merge: existing models stay first, catalog fills the rest.
             next = next.map((p) =>
               p.id === existing.id
                 ? {
                     ...p,
-                    model,
                     models: [
-                      {
+                      ...p.models,
+                      ...missing.map((m) => ({
                         id: newId('m'),
-                        name: model,
+                        name: m,
                         vision: false,
                         enabled: true,
-                        ...(effort ? { effort } : {}),
-                      },
+                        ...(m === model && effort ? { effort } : {}),
+                      })),
                     ],
                   }
                 : p,
@@ -268,19 +286,9 @@ export function ProviderManager() {
             apiFormat: 'openai',
             baseUrl,
             apiKey,
-            model,
+            model: modelNames[0] ?? model,
             enabled: true,
-            models: model
-              ? [
-                  {
-                    id: newId('m'),
-                    name: model,
-                    vision: false,
-                    enabled: true,
-                    ...(effort ? { effort } : {}),
-                  },
-                ]
-              : [],
+            models: buildModels(),
           },
         ];
         added.push(name);
@@ -308,7 +316,7 @@ export function ProviderManager() {
         // The zcode CLI runs on ZCode's coding plan — its model is GLM.
         const model =
           app.binary === 'zcode' ? zcodeModel || ZCODE_DEFAULT_MODEL : app.model;
-        addDetected(type, app.name, model, app.effort);
+        addDetected(type, app.name, model, app.effort, '', '', app.models ?? []);
       }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.

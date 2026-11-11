@@ -1249,12 +1249,13 @@ pub async fn cli_agent_run(
     state: State<'_, Mutex<AppState>>,
     cli: String,
     prompt: String,
+    model: Option<String>,
 ) -> Result<String, String> {
     let cwd = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    ai::cli_agent_run(&cli, &prompt, &cwd.to_string_lossy().as_ref())
+    ai::cli_agent_run(&cli, &prompt, &cwd.to_string_lossy().as_ref(), model.as_deref())
 }
 
 #[tauri::command]
