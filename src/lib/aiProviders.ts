@@ -107,6 +107,7 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
     enabled: raw.enabled !== false,
     models: [],
   };
+  if (raw.detected === true) entry.detected = true;
   const rawModels = Array.isArray(raw.models) ? raw.models : [];
   entry.models = rawModels
     .map((m) => {

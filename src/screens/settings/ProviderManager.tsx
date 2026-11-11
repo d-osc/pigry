@@ -209,14 +209,27 @@ export function ProviderManager() {
     try {
       let next = [...loadProviders()];
       const hasType = (type: string) => next.some((p) => p.type === type);
+      // Providers already added by an earlier scan (before the flag existed)
+      // get marked too, so they move out of "Custom providers".
+      const markDetected = (type: string, namePrefix?: string) => {
+        next = next.map((p) =>
+          p.type === type && !p.detected && (!namePrefix || p.name.startsWith(namePrefix))
+            ? { ...p, detected: true }
+            : p,
+        );
+      };
       const addDetected = (type: string, name: string, model = '', baseUrl = '', apiKey = '') => {
-        if (hasType(type)) return;
+        if (hasType(type)) {
+          markDetected(type, type === 'zcode' ? 'ZCode' : undefined);
+          return;
+        }
         next = [
           ...next,
           {
             id: newId('p'),
             name,
             kind: 'custom',
+            detected: true,
             type,
             apiFormat: 'openai',
             baseUrl,
@@ -273,7 +286,8 @@ export function ProviderManager() {
   }
 
   const builtins = providers.filter((p) => p.kind === 'builtin');
-  const customs = providers.filter((p) => p.kind !== 'builtin');
+  const apps = providers.filter((p) => p.kind !== 'builtin' && p.detected);
+  const customs = providers.filter((p) => p.kind !== 'builtin' && !p.detected);
 
   const renderRow = (entry: AiProviderEntry) => {
     const status = providerStatus(entry);
@@ -341,6 +355,12 @@ export function ProviderManager() {
         <aside className="prov-mgr__rail" aria-label="Provider list">
           <span className="prov-mgr__group">Providers</span>
           {builtins.map(renderRow)}
+          {apps.length > 0 && (
+            <>
+              <span className="prov-mgr__group">Installed AI apps</span>
+              {apps.map(renderRow)}
+            </>
+          )}
           <span className="prov-mgr__group">Custom providers</span>
           {customs.map(renderRow)}
         </aside>

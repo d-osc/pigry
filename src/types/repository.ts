@@ -137,6 +137,8 @@ export interface AiProviderEntry {
   id: string;
   name: string;
   kind: 'builtin' | 'custom';
+  /** Added automatically by the installed-AI-apps scan (not user-created). */
+  detected?: boolean;
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */
   type: string;
   apiFormat: AiApiFormat;
