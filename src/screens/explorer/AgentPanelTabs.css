@@ -770,3 +770,41 @@
   gap: 8px;
   margin-top: 4px;
 }
+
+.apanel-dlg__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.apanel-dlg__avatar--blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.know-dlg__head--profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.apanel-dlg__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.apanel__server .apanel__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}

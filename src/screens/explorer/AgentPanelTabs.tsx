@@ -545,7 +545,14 @@ export function AgentDetailsDialog({
       }}
     >
       <div className="know-dlg" role="dialog" aria-modal="true" aria-label="Agent details">
-        <header className="know-dlg__head">
+        <header className="know-dlg__head know-dlg__head--profile">
+          {agent.avatar ? (
+            <img className="apanel-dlg__avatar" src={agent.avatar} alt="" />
+          ) : (
+            <span className="apanel-dlg__avatar apanel-dlg__avatar--blank">
+              {agent.name.charAt(0).toUpperCase()}
+            </span>
+          )}
           <div>
             <strong className="know-dlg__title">{agent.name}</strong>
             <p className="know-dlg__sub">
@@ -558,7 +565,7 @@ export function AgentDetailsDialog({
             <X size={13} strokeWidth={1.5} />
           </button>
         </header>
-        <div className="know-dlg__body know-dlg__body--editor">
+        <div className="know-dlg__body know-dlg__body--editor apanel-dlg__body">
           {agent.role && <p className="apanel-dlg__role">{agent.role}</p>}
           {agent.description && (
             <div className="apanel-dlg__desc">{renderMarkdown(agent.description)}</div>
@@ -849,6 +856,9 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
         const base = builtins.filter((agent) => agent.tier === 'base');
         const card = (agent: (typeof builtins)[number]) => (
           <div key={agent.id} className="apanel__server">
+            {agent.avatar && (
+              <img className="apanel__avatar" src={agent.avatar} alt="" />
+            )}
             <div className="apanel__server-main">
               <div className="apanel__server-title">
                 <strong>{agent.name}</strong>

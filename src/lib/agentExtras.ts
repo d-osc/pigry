@@ -319,41 +319,67 @@ interface BuiltinSpec {
   role: string;
   description: string;
   tier: 'default' | 'base';
+  /** Emoji shown in the agent's avatar. */
+  emoji: string;
 }
 
 /** Tier 1 — one default agent per workspace menu/team. Answers every
  * untagged turn in that menu. */
 const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
-  { username: 'explorer', name: 'Explorer', team: 'Explorer', role: 'Code explorer', description: 'Helps browse files, edit code and understand the workspace.', tier: 'default' },
-  { username: 'commit-graph', name: 'Commit graph', team: 'Commit graph', role: 'History analyst', description: 'Reads the commit graph and explains history and relationships.', tier: 'default' },
-  { username: 'merge-branch', name: 'Merge branch', team: 'Merge branch', role: 'Merge planner', description: 'Plans merges and walks through conflicts and resolution.', tier: 'default' },
-  { username: 'push-commits', name: 'Push Commits', team: 'Push Commits', role: 'Push reviewer', description: 'Reviews unpushed commits and prepares pushes.', tier: 'default' },
-  { username: 'stashes-code', name: 'Stashes Code', team: 'Stashes Code', role: 'Stash keeper', description: 'Manages stashes — view, apply, pop and drop.', tier: 'default' },
-  { username: 'cherry-pick', name: 'Cherry Pick', team: 'Cherry Pick', role: 'Commit picker', description: 'Cherry-picks commits between branches.', tier: 'default' },
-  { username: 'branches', name: 'Branches', team: 'Branches', role: 'Branch navigator', description: 'Oversees local and remote branches and checkouts.', tier: 'default' },
-  { username: 'working-changes', name: 'Working changes', team: 'Working changes', role: 'Staging assistant', description: 'Stages, commits and reviews working changes.', tier: 'default' },
-  { username: 'copilot', name: 'Copilot', team: 'Copilot', role: 'General assistant', description: 'General-purpose assistant for the Copilot chat.', tier: 'default' },
-  { username: 'pull-requests', name: 'Pull requests', team: 'Pull requests', role: 'PR assistant', description: 'Drafts and reviews pull requests.', tier: 'default' },
-  { username: 'releases', name: 'Releases', team: 'Releases', role: 'Release manager', description: 'Prepares releases and release notes.', tier: 'default' },
-  { username: 'issues', name: 'Issues', team: 'Issues', role: 'Issue triage', description: 'Triages and drafts issues.', tier: 'default' },
-  { username: 'actions', name: 'Actions', team: 'Actions', role: 'CI assistant', description: 'Watches and explains GitHub Actions runs.', tier: 'default' },
-  { username: 'projects', name: 'Projects', team: 'Projects', role: 'Board assistant', description: 'Manages project boards.', tier: 'default' },
-  { username: 'wiki', name: 'Wiki', team: 'Wiki', role: 'Docs writer', description: 'Maintains the repository wiki.', tier: 'default' },
-  { username: 'security-and-quality', name: 'Security and quality', team: 'Security and quality', role: 'Security analyst', description: 'Reviews security and code quality.', tier: 'default' },
-  { username: 'insights', name: 'Insights', team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.', tier: 'default' },
+  { emoji: '🔍', username: 'explorer', name: 'Explorer', team: 'Explorer', role: 'Code explorer', description: 'Helps browse files, edit code and understand the workspace.', tier: 'default' },
+  { emoji: '📈', username: 'commit-graph', name: 'Commit graph', team: 'Commit graph', role: 'History analyst', description: 'Reads the commit graph and explains history and relationships.', tier: 'default' },
+  { emoji: '🌿', username: 'merge-branch', name: 'Merge branch', team: 'Merge branch', role: 'Merge planner', description: 'Plans merges and walks through conflicts and resolution.', tier: 'default' },
+  { emoji: '🚀', username: 'push-commits', name: 'Push Commits', team: 'Push Commits', role: 'Push reviewer', description: 'Reviews unpushed commits and prepares pushes.', tier: 'default' },
+  { emoji: '📦', username: 'stashes-code', name: 'Stashes Code', team: 'Stashes Code', role: 'Stash keeper', description: 'Manages stashes — view, apply, pop and drop.', tier: 'default' },
+  { emoji: '🍒', username: 'cherry-pick', name: 'Cherry Pick', team: 'Cherry Pick', role: 'Commit picker', description: 'Cherry-picks commits between branches.', tier: 'default' },
+  { emoji: '🌳', username: 'branches', name: 'Branches', team: 'Branches', role: 'Branch navigator', description: 'Oversees local and remote branches and checkouts.', tier: 'default' },
+  { emoji: '✏️', username: 'working-changes', name: 'Working changes', team: 'Working changes', role: 'Staging assistant', description: 'Stages, commits and reviews working changes.', tier: 'default' },
+  { emoji: '✨', username: 'copilot', name: 'Copilot', team: 'Copilot', role: 'General assistant', description: 'General-purpose assistant for the Copilot chat.', tier: 'default' },
+  { emoji: '🔀', username: 'pull-requests', name: 'Pull requests', team: 'Pull requests', role: 'PR assistant', description: 'Drafts and reviews pull requests.', tier: 'default' },
+  { emoji: '🏷️', username: 'releases', name: 'Releases', team: 'Releases', role: 'Release manager', description: 'Prepares releases and release notes.', tier: 'default' },
+  { emoji: '🎯', username: 'issues', name: 'Issues', team: 'Issues', role: 'Issue triage', description: 'Triages and drafts issues.', tier: 'default' },
+  { emoji: '⚙️', username: 'actions', name: 'Actions', team: 'Actions', role: 'CI assistant', description: 'Watches and explains GitHub Actions runs.', tier: 'default' },
+  { emoji: '📋', username: 'projects', name: 'Projects', team: 'Projects', role: 'Board assistant', description: 'Manages project boards.', tier: 'default' },
+  { emoji: '📚', username: 'wiki', name: 'Wiki', team: 'Wiki', role: 'Docs writer', description: 'Maintains the repository wiki.', tier: 'default' },
+  { emoji: '🛡️', username: 'security-and-quality', name: 'Security and quality', team: 'Security and quality', role: 'Security analyst', description: 'Reviews security and code quality.', tier: 'default' },
+  { emoji: '📊', username: 'insights', name: 'Insights', team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.', tier: 'default' },
 ];
 
 /** Tier 2 — base agents pigry provides. Each belongs to the team whose
  * menu fits its job; tag them (@username) in that team's menu. */
 const BASE_AGENT_SPECS: BuiltinSpec[] = [
-  { username: 'code-reviewer', name: 'Code Reviewer', team: 'Working changes', role: 'Code reviewer', description: 'Reviews the working changes for bugs, edge cases and style.', tier: 'base' },
-  { username: 'test-writer', name: 'Test Writer', team: 'Working changes', role: 'Test engineer', description: 'Writes unit tests for the changes and features you stage.', tier: 'base' },
-  { username: 'docs-writer', name: 'Docs Writer', team: 'Wiki', role: 'Technical writer', description: 'Writes and updates documentation and the wiki.', tier: 'base' },
-  { username: 'refactorer', name: 'Refactorer', team: 'Explorer', role: 'Refactoring specialist', description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.', tier: 'base' },
-  { username: 'bug-hunter', name: 'Bug Hunter', team: 'Commit graph', role: 'Debugger', description: 'Root-causes bugs from history, logs and code reading.', tier: 'base' },
-  { username: 'git-expert', name: 'Git Expert', team: 'Commit graph', role: 'Git specialist', description: 'Git workflows — history, rebase, merge and recovery.', tier: 'base' },
-  { username: 'security-auditor', name: 'Security Auditor', team: 'Security and quality', role: 'Security reviewer', description: 'Security and vulnerability review of code and configs.', tier: 'base' },
+  { emoji: '🧐', username: 'code-reviewer', name: 'Code Reviewer', team: 'Working changes', role: 'Code reviewer', description: 'Reviews the working changes for bugs, edge cases and style.', tier: 'base' },
+  { emoji: '🧪', username: 'test-writer', name: 'Test Writer', team: 'Working changes', role: 'Test engineer', description: 'Writes unit tests for the changes and features you stage.', tier: 'base' },
+  { emoji: '📝', username: 'docs-writer', name: 'Docs Writer', team: 'Wiki', role: 'Technical writer', description: 'Writes and updates documentation and the wiki.', tier: 'base' },
+  { emoji: '🛠️', username: 'refactorer', name: 'Refactorer', team: 'Explorer', role: 'Refactoring specialist', description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.', tier: 'base' },
+  { emoji: '🐞', username: 'bug-hunter', name: 'Bug Hunter', team: 'Commit graph', role: 'Debugger', description: 'Root-causes bugs from history, logs and code reading.', tier: 'base' },
+  { emoji: '🔧', username: 'git-expert', name: 'Git Expert', team: 'Commit graph', role: 'Git specialist', description: 'Git workflows — history, rebase, merge and recovery.', tier: 'base' },
+  { emoji: '🛡️', username: 'security-auditor', name: 'Security Auditor', team: 'Security and quality', role: 'Security reviewer', description: 'Security and vulnerability review of code and configs.', tier: 'base' },
 ];
+
+const AVATAR_GRADIENTS: Array<[string, string]> = [
+  ['#8b9dff', '#5f7adb'],
+  ['#6dd6ad', '#3ea982'],
+  ['#edb675', '#d9974e'],
+  ['#e79098', '#c96f77'],
+  ['#62cee7', '#3aa3bd'],
+  ['#b59aff', '#8f6fe0'],
+];
+
+/** Inline SVG avatar (emoji + gradient) as a data URL — no binary assets. */
+function builtinAvatar(username: string, emoji: string): string {
+  const hash = [...username].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const [from, to] = AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">' +
+    '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+    `<stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>` +
+    '</linearGradient></defs>' +
+    '<rect width="96" height="96" rx="22" fill="url(#g)"/>' +
+    `<text x="48" y="63" font-size="42" text-anchor="middle">${emoji}</text>` +
+    '</svg>';
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
 
 function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
   return {
@@ -369,6 +395,7 @@ function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
     mcpServers: [],
     builtIn: true,
     tier: spec.tier,
+    avatar: builtinAvatar(spec.username, spec.emoji),
   };
 }
 
