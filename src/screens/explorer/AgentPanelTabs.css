@@ -486,6 +486,16 @@
 }
 
 /* Agent avatar + editor extras */
+/* Agent avatar on list cards + dialogs (SVG data URLs render at natural
+   96px otherwise). */
+.apanel__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
 .apanel__avatar-row {
   display: flex;
   align-items: center;
