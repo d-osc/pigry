@@ -712,6 +712,33 @@ export async function stashPreview(index: number): Promise<StashPreview> {
   return invoke('stash_preview', { index });
 }
 
+/** ---- Web tools for the agent loop ---- */
+
+export interface WebHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+export interface WebSearchResult {
+  query: string;
+  hits: WebHit[];
+}
+
+export async function webSearch(query: string): Promise<WebSearchResult> {
+  return invoke('web_search', { query });
+}
+
+export interface BrowserPage {
+  url: string;
+  title: string;
+  text: string;
+}
+
+export async function browserPage(url: string, waitMs?: number): Promise<BrowserPage> {
+  return invoke('browser_page', { url, waitMs: waitMs ?? null });
+}
+
 export async function getFileHunks(
   path: string,
   staged: boolean,

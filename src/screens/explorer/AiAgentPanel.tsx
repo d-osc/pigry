@@ -34,6 +34,7 @@ import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCo
 import { allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills } from '../../lib/skills';
+import { webSearch, browserPage } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -194,6 +195,47 @@ const FILE_TOOLS: ToolSpec[] = [
   },
 ];
 
+/** Web tools — search + headless browser (backend curls/launches, no CORS). */
+const WEB_TOOLS: ToolSpec[] = [
+  {
+    id: 'web_search',
+    name: 'web_search',
+    description:
+      'Search the web with DuckDuckGo. Returns the top results as title/url/snippet lines. Use playwright after this to read a specific page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query' },
+      },
+      required: ['query'],
+    },
+    run: async (input) => {
+      const result = await webSearch(String(input.query ?? ''));
+      return result.hits
+        .map((hit, i) => `${i + 1}. ${hit.title}\n   ${hit.url}\n   ${hit.snippet}`)
+        .join('\n');
+    },
+  },
+  {
+    id: 'playwright',
+    name: 'playwright',
+    description:
+      'Open a URL in headless Edge/Chrome and read the rendered page text (JavaScript already executed). Use after web_search to read a specific result.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The http(s) URL to open' },
+        wait_ms: { type: 'number', description: 'How long to let the page run (ms, default 1200)' },
+      },
+      required: ['url'],
+    },
+    run: async (input) => {
+      const page = await browserPage(String(input.url ?? ''), Number(input.wait_ms ?? 1200) || undefined);
+      return `title: ${page.title}\nurl: ${page.url}\n\n${page.text}`;
+    },
+  },
+];
+
 /** Short label shown as a tool-activity chip in the chat bubble. */
 function toolLabel(name: string, input: Record<string, unknown>, output: string): string {
   if (name === 'write_file') return `write_file → ${String(input.path ?? '?')}`;
@@ -202,6 +244,8 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
     return typeof input.line === 'number' ? `read_file → ${path}:${input.line}` : `read_file → ${path}`;
   }
   if (name === 'list_files') return `list_files (${output.split('\n').length} paths)`;
+  if (name === 'web_search') return `web_search: ${String(input.query ?? '?')}`;
+  if (name === 'playwright') return `playwright → ${String(input.url ?? '?')}`;
   return name;
 }
 
@@ -1092,7 +1136,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = FILE_TOOLS.filter(
+    const tools = [...FILE_TOOLS, ...WEB_TOOLS].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({

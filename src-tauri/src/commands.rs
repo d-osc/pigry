@@ -1652,6 +1652,21 @@ pub async fn cherry_pick_abort(
 }
 
 #[tauri::command]
+pub async fn web_search(
+    query: String,
+) -> Result<crate::web::WebSearchResult, String> {
+    crate::web::web_search(&query)
+}
+
+#[tauri::command]
+pub async fn browser_page(
+    url: String,
+    waitMs: Option<u64>,
+) -> Result<crate::web::BrowserPage, String> {
+    crate::web::browser_page(&url, waitMs.unwrap_or(1200))
+}
+
+#[tauri::command]
 pub async fn stash_preview(
     state: State<'_, Mutex<AppState>>,
     index: usize,
