@@ -428,18 +428,33 @@ export async function ghOpenUrl(url: string): Promise<void> {
 export interface CliDetectResult {
   claude: boolean;
   codex: boolean;
+  copilot: boolean;
   claudeVersion: string;
   codexVersion: string;
+  copilotVersion: string;
+  /** Default model read from each app's own config (empty when unset). */
+  claudeModel: string;
+  codexModel: string;
 }
 
-/** Detect installed CLI coding agents (claude / codex). */
+/** Detect installed CLI coding agents (claude / codex / copilot). */
 export async function cliDetect(): Promise<CliDetectResult> {
-  if (!isTauri()) return { claude: false, codex: false, claudeVersion: '', codexVersion: '' };
+  if (!isTauri())
+    return {
+      claude: false,
+      codex: false,
+      copilot: false,
+      claudeVersion: '',
+      codexVersion: '',
+      copilotVersion: '',
+      claudeModel: '',
+      codexModel: '',
+    };
   return invoke('cli_detect');
 }
 
-/** Runs a prompt through claude / codex (blocking until the agent finishes). */
-export async function cliAgentRun(cli: 'claude' | 'codex', prompt: string): Promise<string> {
+/** Runs a prompt through claude / codex / copilot (blocking until the agent finishes). */
+export async function cliAgentRun(cli: 'claude' | 'codex' | 'copilot', prompt: string): Promise<string> {
   if (!isTauri()) throw new Error('CLI agents require the desktop app');
   return invoke<string>('cli_agent_run', { cli, prompt });
 }

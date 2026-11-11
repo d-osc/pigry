@@ -20,12 +20,13 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { aiChat } from '../../lib/tauriClient';
+import { aiChat, cliDetect } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
   activeProviderId,
   anthropicEndpoint,
+  isCliProvider,
   loadProviders,
   newId,
   providerStatus,
@@ -40,6 +41,9 @@ import { AddModelDialog } from './AddModelDialog';
 import './ProviderManager.css';
 
 type ModelTestState = 'running' | 'ok' | 'fail';
+
+/** Auto-scan for installed AI apps — once per app session. */
+let scannedAppsOnce = false;
 
 export function ProviderManager() {
   const { notify } = useRepository();
@@ -197,6 +201,64 @@ export function ProviderManager() {
     }
   };
 
+  /** Scans for installed AI apps (ZCode, Claude Code, Codex, Copilot) and
+   * adds providers for the ones not configured yet, reading each app's own
+   * config for its default model. */
+  const scanApps = async (silent = false) => {
+    const added: string[] = [];
+    try {
+      let next = [...loadProviders()];
+      const hasType = (type: string) => next.some((p) => p.type === type);
+      const addDetected = (type: string, name: string, model = '', baseUrl = '', apiKey = '') => {
+        if (hasType(type)) return;
+        next = [
+          ...next,
+          {
+            id: newId('p'),
+            name,
+            kind: 'custom',
+            type,
+            apiFormat: 'openai',
+            baseUrl,
+            apiKey,
+            model,
+            enabled: true,
+            models: model ? [{ id: newId('m'), name: model, vision: false, enabled: true }] : [],
+          },
+        ];
+        added.push(name);
+      };
+      const detected = await cliDetect();
+      if (detected.claude) addDetected('claude-code', 'Claude Code', detected.claudeModel);
+      if (detected.codex) addDetected('codex', 'Codex', detected.codexModel);
+      if (detected.copilot) addDetected('copilot', 'GitHub Copilot');
+      try {
+        const zcode = await detectZcodeGlm();
+        if (zcode && !hasType('zcode')) {
+          addDetected('zcode', zcode.name, zcode.model, zcode.baseUrl, zcode.apiKey);
+        }
+      } catch {
+        // ZCode desktop not installed / unreadable
+      }
+      if (added.length > 0) {
+        commit(next);
+        notify('Added AI apps: ' + added.join(', '), 'success');
+      } else if (!silent) {
+        notify('All installed AI apps are already configured', 'success');
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), 'error');
+    }
+  };
+
+  // Scan once per app session when the settings screen opens.
+  useEffect(() => {
+    if (scannedAppsOnce) return;
+    scannedAppsOnce = true;
+    void scanApps(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Focus the name field as soon as rename mode starts.
   useEffect(() => {
     if (nameEditing) nameInputRef.current?.focus();
@@ -247,6 +309,15 @@ export function ProviderManager() {
           Manage custom model providers. Once configured, they can be selected during chat.
         </p>
         <div className="prov-mgr__header-actions">
+          <button
+            type="button"
+            className="prov-mgr__ghost-btn"
+            title="Look for ZCode, Claude Code, Codex and Copilot installed on this machine"
+            onClick={() => void scanApps()}
+          >
+            <Sparkles size={12} strokeWidth={1.5} />
+            Detect AI apps
+          </button>
           <button
             type="button"
             className="prov-mgr__icon-btn"
@@ -399,6 +470,16 @@ export function ProviderManager() {
                 <Sparkles size={12} strokeWidth={1.5} />
                 Detect from ZCode desktop
               </button>
+            </div>
+          )}
+
+          {isCliProvider(selected) && (
+            <div className="prov-mgr__hint-row">
+              <p className="prov-mgr__footnote">
+                Runs through the installed{' '}
+                {selected.type === 'claude-code' ? 'claude' : selected.type === 'copilot' ? 'copilot' : 'codex'} CLI —
+                uses that app's own login and subscription. Base URL and API key are not needed.
+              </p>
             </div>
           )}
 

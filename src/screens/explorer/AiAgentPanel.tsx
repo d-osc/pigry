@@ -1543,7 +1543,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setImageGate(spec);
     const repliedAs = target.username;
     if (isCliProvider(provider)) {
-      const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
+      const cli =
+        provider.type === 'claude-code' ? 'claude' : provider.type === 'copilot' ? 'copilot' : 'codex';
       const output = await cliAgentRun(cli, last.text);
       return {
         role: 'assistant',
@@ -1752,7 +1753,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setReplyingAs(repliedAs);
 
     if (isCliProvider(provider)) {
-      const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
+      const cli =
+        provider.type === 'claude-code' ? 'claude' : provider.type === 'copilot' ? 'copilot' : 'codex';
       let working = history;
       try {
         const output = await cliAgentRun(cli, last.text);

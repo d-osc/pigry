@@ -452,5 +452,5 @@ export function providerStatus(entry: AiProviderEntry): 'ok' | 'warn' {
 
 /** True when this provider talks to a CLI agent instead of an HTTP API. */
 export function isCliProvider(entry: AiProviderEntry): boolean {
-  return entry.type === 'claude-code' || entry.type === 'codex';
+  return entry.type === 'claude-code' || entry.type === 'codex' || entry.type === 'copilot';
 }

@@ -6,7 +6,7 @@
 use serde::Serialize;
 use std::io::Write;
 use std::os::windows::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -157,8 +157,13 @@ pub fn zcode_creds() -> Result<ZcodeCreds, String> {
 pub struct CliDetectResult {
     pub claude: bool,
     pub codex: bool,
+    pub copilot: bool,
     pub claude_version: String,
     pub codex_version: String,
+    pub copilot_version: String,
+    /// Default model read from each app's own config, if any.
+    pub claude_model: String,
+    pub codex_model: String,
 }
 
 fn cli_version(exe: &str) -> String {
@@ -174,14 +179,130 @@ fn cli_version(exe: &str) -> String {
     }
 }
 
+/// A file under the user's home directory (e.g. .claude/settings.json).
+fn home_file(rel: &str) -> Option<PathBuf> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok()?;
+    let path = Path::new(&home).join(rel);
+    path.is_file().then_some(path)
+}
+
+/// Reads the configured default model from Claude Code's settings.json.
+fn read_claude_model() -> String {
+    let Some(path) = home_file(".claude/settings.json") else {
+        return String::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    parse_claude_model(&text)
+}
+
+/// Parses `"model": "…"` out of Claude Code settings content.
+fn parse_claude_model(text: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| {
+            v.get("model")
+                .and_then(|m| m.as_str())
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_default()
+}
+
+/// Reads the configured default model from Codex's config.toml (`model = "…"`).
+fn read_codex_model() -> String {
+    let Some(path) = home_file(".codex/config.toml") else {
+        return String::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    parse_codex_model(&text)
+}
+
+/// Parses `model = "…"` out of Codex config.toml content.
+fn parse_codex_model(text: &str) -> String {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("model") && trimmed.contains('=') {
+            let value = trimmed[trimmed.find('=').unwrap() + 1..]
+                .trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim()
+                .to_string();
+            if !value.is_empty() {
+                return value;
+            }
+        }
+    }
+    String::new()
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_claude_settings_model() {
+        assert_eq!(
+            parse_claude_model(r#"{"model":"opus","env":{} }"#),
+            "opus"
+        );
+        assert_eq!(parse_claude_model(r#"{"other":1}"#), "");
+        assert_eq!(parse_claude_model("not json"), "");
+    }
+
+    #[test]
+    fn parses_codex_config_model() {
+        assert_eq!(parse_codex_model("model = \"gpt-5.1-codex\"\n"), "gpt-5.1-codex");
+        assert_eq!(parse_codex_model("model = 'o4-mini'\n"), "o4-mini");
+        assert_eq!(parse_codex_model("[profile]\nmodel=\"x\"\n"), "x");
+        assert_eq!(parse_codex_model("no model here\n"), "");
+    }
+
+    #[test]
+    fn cli_detect_reports_without_panicking() {
+        // IO-bound smoke test — on dev machines claude/codex exist; on CI they
+        // may not. Only assert internal consistency.
+        let det = cli_detect();
+        assert_eq!(det.claude, !det.claude_version.is_empty());
+        assert_eq!(det.codex, !det.codex_version.is_empty());
+        assert_eq!(det.copilot, !det.copilot_version.is_empty());
+        if !det.claude {
+            assert!(det.claude_model.is_empty());
+        }
+        if !det.codex {
+            assert!(det.codex_model.is_empty());
+        }
+    }
+}
+
 pub fn cli_detect() -> CliDetectResult {
     let claude_version = cli_version("claude");
     let codex_version = cli_version("codex");
+    let copilot_version = cli_version("copilot");
+    let claude_model = if claude_version.is_empty() {
+        String::new()
+    } else {
+        read_claude_model()
+    };
+    let codex_model = if codex_version.is_empty() {
+        String::new()
+    } else {
+        read_codex_model()
+    };
     CliDetectResult {
         claude: !claude_version.is_empty(),
         codex: !codex_version.is_empty(),
+        copilot: !copilot_version.is_empty(),
         claude_version,
         codex_version,
+        copilot_version,
+        claude_model,
+        codex_model,
     }
 }
 
@@ -197,6 +318,9 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, Strin
         }
         "codex" => {
             cmd.args(["exec", prompt]);
+        }
+        "copilot" => {
+            cmd.args(["-p", prompt]);
         }
         other => return Err(format!("unknown CLI agent: {other}")),
     }
