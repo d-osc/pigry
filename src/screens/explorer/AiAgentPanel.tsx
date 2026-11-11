@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Code,
   FileText,
+  Globe,
   Heading2,
   History,
   ImageIcon,
@@ -23,6 +24,7 @@ import {
   Plug,
   Puzzle,
   Quote,
+  SearchCode,
   Sparkles,
   Strikethrough,
   Trash2,
@@ -134,6 +136,88 @@ function agentProfileText(agent: AgentEntry): string {
     agent.mcpServers.length > 0 ? `- mcp: ${agent.mcpServers.join(', ')}` : '',
   ].filter(Boolean);
   return `${lines.join('\n')}\n\nYou are @${agent.username}. Respond in character as this agent.`;
+}
+
+/* ---------- live activity indicator (per-phase animations) ---------- */
+
+type ActivityKind = 'thinking' | 'analysis' | 'research' | 'mcp' | 'tool';
+
+interface ActivityState {
+  kind: ActivityKind;
+  label: string;
+}
+
+/** Tools that hit the web — the agent is researching. */
+const RESEARCH_TOOLS = new Set(['web_search', 'playwright', 'browser', 'browser_devtools', 'browser_page']);
+/** Read/inspect tools — the agent is analyzing the repo. */
+const ANALYSIS_TOOLS = new Set([
+  'read_file',
+  'read_diff',
+  'read_history',
+  'search_code',
+  'read_image',
+  'read_pdf',
+  'read_word',
+  'read_excel',
+  'list_files',
+  'agent_lookup',
+  'agent_contacts',
+]);
+
+/** Classifies a tool call into the activity animation it should show. */
+export function activityForTool(name: string): ActivityState {
+  const lower = name.toLowerCase();
+  let mcp = lower.startsWith('mcp');
+  if (!mcp) {
+    try {
+      mcp = loadMcpServers().some(
+        (server) => server.enabled && lower.includes(server.name.toLowerCase()),
+      );
+    } catch {
+      // registry unavailable
+    }
+  }
+  if (mcp) return { kind: 'mcp', label: name };
+  if (RESEARCH_TOOLS.has(lower)) return { kind: 'research', label: name };
+  if (ANALYSIS_TOOLS.has(lower)) return { kind: 'analysis', label: name };
+  return { kind: 'tool', label: name };
+}
+
+/** The animated status row shown under the replying agent's name. */
+function ActivityIndicator({ activity }: { activity: ActivityState | null }) {
+  const kind = activity?.kind ?? 'thinking';
+  const label = activity?.label
+    ? {
+        thinking: 'Reasoning',
+        analysis: `Analyzing — ${activity.label}`,
+        research: `Researching — ${activity.label}`,
+        mcp: `MCP — ${activity.label}`,
+        tool: `Using ${activity.label}`,
+      }[kind]
+    : 'Thinking';
+  const Icon =
+    kind === 'analysis'
+      ? SearchCode
+      : kind === 'research'
+        ? Globe
+        : kind === 'mcp'
+          ? Plug
+          : kind === 'tool'
+            ? Wrench
+            : Brain;
+  return (
+    <span className={`ai-activity ai-activity--${kind}`}>
+      <span className="ai-activity__icon">
+        <Icon size={12} strokeWidth={1.75} />
+      </span>
+      <span className="ai-activity__label">{label}</span>
+      <span className="ai-typing" aria-label="AI is working">
+        <i />
+        <i />
+        <i />
+      </span>
+    </span>
+  );
 }
 
 /* ---------- agent file tools (real tool-use loop) ---------- */
@@ -708,6 +792,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const [sending, setSending] = useState(false);
   /** Username of the agent currently generating a reply (typing indicator). */
   const [replyingAs, setReplyingAs] = useState('');
+  /** Live phase of the replying agent — drives the activity animation. */
+  const [activity, setActivity] = useState<ActivityState | null>(null);
   /** Which section of the panel is visible — chat body or one of the tool tabs. */
   const [panelTab, setPanelTab] = useState<
     'chat' | 'tools' | 'mcp' | 'plugins' | 'agents' | 'hooks' | 'instructions'
@@ -1358,10 +1444,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     chainLeft = 3,
   ): Promise<ChatMessage[]> => {
     setSending(true);
+    setActivity({ kind: 'thinking', label: '' });
     try {
       return await runTurn(history, target ?? null, chainLeft);
     } finally {
       setSending(false);
+      setActivity(null);
       setReplyingAs('');
       // after-reply hooks (Hooks tab) run once the reply lands or fails.
       try {
@@ -1383,6 +1471,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   ): Promise<void> => {
     setSending(true);
     setReplyingAs(targets.map((t) => '@' + t.username).join(' + '));
+    setActivity({ kind: 'thinking', label: '' });
     const replies = new Map<string, ChatMessage>();
     try {
       const settled = await Promise.allSettled(
@@ -1423,6 +1512,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       }
     } finally {
       setSending(false);
+      setActivity(null);
       setReplyingAs('');
     }
   };
@@ -1525,6 +1615,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const toolEvents: string[] = [];
     const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
     for (let iter = 0; iter < 8; iter++) {
+      setActivity({ kind: 'thinking', label: '' });
       const payload = isAnthropic
         ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
         : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
@@ -1556,6 +1647,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         for (const call of calls) {
           const tool = tools.find((t) => t.name === call.name);
           const input = call.input ?? {};
+          setActivity(activityForTool(String(call.name)));
           const output = await runToolCall(tool, String(call.name), input);
           toolEvents.push(toolLabel(String(call.name), input, output));
           results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
@@ -1598,6 +1690,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             // malformed arguments — runToolCall reports the failure
           }
           const tool = tools.find((t) => t.name === name);
+          setActivity(activityForTool(name));
           const output = await runToolCall(tool, name, input);
           toolEvents.push(toolLabel(name, input, output));
           apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
@@ -1765,6 +1858,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         // until it produces a final text reply (max 8 tool rounds).
         const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
         for (let iter = 0; iter < 8; iter++) {
+          setActivity({ kind: 'thinking', label: '' });
           const payload = isAnthropic
             ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
             : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
@@ -1797,7 +1891,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             for (const call of calls) {
               const tool = tools.find((t) => t.name === call.name);
               const input = call.input ?? {};
-              const output = await runToolCall(tool, String(call.name), input);
+              setActivity(activityForTool(String(call.name)));
+          const output = await runToolCall(tool, String(call.name), input);
               toolEvents.push(toolLabel(String(call.name), input, output));
               results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
             }
@@ -1839,7 +1934,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                 // malformed arguments — runToolCall reports the failure
               }
               const tool = tools.find((t) => t.name === name);
-              const output = await runToolCall(tool, name, input);
+              setActivity(activityForTool(name));
+          const output = await runToolCall(tool, name, input);
               toolEvents.push(toolLabel(name, input, output));
               apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
               if (imageGate && pendingImages.length > 0) {
@@ -2337,11 +2433,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                     </span>
                     <span className="explorer-ai__msg-name">{agentDisplayName(replyingAs)}</span>
                   </div>
-                  <span className="ai-typing" aria-label="AI is thinking">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
+                  <ActivityIndicator activity={activity} />
                 </div>
               )}
           </section>

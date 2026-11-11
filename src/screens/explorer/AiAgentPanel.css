@@ -1426,3 +1426,91 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---- Live activity indicator — one animation per phase ---- */
+
+.ai-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: var(--fs-xs);
+}
+
+.ai-activity__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.ai-activity__label {
+  color: var(--text-secondary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-activity .ai-typing {
+  margin: 0;
+}
+
+/* thinking — the icon gently breathes */
+.ai-activity--thinking .ai-activity__icon {
+  animation: ai-think 1.3s ease-in-out infinite;
+}
+
+@keyframes ai-think {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+
+/* analysis — scanning sweep left-right */
+.ai-activity--analysis .ai-activity__icon {
+  animation: ai-scan 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-scan {
+  0%, 100% { transform: translateX(-2px); }
+  50% { transform: translateX(2px); }
+}
+
+/* research — the globe spins */
+.ai-activity--research .ai-activity__icon {
+  animation: ai-spin 1.6s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* mcp — plug blinks while connecting */
+.ai-activity--mcp .ai-activity__icon {
+  animation: ai-blink 1s steps(2, start) infinite;
+}
+
+@keyframes ai-blink {
+  50% { opacity: 0.3; }
+}
+
+/* tool — wrench taps up and down */
+.ai-activity--tool .ai-activity__icon {
+  animation: ai-tap 0.9s ease-in-out infinite;
+}
+
+@keyframes ai-tap {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50% { transform: translateY(-3px) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-activity__icon {
+    animation: none !important;
+  }
+}
