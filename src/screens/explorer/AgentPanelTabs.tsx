@@ -16,6 +16,7 @@ import {
   Plug,
   Plus,
   Quote,
+  RotateCcw,
   Strikethrough,
   Trash2,
   X,
@@ -41,6 +42,9 @@ import {
   AGENT_TEAMS,
   allAgents,
   builtinAgents,
+  hasAgentOverride,
+  resetAgentOverride,
+  setAgentOverride,
 
   loadAgents,
   loadHooks,
@@ -627,8 +631,8 @@ export function AgentDetailsDialog({
           </div>
           {agent.builtIn ? (
             <p className="apanel-dlg__note">
-              Built-in {agent.tier === 'default' ? 'default' : 'base'} agent — hard-coded in the
-              app, cannot be edited or deleted.
+              Built-in {agent.tier === 'default' ? 'default' : 'base'} agent — you can edit it;
+              your changes override the default and can be reset any time.
             </p>
           ) : (
             onEdit && (
@@ -824,6 +828,14 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
 
   const submit = () => {
     if (!draft || !draft.name.trim()) return;
+    // Built-in agents keep their identity — the edit lands in the override
+    // store (resettable) instead of the extension registry.
+    if (draft.builtIn) {
+      setAgentOverride({ ...draft, isNew: undefined } as AgentEntry);
+      setAgents(loadAgents());
+      setDraft(null);
+      return;
+    }
     const entry: AgentEntry = {
       id: draft.id,
       name: draft.name.trim(),
@@ -903,6 +915,32 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
             <span className="apanel__builtin-tag">
               {agent.tier === 'default' ? 'default' : 'base'}
             </span>
+            {hasAgentOverride(agent.username) && (
+              <button
+                type="button"
+                className="apanel__view-btn"
+                title="Reset to the original definition"
+                aria-label={`Reset ${agent.name}`}
+                onClick={() => {
+                  resetAgentOverride(agent.username);
+                  setAgents(loadAgents());
+                }}
+              >
+                <RotateCcw size={12} strokeWidth={1.5} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="apanel__view-btn"
+              title={`Edit ${agent.name}`}
+              aria-label={`Edit ${agent.name}`}
+              onClick={() => {
+                setDescPreview(false);
+                setDraft({ ...agent, isNew: false });
+              }}
+            >
+              <Pencil size={12} strokeWidth={1.5} />
+            </button>
             <button
               type="button"
               className="apanel__view-btn"
@@ -933,15 +971,11 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
         <AgentDetailsDialog
           agent={viewing}
           onClose={() => setViewing(null)}
-          onEdit={
-            viewing.builtIn
-              ? undefined
-              : () => {
-                  setViewing(null);
-                  setDescPreview(false);
-                  setDraft({ ...viewing, isNew: false });
-                }
-          }
+          onEdit={() => {
+            setViewing(null);
+            setDescPreview(false);
+            setDraft({ ...viewing, isNew: false });
+          }}
         />
       )}
       <h4 className="apanel__group-title">Extension agents</h4>
@@ -1074,6 +1108,8 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
               <input
                 value={draft.username}
                 placeholder="test-runner"
+                disabled={Boolean(draft.builtIn)}
+                title={draft.builtIn ? 'Built-in agents keep their @username' : undefined}
                 onChange={(event) => setDraft({ ...draft, username: event.target.value })}
               />
             </label>

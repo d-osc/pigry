@@ -1125,7 +1125,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   /** Tier 1: the hard-coded default agent of this menu's team — answers
    * every turn that carries no @mention, with its own private memory. */
   const defaultAgent = builtinAgents().find(
-    (agent) => agent.tier === 'default' && agent.team === team,
+    (agent) => agent.enabled && agent.tier === 'default' && agent.team === team,
   );
 
   const send = async () => {

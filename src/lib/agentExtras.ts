@@ -639,9 +639,77 @@ function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
   };
 }
 
-/** Tier 1 + 2 agents, computed fresh — never stored in agents.json. */
+/** Tier 1 + 2 agents, computed fresh — never stored in agents.json. User
+ * edits live in a separate override store, keyed by username. */
 export function builtinAgents(): AgentEntry[] {
-  return DEFAULT_AGENT_SPECS.map(builtinFromSpec);
+  const overrides = loadAgentOverrides();
+  return DEFAULT_AGENT_SPECS.map((spec) => {
+    const base = builtinFromSpec(spec);
+    const patch = overrides[spec.username];
+    if (!patch) return base;
+    return { ...base, ...patch, id: base.id, username: base.username, builtIn: true, tier: spec.tier };
+  });
+}
+
+/* ---- Built-in agent overrides — user edits, resettable to factory ---- */
+
+const OVERRIDES_KEY = 'pigry:agent-overrides';
+
+/** Fields a user may customize on a built-in agent (identity/tier locked). */
+const OVERRIDE_FIELDS = [
+  'name',
+  'role',
+  'team',
+  'description',
+  'enabled',
+  'tools',
+  'skills',
+  'mcpServers',
+  'avatar',
+  'providerId',
+  'model',
+  'effort',
+] as const;
+
+export function loadAgentOverrides(): Record<string, Partial<AgentEntry>> {
+  try {
+    const raw = localStorage.getItem(OVERRIDES_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, Partial<AgentEntry>>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAgentOverrides(map: Record<string, Partial<AgentEntry>>) {
+  try {
+    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(map));
+  } catch {
+    // session-only
+  }
+}
+
+/** Stores a user's edit of a built-in agent (keyed by its username). */
+export function setAgentOverride(entry: AgentEntry): void {
+  const map = loadAgentOverrides();
+  const patch: Record<string, unknown> = {};
+  for (const field of OVERRIDE_FIELDS) {
+    const value = entry[field];
+    if (value !== undefined) patch[field] = value;
+  }
+  map[entry.username] = patch;
+  saveAgentOverrides(map);
+}
+
+/** Drops a built-in agent's overrides — back to the factory definition. */
+export function resetAgentOverride(username: string): void {
+  const map = loadAgentOverrides();
+  if (!(username in map)) return;
+  delete map[username];
+  saveAgentOverrides(map);
+}
+
+export function hasAgentOverride(username: string): boolean {
+  return username in loadAgentOverrides();
 }
 
 /** Every agent: built-in (tiers 1-2) first, then the user's extension
