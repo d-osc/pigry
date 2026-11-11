@@ -37,6 +37,8 @@ import {
   applyPlugin,
   INSTRUCTIONS_PATH,
   AGENT_TEAMS,
+  allAgents,
+  builtinAgents,
   loadAgents,
   loadHooks,
   loadPlugins,
@@ -537,7 +539,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const [descMention, setDescMention] = useState<MentionState | null>(null);
   const [descMentionIdx, setDescMentionIdx] = useState(0);
   const descMentionList = useMemo(
-    () => (descMention ? mentionCandidates(loadAgents(), descMention.query) : []),
+    () => (descMention ? mentionCandidates(allAgents(), descMention.query) : []),
     [descMention],
   );
   const descMentionPos = Math.min(descMentionIdx, Math.max(0, descMentionList.length - 1));
@@ -697,9 +699,43 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
       </button>
       {agents.length === 0 && (
         <div className="apanel__empty">
-          <p>No agents defined yet.</p>
+          <p>No extension agents yet — add your own below the built-ins.</p>
         </div>
       )}
+      {(() => {
+        const builtins = builtinAgents();
+        const defaults = builtins.filter((agent) => agent.tier === 'default');
+        const base = builtins.filter((agent) => agent.tier === 'base');
+        const card = (agent: (typeof builtins)[number]) => (
+          <div key={agent.id} className="apanel__server">
+            <div className="apanel__server-main">
+              <div className="apanel__server-title">
+                <strong>{agent.name}</strong>
+                {agent.username && <span className="apanel__username">@{agent.username}</span>}
+                {agent.role && <span className="apanel__role">{agent.role}</span>}
+                {agent.team && <span className="apanel__role apanel__team">{agent.team}</span>}
+              </div>
+              {agent.description && <p className="apanel__server-detail">{agent.description}</p>}
+            </div>
+            <span className="apanel__builtin-tag">
+              {agent.tier === 'default' ? 'default' : 'base'}
+            </span>
+          </div>
+        );
+        return (
+          <div className="apanel__builtin">
+            <h4 className="apanel__group-title">Built-in — default agents</h4>
+            <p className="apanel__group-hint">
+              One per workspace menu — answers turns typed there without a tag.
+            </p>
+            {defaults.map(card)}
+            <h4 className="apanel__group-title">Built-in — base agents</h4>
+            <p className="apanel__group-hint">Tag them with @username from any menu.</p>
+            {base.map(card)}
+          </div>
+        );
+      })()}
+      <h4 className="apanel__group-title">Extension agents</h4>
       <div className="apanel__servers">
         {agents.map((agent) => (
           <section

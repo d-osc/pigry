@@ -31,6 +31,7 @@ import {
   X,
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { allAgents, builtinAgents } from '../../lib/agentExtras';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -388,7 +389,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   /** The signed-in GitHub account — real name + avatar on user messages. */
   const [ghUser, setGhUser] = useState<{ name: string; login: string; avatarUrl: string } | null>(null);
   // Attribution stamped into every message: agent username + repo owner.
-  const actingAgent = loadAgents().find((agent) => agent.enabled);
+  const actingAgent = allAgents().find((agent) => agent.enabled);
   const agentUsername = actingAgent?.username || 'ai-agent';
   const ownerName = ghUser?.name || repository?.account.name || 'local-user';
   const [images, setImages] = useState<ChatImage[]>([]);
@@ -729,11 +730,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setAttachedFiles((current) => current.filter((file) => file.path !== path));
   };
 
-  /** The menu's default agent — first enabled member of the panel's team.
-   * Answers turns that carry no @mention, with its own provider/model and
-   * its own private memory scope. */
-  const defaultAgent = loadAgents().find(
-    (agent) => agent.enabled && agent.username && agent.team === team,
+  /** Tier 1: the hard-coded default agent of this menu's team — answers
+   * every turn that carries no @mention, with its own private memory. */
+  const defaultAgent = builtinAgents().find(
+    (agent) => agent.tier === 'default' && agent.team === team,
   );
 
   const send = async () => {
@@ -745,7 +745,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const target =
       firstMentionedAgent(
         text,
-        loadAgents().filter((agent) => agent.enabled && agent.username),
+        allAgents().filter((agent) => agent.enabled && agent.username),
       ) ?? defaultAgent ?? null;
     if (!active) {
       setMessages((m) => [
@@ -807,7 +807,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     // Agents defined on the Agents tab — the model can reference them by name.
     try {
-      const agents = loadAgents().filter((agent) => agent.enabled);
+      const agents = allAgents().filter((agent) => agent.enabled);
       if (agents.length > 0) {
         context +=
           `\n\n[Available agents]\n` +
@@ -818,6 +818,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               ];
               if (agent.role) parts.push(` (${agent.role})`);
               if (agent.team) parts.push(` [team: ${agent.team}]`);
+              if (agent.tier === 'default') parts.push(' [default agent]');
+              if (agent.tier === 'base') parts.push(' [base agent]');
               if (agent.description) parts.push(` — ${agent.description}`);
               if (agent.tools.length > 0) parts.push(` | tools: ${agent.tools.join(', ')}`);
               if (agent.skills.length > 0) parts.push(` | skills: ${agent.skills.join(', ')}`);
@@ -915,7 +917,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const target =
       firstMentionedAgent(
         edited.text,
-        loadAgents().filter((agent) => agent.enabled && agent.username),
+        allAgents().filter((agent) => agent.enabled && agent.username),
       ) ?? defaultAgent ?? null;
     await doSend(history, target);
   };

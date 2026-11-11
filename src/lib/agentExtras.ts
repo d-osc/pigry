@@ -57,6 +57,10 @@ export interface AgentEntry {
   mcpServers: string[];
   /** Seeded by the app as a menu's default agent (not user-created). */
   builtIn?: boolean;
+  /** Built-in tier: 'default' = per-menu main agent (answers untagged
+   * turns), 'base' = pigry-provided specialist (@tag to use). Extension
+   * (user-created/imported) agents have no tier. */
+  tier?: 'default' | 'base';
 }
 
 const AGENTS_KEY = 'pigry:agents';
@@ -129,6 +133,7 @@ export function normalizeAgents(list: unknown[]): AgentEntry[] {
       skills: Array.isArray(entry.skills) ? entry.skills.map(String) : [],
       mcpServers: Array.isArray(entry.mcpServers) ? entry.mcpServers.map(String) : [],
       builtIn: entry.builtIn === true,
+      tier: entry.tier === 'default' || entry.tier === 'base' ? entry.tier : undefined,
     }));
 }
 
@@ -136,7 +141,8 @@ export function loadAgents(): AgentEntry[] {
   try {
     const raw = localStorage.getItem(AGENTS_KEY);
     if (!raw) return [];
-    return normalizeAgents(JSON.parse(raw));
+    // Built-in agents (tiers 1-2) are hard-coded and never stored here.
+    return normalizeAgents(JSON.parse(raw)).filter((agent) => !agent.builtIn);
   } catch {
     return [];
   }
@@ -303,62 +309,96 @@ export function saveAgents(agents: AgentEntry[]) {
   void mirrorAgentsToRepo(agents);
 }
 
-/* ---- Built-in default agents — one per workspace menu/team. Every menu
- * answers untagged turns through its own agent without needing @mentions.
- * Teams the user already populated are left untouched. ---- */
+/* ---- Built-in agents, hard-coded in tiers (never stored in agents.json,
+ * never editable or deletable) ---- */
 
-interface DefaultAgentSpec {
-  team: string;
+interface BuiltinSpec {
+  username: string;
+  name: string;
+  team?: string;
   role: string;
   description: string;
+  tier: 'default' | 'base';
 }
 
-const DEFAULT_AGENT_SPECS: DefaultAgentSpec[] = [
-  { team: 'Explorer', role: 'Code explorer', description: 'Helps browse files, edit code and understand the workspace.' },
-  { team: 'Commit graph', role: 'History analyst', description: 'Reads the commit graph and explains history and relationships.' },
-  { team: 'Merge branch', role: 'Merge planner', description: 'Plans merges and walks through conflicts and resolution.' },
-  { team: 'Push Commits', role: 'Push reviewer', description: 'Reviews unpushed commits and prepares pushes.' },
-  { team: 'Stashes Code', role: 'Stash keeper', description: 'Manages stashes — view, apply, pop and drop.' },
-  { team: 'Cherry Pick', role: 'Commit picker', description: 'Cherry-picks commits between branches.' },
-  { team: 'Branches', role: 'Branch navigator', description: 'Oversees local and remote branches and checkouts.' },
-  { team: 'Working changes', role: 'Staging assistant', description: 'Stages, commits and reviews working changes.' },
-  { team: 'Copilot', role: 'General assistant', description: 'General-purpose assistant for the Copilot chat.' },
-  { team: 'Pull requests', role: 'PR assistant', description: 'Drafts and reviews pull requests.' },
-  { team: 'Releases', role: 'Release manager', description: 'Prepares releases and release notes.' },
-  { team: 'Issues', role: 'Issue triage', description: 'Triages and drafts issues.' },
-  { team: 'Actions', role: 'CI assistant', description: 'Watches and explains GitHub Actions runs.' },
-  { team: 'Projects', role: 'Board assistant', description: 'Manages project boards.' },
-  { team: 'Wiki', role: 'Docs writer', description: 'Maintains the repository wiki.' },
-  { team: 'Security and quality', role: 'Security analyst', description: 'Reviews security and code quality.' },
-  { team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.' },
+/** Tier 1 — one default agent per workspace menu/team. Answers every
+ * untagged turn in that menu. */
+const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
+  { username: 'explorer', name: 'Explorer Agent', team: 'Explorer', role: 'Code explorer', description: 'Helps browse files, edit code and understand the workspace.', tier: 'default' },
+  { username: 'commit-graph', name: 'Commit graph Agent', team: 'Commit graph', role: 'History analyst', description: 'Reads the commit graph and explains history and relationships.', tier: 'default' },
+  { username: 'merge-branch', name: 'Merge branch Agent', team: 'Merge branch', role: 'Merge planner', description: 'Plans merges and walks through conflicts and resolution.', tier: 'default' },
+  { username: 'push-commits', name: 'Push Commits Agent', team: 'Push Commits', role: 'Push reviewer', description: 'Reviews unpushed commits and prepares pushes.', tier: 'default' },
+  { username: 'stashes-code', name: 'Stashes Code Agent', team: 'Stashes Code', role: 'Stash keeper', description: 'Manages stashes — view, apply, pop and drop.', tier: 'default' },
+  { username: 'cherry-pick', name: 'Cherry Pick Agent', team: 'Cherry Pick', role: 'Commit picker', description: 'Cherry-picks commits between branches.', tier: 'default' },
+  { username: 'branches', name: 'Branches Agent', team: 'Branches', role: 'Branch navigator', description: 'Oversees local and remote branches and checkouts.', tier: 'default' },
+  { username: 'working-changes', name: 'Working changes Agent', team: 'Working changes', role: 'Staging assistant', description: 'Stages, commits and reviews working changes.', tier: 'default' },
+  { username: 'copilot', name: 'Copilot Agent', team: 'Copilot', role: 'General assistant', description: 'General-purpose assistant for the Copilot chat.', tier: 'default' },
+  { username: 'pull-requests', name: 'Pull requests Agent', team: 'Pull requests', role: 'PR assistant', description: 'Drafts and reviews pull requests.', tier: 'default' },
+  { username: 'releases', name: 'Releases Agent', team: 'Releases', role: 'Release manager', description: 'Prepares releases and release notes.', tier: 'default' },
+  { username: 'issues', name: 'Issues Agent', team: 'Issues', role: 'Issue triage', description: 'Triages and drafts issues.', tier: 'default' },
+  { username: 'actions', name: 'Actions Agent', team: 'Actions', role: 'CI assistant', description: 'Watches and explains GitHub Actions runs.', tier: 'default' },
+  { username: 'projects', name: 'Projects Agent', team: 'Projects', role: 'Board assistant', description: 'Manages project boards.', tier: 'default' },
+  { username: 'wiki', name: 'Wiki Agent', team: 'Wiki', role: 'Docs writer', description: 'Maintains the repository wiki.', tier: 'default' },
+  { username: 'security-and-quality', name: 'Security and quality Agent', team: 'Security and quality', role: 'Security analyst', description: 'Reviews security and code quality.', tier: 'default' },
+  { username: 'insights', name: 'Insights Agent', team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.', tier: 'default' },
 ];
 
-function teamSlug(team: string): string {
-  return team.toLowerCase().replace(/\s+/g, '-');
+/** Tier 2 — base agents pigry provides. Tag them (@username) from any menu. */
+const BASE_AGENT_SPECS: BuiltinSpec[] = [
+  { username: 'code-reviewer', name: 'Code Reviewer', role: 'Code reviewer', description: 'Reviews diffs and files for bugs, edge cases and style.', tier: 'base' },
+  { username: 'test-writer', name: 'Test Writer', role: 'Test engineer', description: 'Writes unit tests for code, features and fixes.', tier: 'base' },
+  { username: 'docs-writer', name: 'Docs Writer', role: 'Technical writer', description: 'Writes and updates documentation and READMEs.', tier: 'base' },
+  { username: 'refactorer', name: 'Refactorer', role: 'Refactoring specialist', description: 'Suggests and applies safe, behaviour-preserving refactors.', tier: 'base' },
+  { username: 'bug-hunter', name: 'Bug Hunter', role: 'Debugger', description: 'Root-causes bugs from symptoms, logs and code reading.', tier: 'base' },
+  { username: 'git-expert', name: 'Git Expert', role: 'Git specialist', description: 'Git workflows — history, rebase, merge and recovery.', tier: 'base' },
+  { username: 'security-auditor', name: 'Security Auditor', role: 'Security reviewer', description: 'Security and vulnerability review of code and configs.', tier: 'base' },
+];
+
+function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
+  return {
+    id: `agent-builtin-${spec.username}`,
+    name: spec.name,
+    username: spec.username,
+    role: spec.role,
+    team: spec.team,
+    description: spec.description,
+    enabled: true,
+    tools: [],
+    skills: [],
+    mcpServers: [],
+    builtIn: true,
+    tier: spec.tier,
+  };
 }
 
-/** Seeds a built-in default agent for every workspace team that has no
- * agent yet. Runs at startup; user-created agents are never replaced. */
-export function ensureDefaultAgents(): void {
-  const agents = loadAgents();
-  const seeded: AgentEntry[] = [];
-  for (const spec of DEFAULT_AGENT_SPECS) {
-    if (agents.some((agent) => agent.team === spec.team)) continue;
-    seeded.push({
-      id: `agent-default-${teamSlug(spec.team)}`,
-      name: `${spec.team} Agent`,
-      username: teamSlug(spec.team),
-      role: spec.role,
-      team: spec.team,
-      description: spec.description,
-      enabled: true,
-      tools: [],
-      skills: [],
-      mcpServers: [],
-      builtIn: true,
-    });
+/** Tier 1 + 2 agents, computed fresh — never stored in agents.json. */
+export function builtinAgents(): AgentEntry[] {
+  return [...DEFAULT_AGENT_SPECS, ...BASE_AGENT_SPECS].map(builtinFromSpec);
+}
+
+/** Every agent: built-in (tiers 1-2) first, then the user's extension
+ * agents (tier 3). Usernames colliding with a built-in are hidden. */
+export function allAgents(): AgentEntry[] {
+  const builtins = builtinAgents();
+  const users = loadAgents().filter(
+    (agent) =>
+      !agent.builtIn && !builtins.some((b) => b.username === agent.username),
+  );
+  return [...builtins, ...users];
+}
+
+/** Removes previously-seeded default agents from the store — tiers 1-2 are
+ * hard-coded in the app now and must not live in agents.json. */
+export function purgeSeededDefaults(): void {
+  try {
+    const raw = localStorage.getItem(AGENTS_KEY);
+    if (!raw) return;
+    const stored = normalizeAgents(JSON.parse(raw));
+    const kept = stored.filter((agent) => !agent.builtIn);
+    if (kept.length !== stored.length) saveAgents(kept);
+  } catch {
+    // nothing to purge
   }
-  if (seeded.length > 0) saveAgents([...agents, ...seeded]);
 }
 
 /* ---- Hooks (lifecycle commands run around agent sends) ---- */
