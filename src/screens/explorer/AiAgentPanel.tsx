@@ -619,9 +619,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     () =>
       allAgents().filter(
         (agent) =>
-          agent.enabled &&
-          agent.username &&
-          (agent.tier === 'base' || agent.team === team),
+          agent.enabled && agent.username && agent.team === team,
       ),
     [team, repository?.headOid],
   );
@@ -1103,10 +1101,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // Agents defined on the Agents tab — the model can reference them by name.
     try {
       const agents = allAgents().filter(
-        (agent) =>
-          agent.enabled &&
-          agent.username &&
-          (agent.tier === 'base' || agent.team === team),
+        (agent) => agent.enabled && agent.username && agent.team === team,
       );
       if (agents.length > 0) {
         context +=

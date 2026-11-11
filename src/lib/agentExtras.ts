@@ -343,15 +343,16 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
   { username: 'insights', name: 'Insights', team: 'Insights', role: 'Analytics', description: 'Explains repository insights and stats.', tier: 'default' },
 ];
 
-/** Tier 2 — base agents pigry provides. Tag them (@username) from any menu. */
+/** Tier 2 — base agents pigry provides. Each belongs to the team whose
+ * menu fits its job; tag them (@username) in that team's menu. */
 const BASE_AGENT_SPECS: BuiltinSpec[] = [
-  { username: 'code-reviewer', name: 'Code Reviewer', role: 'Code reviewer', description: 'Reviews diffs and files for bugs, edge cases and style.', tier: 'base' },
-  { username: 'test-writer', name: 'Test Writer', role: 'Test engineer', description: 'Writes unit tests for code, features and fixes.', tier: 'base' },
-  { username: 'docs-writer', name: 'Docs Writer', role: 'Technical writer', description: 'Writes and updates documentation and READMEs.', tier: 'base' },
-  { username: 'refactorer', name: 'Refactorer', role: 'Refactoring specialist', description: 'Suggests and applies safe, behaviour-preserving refactors.', tier: 'base' },
-  { username: 'bug-hunter', name: 'Bug Hunter', role: 'Debugger', description: 'Root-causes bugs from symptoms, logs and code reading.', tier: 'base' },
-  { username: 'git-expert', name: 'Git Expert', role: 'Git specialist', description: 'Git workflows — history, rebase, merge and recovery.', tier: 'base' },
-  { username: 'security-auditor', name: 'Security Auditor', role: 'Security reviewer', description: 'Security and vulnerability review of code and configs.', tier: 'base' },
+  { username: 'code-reviewer', name: 'Code Reviewer', team: 'Working changes', role: 'Code reviewer', description: 'Reviews the working changes for bugs, edge cases and style.', tier: 'base' },
+  { username: 'test-writer', name: 'Test Writer', team: 'Working changes', role: 'Test engineer', description: 'Writes unit tests for the changes and features you stage.', tier: 'base' },
+  { username: 'docs-writer', name: 'Docs Writer', team: 'Wiki', role: 'Technical writer', description: 'Writes and updates documentation and the wiki.', tier: 'base' },
+  { username: 'refactorer', name: 'Refactorer', team: 'Explorer', role: 'Refactoring specialist', description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.', tier: 'base' },
+  { username: 'bug-hunter', name: 'Bug Hunter', team: 'Commit graph', role: 'Debugger', description: 'Root-causes bugs from history, logs and code reading.', tier: 'base' },
+  { username: 'git-expert', name: 'Git Expert', team: 'Commit graph', role: 'Git specialist', description: 'Git workflows — history, rebase, merge and recovery.', tier: 'base' },
+  { username: 'security-auditor', name: 'Security Auditor', team: 'Security and quality', role: 'Security reviewer', description: 'Security and vulnerability review of code and configs.', tier: 'base' },
 ];
 
 function builtinFromSpec(spec: BuiltinSpec): AgentEntry {

@@ -774,7 +774,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
             </p>
             {defaults.map(card)}
             <h4 className="apanel__group-title">Built-in — base agents</h4>
-            <p className="apanel__group-hint">Tag them with @username from any menu.</p>
+            <p className="apanel__group-hint">Tag them with @username in their team’s menu.</p>
             {base.map(card)}
           </div>
         );
