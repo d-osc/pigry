@@ -7,6 +7,12 @@
   gap: 10px;
   padding: 12px 12px 16px;
   overflow-y: auto;
+  /* Flex children must keep their natural height — otherwise the whole
+     list squishes to fit and there is nothing for the wheel to scroll. */
+}
+
+.apanel > * {
+  flex-shrink: 0;
 }
 
 .apanel__intro {
