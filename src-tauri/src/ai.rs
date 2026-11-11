@@ -186,6 +186,7 @@ const DETECTABLE_APPS: &[(&str, &str)] = &[
     ("claude", "Claude Code"),
     ("codex", "Codex"),
     ("copilot", "GitHub Copilot"),
+    ("gemini", "Gemini"),
     ("zcode", "ZCode"),
     ("autoclaw", "AutoClaw"),
     ("workbuddy", "WorkBuddy"),
@@ -204,8 +205,40 @@ fn read_app_model(binary: &str) -> String {
     match binary {
         "claude" => read_claude_model(),
         "codex" => read_codex_model(),
+        "gemini" => read_gemini_model(),
         _ => String::new(),
     }
+}
+
+/// Reads the configured default model from Gemini CLI's settings.json
+/// (`"model": "…"` or `"model": { "name": "…" }`).
+fn read_gemini_model() -> String {
+    let Some(path) = home_file(".gemini/settings.json") else {
+        return String::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    parse_gemini_model(&text)
+}
+
+/// Parses the model field out of Gemini CLI settings content.
+fn parse_gemini_model(text: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .and_then(|v| {
+            let model = v.get("model")?;
+            model
+                .as_str()
+                .map(|s| s.trim().to_string())
+                .or_else(|| {
+                    model
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.trim().to_string())
+                })
+        })
+        .unwrap_or_default()
 }
 
 fn cli_version(exe: &str) -> String {
@@ -306,6 +339,16 @@ mod cli_tests {
     }
 
     #[test]
+    fn parses_gemini_settings_model() {
+        assert_eq!(parse_gemini_model(r#"{"model":"gemini-2.5-pro"}"#), "gemini-2.5-pro");
+        assert_eq!(
+            parse_gemini_model(r#"{"model":{"name":"gemini-2.5-flash"}}"#),
+            "gemini-2.5-flash"
+        );
+        assert_eq!(parse_gemini_model(r#"{"other":1}"#), "");
+    }
+
+    #[test]
     fn cli_detect_reports_without_panicking() {
         // IO-bound smoke test — on dev machines claude/codex exist; on CI they
         // may not. Only assert internal consistency.
@@ -386,6 +429,11 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, Strin
             cmd.args(["exec", "-"]);
         }
         "copilot" => {
+            prompt_via_stdin = false;
+            let flat = prompt.replace(['\r', '\n'], " ");
+            cmd.args(["-p", &flat]);
+        }
+        "gemini" => {
             prompt_via_stdin = false;
             let flat = prompt.replace(['\r', '\n'], " ");
             cmd.args(["-p", &flat]);
