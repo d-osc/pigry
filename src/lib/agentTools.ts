@@ -47,6 +47,7 @@ export const AGENT_TOOLS: AgentTool[] = [
 
   // Agents (agent_lookup — registry introspection for the agent itself)
   { id: 'agents-lookup', name: 'agent_lookup', group: 'Agents', description: "Look up agent profiles — list every agent or read one agent's full details by @username" },
+  { id: 'agents-contacts', name: 'agent_contacts', group: 'Agents', description: 'The workspace contact book — every enabled agent grouped by team, one line each' },
   { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'Read and edit the repository wiki' },
 ];
 

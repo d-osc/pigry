@@ -31,7 +31,8 @@ import {
   X,
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
-import { allAgents, builtinAgents } from '../../lib/agentExtras';
+import {
+  AGENT_TEAMS, allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
@@ -319,6 +320,43 @@ function agentProfileBlock(agent: AgentEntry): string {
   return parts.join('\n');
 }
 
+/** AGENT_CONTACTS_TOOL — the workspace contact book, grouped by team. */
+const AGENT_CONTACTS_TOOL: ToolSpec = {
+  id: 'agent_contacts',
+  name: 'agent_contacts',
+  description:
+    'The workspace contact book: every enabled agent grouped by team, one line each (@handle, name, role). Use it to see who exists and who to contact; use agent_lookup for one agent\u2019s full profile.',
+  input_schema: { type: 'object', properties: {} },
+  run: async () => {
+    const agents = allAgents().filter((agent) => agent.enabled && agent.username);
+    if (agents.length === 0) return '(no agents registered)';
+    const teamOrder: string[] = AGENT_TEAMS as unknown as string[];
+    const grouped = new Map<string, typeof agents>();
+    for (const agent of agents) {
+      const key = agent.team ?? '';
+      const bucket = grouped.get(key);
+      if (bucket) bucket.push(agent);
+      else grouped.set(key, [agent]);
+    }
+    const ordered = [
+      ...teamOrder.filter((team) => grouped.has(team)),
+      ...[...grouped.keys()].filter((team) => !teamOrder.includes(team)),
+    ];
+    return ordered
+      .map((team) => {
+        const members = grouped
+          .get(team)
+          ?.map(
+            (agent) =>
+              `  @${agent.username} — ${agent.name}${agent.role ? ` (${agent.role})` : ''}${agent.tier ? ` [${agent.tier}]` : ''}`,
+          )
+          .join('\n');
+        return `[${team || 'no team'}]\n${members}`;
+      })
+      .join('\n\n');
+  },
+};
+
 /** AGENT_LOOKUP_TOOL — the agent introspects the registry itself. */
 const AGENT_LOOKUP_TOOL: ToolSpec = {
   id: 'agent_lookup',
@@ -451,6 +489,7 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
   if (name === 'web_search') return `web_search: ${String(input.query ?? '?')}`;
   if (name === 'playwright') return `playwright → ${String(input.url ?? '?')}`;
   if (name === 'read_image') return `read_image → ${String(input.path ?? '?')}`;
+  if (name === 'agent_contacts') return 'agent_contacts — team directory';
   if (name === 'read_pdf') return `read_pdf → ${String(input.path ?? '?')}`;
   if (name === 'read_word') return `read_word → ${String(input.path ?? '?')}`;
   if (name === 'read_excel') return `read_excel → ${String(input.path ?? '?')}`;
@@ -1358,7 +1397,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_LOOKUP_TOOL].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({
