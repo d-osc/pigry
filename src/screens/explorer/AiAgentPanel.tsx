@@ -2567,11 +2567,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               <button
                 type="button"
                 className="explorer-ai__model-pill"
-                title="Change provider or model"
+                title={`Change provider or model — ${providerLabel}${activeEffort ? ` · effort ${activeEffort}` : ''}`}
                 onClick={() => setModelDialogOpen(true)}
               >
                 <span className={`explorer-ai__model-dot explorer-ai__model-dot--${pointedProvider && pointedProvider.apiKey && pointedProvider.baseUrl ? 'ok' : 'warn'}`} />
-                <span className="explorer-ai__model-pill-name">{providerLabel}</span>
+                <span className="explorer-ai__model-pill-name">{pointedModel || providerLabel}</span>
                 {activeEffort && <span className="explorer-ai__model-pill-effort">{activeEffort}</span>}
                 <ChevronDown size={11} strokeWidth={1.75} />
               </button>

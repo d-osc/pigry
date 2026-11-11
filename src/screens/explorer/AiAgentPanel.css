@@ -1401,3 +1401,28 @@
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--accent);
 }
+
+/* Model pill hugs the composer's right corner; model name ellipsizes. */
+.ai-composer {
+  padding: 8px 6px 8px 10px;
+}
+
+.ai-composer__bar {
+  padding-right: 0;
+}
+
+.ai-composer__right {
+  margin-left: auto;
+}
+
+.explorer-ai__model-pill {
+  max-width: 220px;
+  min-width: 0;
+  padding: 4px 8px 4px 9px;
+}
+
+.explorer-ai__model-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
