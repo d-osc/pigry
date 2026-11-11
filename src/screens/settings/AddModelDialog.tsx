@@ -32,6 +32,30 @@ function contextBadge(tokens: number): string {
   return String(tokens);
 }
 
+/** One editable effort row: level name → its payload-parameter JSON. */
+interface EffortRow {
+  level: string;
+  params: string;
+}
+
+/** Turns a model's saved levels + mapping JSON into editable rows. */
+function mappingToRows(levels: string[], mapping: string | undefined): EffortRow[] {
+  const rows = levels.map((level) => ({ level, params: '' }));
+  if (mapping) {
+    try {
+      const obj = JSON.parse(mapping) as Record<string, unknown>;
+      for (const [level, fragment] of Object.entries(obj)) {
+        const existing = rows.find((r) => r.level === level);
+        if (existing) existing.params = JSON.stringify(fragment);
+        else rows.push({ level, params: JSON.stringify(fragment) });
+      }
+    } catch {
+      // unparsable legacy mapping — start from bare level names
+    }
+  }
+  return rows;
+}
+
 interface Props {
   /** Existing model — the dialog prefills and Save updates it in place. */
   initial?: AiModelEntry | null;
@@ -57,20 +81,16 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
     return initial?.vision ? ['image'] : [];
   });
   const [capabilities, setCapabilities] = useState<string[]>(initial?.capabilities ?? []);
-  const [levels, setLevels] = useState<string[]>(initial?.reasoningLevels ?? []);
-  const [levelDraft, setLevelDraft] = useState<string | null>(null);
-  const [mapping, setMapping] = useState(initial?.reasoningMapping ?? '');
+  /** Editable effort types — each vendor's known models come prefilled. */
+  const [effortRows, setEffortRows] = useState<EffortRow[]>(() =>
+    mappingToRows(initial?.reasoningLevels ?? [], initial?.reasoningMapping),
+  );
   const [error, setError] = useState('');
   const idInputRef = useRef<HTMLInputElement | null>(null);
-  const levelInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     idInputRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (levelDraft !== null) levelInputRef.current?.focus();
-  }, [levelDraft]);
 
   const specHint = useMemo(() => {
     if (!smart || !modelId.trim()) return '';
@@ -87,7 +107,8 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
     if (spec.maxOutputTokens) setMaxOutputTokens(String(spec.maxOutputTokens));
     setInputTypes(spec.inputTypes ? spec.inputTypes.filter((t) => t !== 'text') : []);
     setCapabilities(spec.capabilities ?? []);
-    setLevels(spec.reasoningLevels ?? []);
+    // Vendor default effort types come prefilled and stay editable.
+    setEffortRows(mappingToRows(spec.reasoningLevels ?? [], spec.reasoningMapping));
   };
 
   const changeModelId = (value: string) => {
@@ -109,9 +130,7 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
       initial?.inputTypes ? initial.inputTypes.filter((t) => t !== 'text') : initial?.vision ? ['image'] : [],
     );
     setCapabilities(initial?.capabilities ?? []);
-    setLevels(initial?.reasoningLevels ?? []);
-    setLevelDraft(null);
-    setMapping(initial?.reasoningMapping ?? '');
+    setEffortRows(mappingToRows(initial?.reasoningLevels ?? [], initial?.reasoningMapping));
     setError('');
     idInputRef.current?.focus();
   };
@@ -126,6 +145,24 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
     const ctx = Number(contextWindow.replace(/[,\s_]/g, ''));
     const maxOut = Number(maxOutputTokens.replace(/[,\s_]/g, ''));
     const types = ['text', ...inputTypes];
+    // Build effort levels + the level→parameters mapping from the rows.
+    const rows = effortRows.filter((r) => r.level.trim());
+    const levels = rows.map((r) => r.level.trim());
+    let mapping: string | undefined;
+    if (rows.length > 0) {
+      const obj: Record<string, unknown> = {};
+      for (const row of rows) {
+        const raw = row.params.trim();
+        if (!raw) continue;
+        try {
+          obj[row.level.trim()] = JSON.parse(raw);
+        } catch {
+          setError(`Effort parameters for "${row.level.trim()}" are not valid JSON.`);
+          return;
+        }
+      }
+      if (Object.keys(obj).length > 0) mapping = JSON.stringify(obj);
+    }
     const model: AiModelEntry = {
       id: initial?.id ?? newId('m'),
       name,
@@ -140,15 +177,9 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
     if (inputTypes.length > 0) model.inputTypes = types;
     if (capabilities.length > 0) model.capabilities = capabilities;
     if (levels.length > 0) model.reasoningLevels = levels;
-    if (mapping.trim()) model.reasoningMapping = mapping.trim();
+    if (mapping) model.reasoningMapping = mapping;
     if (smart && matchModelSpec(name)) model.smartConfig = true;
     onSave(model);
-  };
-
-  const commitLevel = () => {
-    const value = (levelDraft ?? '').trim().toLowerCase();
-    if (value && !levels.includes(value)) setLevels((prev) => [...prev, value]);
-    setLevelDraft(null);
   };
 
   return (
@@ -292,69 +323,63 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
 
               <div className="amdlg__group">
                 <span className="amdlg__label">
-                  Reasoning levels (low to high)
-                  <span className="amdlg__help" title="Ordered reasoning effort levels the model supports.">
+                  Effort types (level → parameters)
+                  <span className="amdlg__help" title="Custom effort levels the chat picker offers. Known models come with their vendor's defaults prefilled — edit rows freely. Each level's JSON is merged into chat requests when that level is selected.">
                     ?
                   </span>
                 </span>
-                <div className="amdlg__chips">
-                  {levels.map((level) => (
-                    <span key={level} className="amdlg__chip amdlg__chip--on">
-                      {level}
-                      <button
-                        type="button"
-                        className="amdlg__chip-x"
-                        aria-label={`Remove ${level}`}
-                        onClick={() => setLevels((prev) => prev.filter((v) => v !== level))}
-                      >
-                        <X size={10} strokeWidth={2} />
-                      </button>
-                    </span>
-                  ))}
-                  {levelDraft !== null ? (
-                    <input
-                      ref={levelInputRef}
-                      className="amdlg__level-input"
-                      value={levelDraft}
-                      onChange={(event) => setLevelDraft(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') commitLevel();
-                        if (event.key === 'Escape') setLevelDraft(null);
-                      }}
-                      onBlur={commitLevel}
-                      placeholder="level name"
-                      aria-label="Reasoning level name"
-                      spellCheck={false}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="amdlg__chip amdlg__chip-add"
-                      aria-label="Add reasoning level"
-                      title="Add a reasoning level"
-                      onClick={() => setLevelDraft('')}
-                    >
-                      <Plus size={12} strokeWidth={2} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="amdlg__group">
-                <span className="amdlg__label">
-                  Reasoning parameter mapping
-                  <span className="amdlg__help" title="Optional JSON: level name → request parameters, merged into payloads when that level is selected.">
-                    ?
-                  </span>
-                </span>
-                <textarea
-                  className="prov-mgr__control amdlg__mapping"
-                  value={mapping}
-                  onChange={(event) => setMapping(event.target.value)}
-                  placeholder={'{"high": {"thinking": {"type": "enabled"}}}'}
-                  aria-label="Reasoning parameter mapping"
-                  spellCheck={false}
-                />
+                {effortRows.length > 0 && (
+                  <div className="amdlg__effort-rows">
+                    {effortRows.map((row, index) => (
+                      <div key={index} className="amdlg__effort-row">
+                        <input
+                          className="amdlg__effort-name"
+                          value={row.level}
+                          onChange={(event) =>
+                            setEffortRows((prev) =>
+                              prev.map((r, i) => (i === index ? { ...r, level: event.target.value } : r)),
+                            )
+                          }
+                          placeholder="level"
+                          aria-label={`Effort level ${index + 1} name`}
+                          spellCheck={false}
+                        />
+                        <span className="amdlg__effort-arrow">→</span>
+                        <input
+                          className="amdlg__effort-params"
+                          value={row.params}
+                          onChange={(event) =>
+                            setEffortRows((prev) =>
+                              prev.map((r, i) => (i === index ? { ...r, params: event.target.value } : r)),
+                            )
+                          }
+                          placeholder='{"thinking": {"type": "enabled"}}'
+                          aria-label={`Effort level ${index + 1} parameters`}
+                          spellCheck={false}
+                        />
+                        <button
+                          type="button"
+                          className="amdlg__chip-x"
+                          aria-label={`Remove effort level ${row.level || index + 1}`}
+                          onClick={() => setEffortRows((prev) => prev.filter((_, i) => i !== index))}
+                        >
+                          <X size={11} strokeWidth={2} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="amdlg__effort-add"
+                  onClick={() => setEffortRows((prev) => [...prev, { level: '', params: '' }])}
+                >
+                  <Plus size={11} strokeWidth={2} />
+                  Add effort level
+                </button>
+                <p className="amdlg__hint">
+                  Leave parameters empty for a level without vendor parameters.
+                </p>
               </div>
             </div>
           )}

@@ -744,3 +744,75 @@ select.prov-mgr__control {
 .amdlg__reset:hover {
   color: var(--text-secondary);
 }
+
+/* Effort types editor — one row per level: name → parameter JSON */
+
+.amdlg__effort-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.amdlg__effort-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.amdlg__effort-name {
+  width: 96px;
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.amdlg__effort-name:focus {
+  border-color: var(--accent);
+}
+
+.amdlg__effort-arrow {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.amdlg__effort-params {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.amdlg__effort-params:focus {
+  border-color: var(--accent);
+}
+
+.amdlg__effort-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.amdlg__effort-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
