@@ -33,6 +33,7 @@ import {
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents } from '../../lib/agentExtras';
+import { effortPayloadFragment } from '../../lib/aiProviders';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills, getSkillContent } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
@@ -218,11 +219,32 @@ function maxTokensFor(spec: { maxOutputTokens?: number } | null | undefined): nu
 }
 
 /** Resolves the AiModelEntry matching the provider's active model name. */
-function modelSpecOf(provider: { model?: string; models?: Array<{ name?: string; inputTypes?: string[]; maxOutputTokens?: number }> }):
-  | { inputTypes?: string[]; maxOutputTokens?: number }
+function modelSpecOf(provider: {
+  model?: string;
+  models?: Array<{
+    name?: string;
+    inputTypes?: string[];
+    maxOutputTokens?: number;
+    effort?: string;
+    reasoningMapping?: string;
+  }>;
+}):
+  | { inputTypes?: string[]; maxOutputTokens?: number; effort?: string; reasoningMapping?: string }
   | null {
   const entry = provider.models?.find((m) => m.name === provider.model);
-  return entry ? { inputTypes: entry.inputTypes, maxOutputTokens: entry.maxOutputTokens } : null;
+  return entry
+    ? {
+        inputTypes: entry.inputTypes,
+        maxOutputTokens: entry.maxOutputTokens,
+        effort: entry.effort,
+        reasoningMapping: entry.reasoningMapping,
+      }
+    : null;
+}
+
+/** Vendor effort params for the current turn (thinking/effort/thinkingConfig). */
+function effortFor(spec: { effort?: string; reasoningMapping?: string } | null | undefined): Record<string, unknown> {
+  return effortPayloadFragment(spec?.effort, spec?.reasoningMapping) ?? {};
 }
 
 const READ_IMAGE_TOOL: ToolSpec = {
@@ -1497,8 +1519,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
     for (let iter = 0; iter < 8; iter++) {
       const payload = isAnthropic
-        ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages }
-        : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, stream: false };
+        ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
+        : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
       const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
       const parsed = safeParse(result.body);
       if (!result.ok) {
@@ -1707,8 +1729,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       if (tools.length === 0) {
         // No tools allowed — plain single-shot reply (legacy path).
         const payload = isAnthropic
-          ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), messages: [{ role: 'user', content }] }
-        : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), stream: false };
+          ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), messages: [{ role: 'user', content }], ...effortFor(spec) }
+        : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
         const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
         const parsed = safeParse(result.body);
         const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
@@ -1730,8 +1752,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
         for (let iter = 0; iter < 8; iter++) {
           const payload = isAnthropic
-            ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages }
-            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), stream: false };
+            ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
+            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
           const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
           const parsed = safeParse(result.body);
           if (!result.ok) {
@@ -1891,6 +1913,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   };
 
   const providerLabel = active ? `${active.name || active.type}${active.model ? ' · ' + active.model : ''}` : 'No provider';
+  // Selected effort level of the active model (shown on the composer pill).
+  const activeEffort = active?.models.find((m) => m.name === active.model)?.effort ?? '';
 
   /** The group name in the header: custom name > auto title > default. */
   const headerTitle =
@@ -2523,6 +2547,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               >
                 <span className={`explorer-ai__model-dot explorer-ai__model-dot--${active && active.apiKey && active.baseUrl ? 'ok' : 'warn'}`} />
                 <span className="explorer-ai__model-pill-name">{providerLabel}</span>
+                {activeEffort && <span className="explorer-ai__model-pill-effort">{activeEffort}</span>}
                 <ChevronDown size={11} strokeWidth={1.75} />
               </button>
               <button
@@ -2560,6 +2585,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           providers={providers}
           activeId={active?.id ?? ''}
           onClose={() => setModelDialogOpen(false)}
+          onEffort={(providerId, modelId, effort) => {
+            const list = providers.map((p) =>
+              p.id === providerId
+                ? { ...p, models: p.models.map((m) => (m.id === modelId ? { ...m, effort } : m)) }
+                : p,
+            );
+            saveProviders(list, activeId);
+            setProviders(list);
+          }}
           onPick={(providerId, modelName) => {
             // Persist the chosen model as the provider's active one, then
             // switch — the panel and legacy consumers both read the mirror.
@@ -2598,17 +2632,20 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   );
 }
 
-/** Full-screen dialog: pick a provider on the left, a model on the right. */
+/** Full-screen dialog: pick a provider on the left, a model on the right.
+ * Models with reasoning levels get an inline Effort selector under their row. */
 function ModelPickerDialog({
   providers,
   activeId,
   onClose,
   onPick,
+  onEffort,
 }: {
   providers: AiProviderEntry[];
   activeId: string;
   onClose: () => void;
   onPick: (providerId: string, modelName: string) => void;
+  onEffort: (providerId: string, modelId: string, effort: string | undefined) => void;
 }) {
   const activeProvider = providers.find((p) => p.id === activeId) ?? null;
   const [viewId, setViewId] = useState(activeProvider?.id ?? providers[0]?.id ?? '');
@@ -2651,23 +2688,48 @@ function ModelPickerDialog({
             )}
             {viewed?.models.map((model) => {
               const isChosen = viewed.id === activeId && model.name === viewed.model;
+              const levels = model.reasoningLevels ?? [];
               return (
-                <button
-                  key={model.id}
-                  type="button"
-                  className={`model-dlg__model${isChosen ? ' model-dlg__model--chosen' : ''}${model.enabled ? '' : ' model-dlg__model--off'}`}
-                  onClick={() => onPick(viewed.id, model.name)}
-                  disabled={!model.enabled}
-                >
-                  {isChosen ? (
-                    <Check size={13} strokeWidth={2} className="model-dlg__check" />
-                  ) : (
-                    <span className="model-dlg__check-spacer" />
+                <div key={model.id} className="model-dlg__model-block">
+                  <button
+                    type="button"
+                    className={`model-dlg__model${isChosen ? ' model-dlg__model--chosen' : ''}${model.enabled ? '' : ' model-dlg__model--off'}`}
+                    onClick={() => onPick(viewed.id, model.name)}
+                    disabled={!model.enabled}
+                  >
+                    {isChosen ? (
+                      <Check size={13} strokeWidth={2} className="model-dlg__check" />
+                    ) : (
+                      <span className="model-dlg__check-spacer" />
+                    )}
+                    <span className="model-dlg__model-name">{model.name}</span>
+                    {model.context && <span className="model-dlg__badge">{model.context}</span>}
+                    {model.vision && <span className="model-dlg__badge">Vision</span>}
+                  </button>
+                  {levels.length > 0 && (
+                    <div className="model-dlg__effort" aria-label={`Effort for ${model.name}`}>
+                      <span className="model-dlg__effort-label">Effort</span>
+                      <button
+                        type="button"
+                        className={`model-dlg__effort-pill${!model.effort ? ' model-dlg__effort-pill--on' : ''}`}
+                        title="No effort parameter — provider default"
+                        onClick={() => onEffort(viewed.id, model.id, undefined)}
+                      >
+                        default
+                      </button>
+                      {levels.map((level) => (
+                        <button
+                          key={level}
+                          type="button"
+                          className={`model-dlg__effort-pill${model.effort === level ? ' model-dlg__effort-pill--on' : ''}`}
+                          onClick={() => onEffort(viewed.id, model.id, level)}
+                        >
+                          {level}
+                        </button>
+                      ))}
+                    </div>
                   )}
-                  <span className="model-dlg__model-name">{model.name}</span>
-                  {model.context && <span className="model-dlg__badge">{model.context}</span>}
-                  {model.vision && <span className="model-dlg__badge">Vision</span>}
-                </button>
+                </div>
               );
             })}
           </section>

@@ -124,6 +124,8 @@ export interface AiModelEntry {
   reasoningLevels?: string[];
   /** JSON mapping reasoning level → provider parameter value. */
   reasoningMapping?: string;
+  /** Currently selected reasoning/effort level for chat. */
+  effort?: string;
   /** Metadata auto-filled from the built-in model registry. */
   smartConfig?: boolean;
   /** Selectable during chat. */

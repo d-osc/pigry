@@ -138,6 +138,7 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
       if (typeof item.reasoningMapping === 'string' && item.reasoningMapping) {
         model.reasoningMapping = item.reasoningMapping;
       }
+      if (typeof item.effort === 'string' && item.effort) model.effort = item.effort;
       if (item.smartConfig === true) model.smartConfig = true;
       return model;
     })
@@ -227,12 +228,30 @@ function ensureZaiDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
 }
 
 /** Loads providers, migrating legacy shapes and seeding on first run. */
+/** Fills the registry's vendor reasoning levels/mapping into models that
+ * don't define their own — every known model gets its effort knob. */
+function applyRegistryDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
+  for (const entry of list) {
+    entry.models = entry.models.map((model) => {
+      if (model.reasoningLevels?.length) return model;
+      const spec = matchModelSpec(model.name);
+      if (!spec?.reasoningLevels?.length) return model;
+      return {
+        ...model,
+        reasoningLevels: spec.reasoningLevels,
+        reasoningMapping: spec.reasoningMapping ?? model.reasoningMapping,
+      };
+    });
+  }
+  return list;
+}
+
 export function loadProviders(): AiProviderEntry[] {
   try {
     const raw = localStorage.getItem(LIST_KEY);
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
-      return ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate)));
+      return applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate))));
     }
     const legacy = localStorage.getItem('pigry:ai-provider');
     if (legacy) {
@@ -245,12 +264,14 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = ensureZaiTestProvider(
-        ensureZaiDefaults([
-          makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-          makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
-          entry,
-        ]),
+      const list = applyRegistryDefaults(
+        ensureZaiTestProvider(
+          ensureZaiDefaults([
+            makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+            makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+            entry,
+          ]),
+        ),
       );
       saveProviders(list, activeProviderId());
       return list;
@@ -258,7 +279,7 @@ export function loadProviders(): AiProviderEntry[] {
   } catch {
     // fall through to seed
   }
-  const seeded = ensureZaiTestProvider(ensureZaiDefaults(seedDefaults()));
+  const seeded = applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults())));
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
 }
@@ -309,38 +330,70 @@ export function newModel(name: string): AiModelEntry {
   return makeModel(name, false);
 }
 
-/** Known-model metadata used by the Add-model dialog's smart configuration. */
+/** Known-model metadata used by the Add-model dialog's smart configuration.
+ * reasoningLevels + reasoningMapping describe the vendor's OWN effort knob —
+ * mapping values are payload fragments merged into chat requests. */
 export interface KnownModelSpec {
   contextWindow?: number;
   maxOutputTokens?: number;
   inputTypes?: string[];
   capabilities?: string[];
   reasoningLevels?: string[];
+  reasoningMapping?: string;
 }
+
+/** Zhipu GLM — thinking on/off switch. */
+const GLM_THINKING = JSON.stringify({
+  low: { thinking: { type: 'disabled' } },
+  high: { thinking: { type: 'enabled' } },
+});
+/** Anthropic extended thinking — effort maps to a token budget. */
+const CLAUDE_THINKING = JSON.stringify({
+  low: { thinking: { type: 'enabled', budget_tokens: 4096 } },
+  medium: { thinking: { type: 'enabled', budget_tokens: 16384 } },
+  high: { thinking: { type: 'enabled', budget_tokens: 32768 } },
+});
+/** OpenAI o-series — native reasoning_effort levels. */
+const OPENAI_EFFORT = JSON.stringify({
+  low: { reasoning_effort: 'low' },
+  medium: { reasoning_effort: 'medium' },
+  high: { reasoning_effort: 'high' },
+});
+/** Qwen3 hybrid thinking — toggle + budget. */
+const QWEN_THINKING = JSON.stringify({
+  low: { enable_thinking: false },
+  high: { enable_thinking: true, thinking_budget: 32768 },
+});
+/** Gemini 2.5 — thinkingConfig budget. */
+const GEMINI_THINKING = JSON.stringify({
+  low: { thinkingConfig: { thinkingBudget: 1024 } },
+  high: { thinkingConfig: { thinkingBudget: 24576 } },
+});
 
 /** Best-effort registry of common model families — matched by substring. */
 const KNOWN_MODEL_SPECS: Array<[pattern: string, spec: KnownModelSpec]> = [
-  ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
-  ['glm-4.5-air', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
-  ['glm-4.5', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
+  ['glm-4.5-air', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
+  ['glm-4.5', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4-flash', { contextWindow: 128_000, maxOutputTokens: 4_096, inputTypes: ['text'] }],
-  ['claude-opus-4', { contextWindow: 200_000, maxOutputTokens: 32_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
-  ['claude-sonnet-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
-  ['claude-haiku-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
-  ['claude-3-7', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: ['low', 'high'] }],
+  ['claude-opus-4', { contextWindow: 200_000, maxOutputTokens: 32_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
+  ['claude-sonnet-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
+  ['claude-haiku-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
+  ['claude-3-7', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
   ['claude-3-5', { contextWindow: 200_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
   ['gpt-4.1', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
   ['gpt-4o', { contextWindow: 128_000, maxOutputTokens: 16_384, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
-  ['o4-mini', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'] }],
-  ['o3', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'] }],
-  ['qwen3-coder', { contextWindow: 1_000_000, maxOutputTokens: 65_536, inputTypes: ['text'] }],
-  ['qwen3', { contextWindow: 262_144, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  ['o4-mini', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: OPENAI_EFFORT }],
+  ['o3', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: OPENAI_EFFORT }],
+  ['qwen3-coder', { contextWindow: 1_000_000, maxOutputTokens: 65_536, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: QWEN_THINKING }],
+  ['qwen3', { contextWindow: 262_144, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: QWEN_THINKING }],
   ['qwen-max', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text'] }],
   ['qwen-plus', { contextWindow: 1_000_000, maxOutputTokens: 16_384, inputTypes: ['text'] }],
-  ['deepseek-r1', { contextWindow: 128_000, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'] }],
+  // DeepSeek R1 reasons on every turn — no effort knob to expose.
+  ['deepseek-r1', { contextWindow: 128_000, maxOutputTokens: 32_768, inputTypes: ['text'] }],
   ['deepseek', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
-  ['gemini-2.5-pro', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'] }],
-  ['gemini-2.5-flash', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'] }],
+  ['gemini-2.5-pro', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'], reasoningLevels: ['low', 'high'], reasoningMapping: GEMINI_THINKING }],
+  ['gemini-2.5-flash', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'], reasoningLevels: ['low', 'high'], reasoningMapping: GEMINI_THINKING }],
   ['gemini', { contextWindow: 1_000_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
   ['llama', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
   ['mistral', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
@@ -355,6 +408,24 @@ export function matchModelSpec(name: string): KnownModelSpec | null {
     if (lower.includes(entry[0]) && (!hit || entry[0].length > hit[0].length)) hit = entry;
   }
   return hit ? { ...hit[1] } : null;
+}
+
+/** Payload fragment for a model's selected effort level — shallow-merged
+ * into the chat request JSON (null when nothing applies). */
+export function effortPayloadFragment(
+  effort: string | undefined,
+  mapping: string | undefined,
+): Record<string, unknown> | null {
+  if (!effort || !mapping) return null;
+  try {
+    const map = JSON.parse(mapping) as Record<string, unknown>;
+    const fragment = map[effort];
+    return fragment && typeof fragment === 'object' && !Array.isArray(fragment)
+      ? (fragment as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The URL the agent should POST to for this provider. */

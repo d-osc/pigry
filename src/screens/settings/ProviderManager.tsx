@@ -425,6 +425,7 @@ export function ProviderManager() {
                   <span className="prov-mgr__model-name">{model.name}</span>
                   {model.context && <span className="prov-mgr__badge">{model.context}</span>}
                   {model.vision && <span className="prov-mgr__badge">Vision</span>}
+                  {model.effort && <span className="prov-mgr__badge">Effort: {model.effort}</span>}
                   <span className="prov-mgr__model-actions">
                     <button
                       type="button"

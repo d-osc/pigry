@@ -1302,3 +1302,54 @@
   color: var(--accent);
   text-decoration: underline;
 }
+
+/* ---- Per-model Effort selector (model picker) ---- */
+
+.model-dlg__model-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-dlg__effort {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px 2px 31px;
+}
+
+.model-dlg__effort-label {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.model-dlg__effort-pill {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--bg-input);
+  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.model-dlg__effort-pill:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.model-dlg__effort-pill--on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+/* Effort shown on the composer model pill */
+.explorer-ai__model-pill-effort {
+  padding: 0 6px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  font-size: var(--fs-2xs);
+  color: var(--accent);
+}
