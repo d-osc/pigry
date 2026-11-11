@@ -35,6 +35,7 @@ import { allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills } from '../../lib/skills';
 import { webSearch, browserPage } from '../../lib/tauriClient';
+import { browserDevtools, type DevtoolsAction } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -232,6 +233,39 @@ const WEB_TOOLS: ToolSpec[] = [
     run: async (input) => {
       const page = await browserPage(String(input.url ?? ''), Number(input.wait_ms ?? 1200) || undefined);
       return `title: ${page.title}\nurl: ${page.url}\n\n${page.text}`;
+    },
+  },
+];
+
+/** Browser DevTools — a persistent headless page the agent can inspect
+ * (JavaScript eval, console output, screenshots, DOM text). */
+const DEVTOOLS_TOOLS: ToolSpec[] = [
+  {
+    id: 'web-devtools',
+    name: 'browser_devtools',
+    description:
+      'Browser DevTools on a persistent headless page. Actions: "open" a URL (required first), "eval" JavaScript on it, read "console" logs, take a "screenshot", dump page "dom", or "close" the session. Returns a text summary for every action.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['open', 'eval', 'console', 'screenshot', 'dom', 'close'],
+          description: 'The devtools action to run',
+        },
+        url: { type: 'string', description: 'URL — required for action "open"' },
+        js: { type: 'string', description: 'JavaScript — required for action "eval"' },
+        wait_ms: { type: 'number', description: 'For "open": how long to let the page run (ms, default 1200)' },
+      },
+      required: ['action'],
+    },
+    run: async (input) => {
+      const action = String(input.action ?? 'open') as DevtoolsAction;
+      return browserDevtools(action, {
+        url: input.url ? String(input.url) : undefined,
+        js: input.js ? String(input.js) : undefined,
+        waitMs: input.wait_ms ? Number(input.wait_ms) : undefined,
+      });
     },
   },
 ];
@@ -1136,7 +1170,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, ...WEB_TOOLS].filter(
+    const tools = [...FILE_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({

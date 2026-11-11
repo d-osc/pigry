@@ -38,6 +38,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   // Web (web_search + headless browser)
   { id: 'web-search', name: 'web_search', group: 'Web', description: 'Search the web (DuckDuckGo) and read top results' },
   { id: 'web-browser', name: 'playwright', group: 'Web', description: 'Open a URL in headless Edge/Chrome and read the rendered page text' },
+  { id: 'web-devtools', name: 'browser_devtools', group: 'Web', description: 'Persistent browser session — open URLs, eval JavaScript, read console logs, screenshots and DOM' },
   { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'Read and edit the repository wiki' },
 ];
 

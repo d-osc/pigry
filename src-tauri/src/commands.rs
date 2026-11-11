@@ -1652,6 +1652,53 @@ pub async fn cherry_pick_abort(
 }
 
 #[tauri::command]
+pub async fn browser_devtools(
+    _app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    action: String,
+    url: Option<String>,
+    js: Option<String>,
+    waitMs: Option<u64>,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    match action.as_str() {
+        "open" => {
+            let url = url.ok_or("action \"open\" requires url")?;
+            let wait = waitMs.unwrap_or(1200);
+            crate::devtools::devtools_open(&repo_path, &url, wait).await?;
+            Ok("opened".to_string())
+        }
+        "eval" => {
+            let js = js.ok_or("action \"eval\" requires js")?;
+            crate::devtools::devtools_eval(&js).await
+        }
+        "console" => {
+            let limit = waitMs.unwrap_or(50) as usize;
+            let lines = crate::devtools::devtools_console(limit).await?;
+            Ok(if lines.is_empty() {
+                "(console empty)".to_string()
+            } else {
+                lines.join("
+")
+            })
+        }
+        "screenshot" => crate::devtools::devtools_screenshot(&repo_path).await,
+        "dom" => {
+            let limit = waitMs.unwrap_or(16_000) as usize;
+            crate::devtools::devtools_dom(limit).await
+        }
+        "close" => {
+            let _ = repo_path;
+            crate::devtools::devtools_close().await
+        }
+        other => Err(format!("unknown devtools action: {other}")),
+    }
+}
+
+#[tauri::command]
 pub async fn web_search(
     query: String,
 ) -> Result<crate::web::WebSearchResult, String> {

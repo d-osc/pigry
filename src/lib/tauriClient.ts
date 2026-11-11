@@ -739,6 +739,20 @@ export async function browserPage(url: string, waitMs?: number): Promise<Browser
   return invoke('browser_page', { url, waitMs: waitMs ?? null });
 }
 
+export type DevtoolsAction = 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'close';
+
+export async function browserDevtools(
+  action: DevtoolsAction,
+  opts?: { url?: string; js?: string; waitMs?: number },
+): Promise<string> {
+  return invoke('browser_devtools', {
+    action,
+    url: opts?.url ?? null,
+    js: opts?.js ?? null,
+    waitMs: opts?.waitMs ?? null,
+  });
+}
+
 export async function getFileHunks(
   path: string,
   staged: boolean,

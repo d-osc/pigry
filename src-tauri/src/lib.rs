@@ -8,6 +8,7 @@ mod busybox_extra;
 mod commands;
 mod config;
 mod memory_vector;
+mod devtools;
 mod web;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
@@ -197,6 +198,7 @@ pub fn run() {
             commands::memory_remove,
             commands::memory_search,
             commands::web_search,
+            commands::browser_devtools,
             commands::browser_page,
         ])
         .build(tauri::generate_context!())

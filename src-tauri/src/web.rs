@@ -318,7 +318,7 @@ fn parse_ddg_hits(html: &str) -> Vec<WebHit> {
 
 /// Candidate browser executables, in preference order (Edge ships with
 /// Windows; Chrome when installed).
-fn browser_candidates() -> [&'static str; 4] {
+pub fn browser_candidates() -> [&'static str; 4] {
     [
         "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
         "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
