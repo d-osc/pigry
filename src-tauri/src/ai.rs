@@ -178,6 +178,8 @@ pub struct CliAppInfo {
     pub version: String,
     /// Default model read from the app's own config, if any.
     pub model: String,
+    /// Default reasoning effort read from the app's own config, if any.
+    pub effort: String,
 }
 
 /// The CLI coding agents pigry knows how to detect — (binary, display name).
@@ -208,6 +210,31 @@ fn read_app_model(binary: &str) -> String {
         "gemini" => read_gemini_model(),
         _ => String::new(),
     }
+}
+
+/// Reads the configured default reasoning effort (codex's config.toml).
+fn read_app_effort(binary: &str) -> String {
+    if binary == "codex" {
+        if let Some(path) = home_file(".codex/config.toml") {
+            if let Ok(text) = std::fs::read_to_string(path) {
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.starts_with("model_reasoning_effort") && trimmed.contains('=') {
+                        let value = trimmed[trimmed.find('=').unwrap() + 1..]
+                            .trim()
+                            .trim_matches('"')
+                            .trim_matches('\'')
+                            .trim()
+                            .to_string();
+                        if !value.is_empty() {
+                            return value;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    String::new()
 }
 
 /// Reads the configured default model from Gemini CLI's settings.json
@@ -405,6 +432,7 @@ pub fn cli_detect() -> CliDetectResult {
             name: name.to_string(),
             version,
             model: read_app_model(binary),
+            effort: read_app_effort(binary),
         });
     }
     CliDetectResult {

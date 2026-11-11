@@ -430,6 +430,8 @@ export interface CliAppInfo {
   name: string;
   version: string;
   model: string;
+  /** Default reasoning effort read from the app's own config, if any. */
+  effort: string;
 }
 
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
@@ -463,7 +465,11 @@ const NO_CLI_DETECT: CliDetectResult = {
 export async function cliDetect(): Promise<CliDetectResult> {
   if (!isTauri()) return { ...NO_CLI_DETECT, apps: [] };
   const result = (await invoke('cli_detect')) as CliDetectResult;
-  return { ...NO_CLI_DETECT, ...result, apps: result.apps ?? [] };
+  return {
+    ...NO_CLI_DETECT,
+    ...result,
+    apps: (result.apps ?? []).map((a) => ({ ...a, effort: a.effort ?? '' })),
+  };
 }
 
 /** Runs a prompt through an installed CLI coding agent (blocking until it finishes). */
