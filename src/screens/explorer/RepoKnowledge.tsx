@@ -35,9 +35,9 @@ const TIER_LABEL: Record<MemoryTier, string> = {
 };
 
 const TIER_PATH: Record<MemoryTier, string> = {
-  main: '.pigry/memory.vector.json',
-  team: '.pigry/teams/<team>/memory.vector.json',
-  agent: '.pigry/teams/<team>/agents/<user>/memory.vector.json',
+  main: '.pigry/memory.vector.json (scope: project)',
+  team: '.pigry/memory.vector.json (scope: team/<team>)',
+  agent: '.pigry/memory.vector.json (scope: agent/<team>/<user>)',
 };
 
 /** Vector-backed memory across three tiers: project-wide, team-shared and

@@ -46,9 +46,6 @@ export function agentDefinitionFile(team: string, username: string): string {
 }
 
 /** Memory scope string for the memory_* Tauri commands. */
-export function teamMemoryScope(team: string): string {
-  return `teams/${segment(team)}`;
-}
 
 export function agentRoot(team: string, username: string): string {
   return `${teamRoot(team)}/agents/${segment(username)}`;
@@ -66,9 +63,11 @@ export function agentMemoryFile(team: string, username: string): string {
 
 /** Memory scope for the memory_* Tauri commands: team store, or the agent's
  * private store when `agent` is given. Null = the project-wide store. */
+/** Scope TAG stored on every memory entry in the single .pigry store:
+ * null = project, 'team/<Team>' = shared team memory, 'agent/<Team>/<user>'
+ * = that agent's private memory. */
 export function memoryScope(team?: string, agent?: string): string | null {
   if (!team) return null;
-  return agent
-    ? `${teamMemoryScope(team)}/agents/${segment(agent)}`
-    : teamMemoryScope(team);
+  const safeTeam = segment(team);
+  return agent ? `agent/${safeTeam}/${segment(agent)}` : `team/${safeTeam}`;
 }
