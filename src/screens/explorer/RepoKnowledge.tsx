@@ -7,7 +7,8 @@
  *   skills → .pigry/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, Heading2, Italic, Link2, List, Pencil, Plus, Quote, SquareCode, Strikethrough, Trash2, X } from 'lucide-react';
+import { renderMarkdown } from '../../lib/markdown';
 import {
   deleteWorktreeFile,
   getFileTree,
@@ -279,10 +280,49 @@ export function MemoryDialog({
 }export function SkillsDialog({ onClose, notify }: { onClose: () => void; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [skills, setSkills] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
-  /** Uncontrolled new-skill name (read from the DOM on submit). */
-  const newNameRef = useRef<HTMLInputElement | null>(null);
-  /** Uncontrolled new-skill description (one line). */
-  const newDescRef = useRef<HTMLInputElement | null>(null);
+  /** New-skill form — id/name/description defined by the user. */
+  const [newId, setNewId] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [descPreview, setDescPreview] = useState(false);
+  const newDescRef = useRef<HTMLTextAreaElement | null>(null);
+  /** True once the user edits the id by hand — stops auto-suggestions. */
+  const idTouchedRef = useRef(false);
+
+  /** Markdown formatting for the description textarea (per line / wrap). */
+  const applySkillMd = (kind: 'bold' | 'italic' | 'code' | 'strike' | 'bullet' | 'quote' | 'heading') => {
+    const el = newDescRef.current;
+    if (!el) return;
+    const a = el.selectionStart ?? 0;
+    const b = el.selectionEnd ?? 0;
+    const value = newDesc;
+    const sel = value.slice(a, b);
+    let next = value;
+    let caret = b;
+    const wrap = (mark: string) => {
+      next = value.slice(0, a) + mark + sel + mark + value.slice(b);
+      caret = a + mark.length + sel.length + mark.length;
+    };
+    const linePrefix = (mark: string) => {
+      const start = value.lastIndexOf('\n', a - 1) + 1;
+      next = value.slice(0, start) + mark + value.slice(start);
+      caret = b + mark.length;
+    };
+    switch (kind) {
+      case 'bold': wrap('**'); break;
+      case 'italic': wrap('_'); break;
+      case 'code': wrap('`'); break;
+      case 'strike': wrap('~~'); break;
+      case 'bullet': linePrefix('- '); break;
+      case 'quote': linePrefix('> '); break;
+      case 'heading': linePrefix('## '); break;
+    }
+    setNewDesc(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(caret, caret);
+    });
+  };
   /** Currently open skill: name + body being edited. */
   const [editing, setEditing] = useState<{ name: string; body: string; isNew: boolean } | null>(null);
 
@@ -323,13 +363,6 @@ export function MemoryDialog({
     };
   }, []);
 
-  const slugOf = (name: string) =>
-    name
-      .trim()
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, '-')
-      .replace(/^-+|-+$/g, '') || 'skill';
-
   const openSkill = async (name: string) => {
     try {
       const file = await readWorktreeFile(`${SKILLS_DIR}${name}.md`);
@@ -342,26 +375,31 @@ export function MemoryDialog({
   };
 
   const createSkill = async () => {
-    const name = newNameRef.current?.value.trim() ?? '';
-    if (!name) return;
-    const slug = slugOf(name);
+    const id = newId.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const name = newName.trim();
+    if (!id || !name) {
+      notify('Skill id and name are required', 'error');
+      return;
+    }
     try {
-      await readWorktreeFile(`${SKILLS_DIR}${slug}.md`);
-      notify(`Skill "${slug}" already exists`, 'error');
+      await readWorktreeFile(`${SKILLS_DIR}${id}.md`);
+      notify(`Skill "${id}" already exists`, 'error');
       return;
     } catch {
       // not found → good, we can create it
     }
-    const description = newDescRef.current?.value.trim() ?? '';
+    const description = newDesc.trim();
     await writeWorktreeFile(
-      `${SKILLS_DIR}${slug}.md`,
+      `${SKILLS_DIR}${id}.md`,
       `# ${name}\n\n${description}\n\n`,
     );
-    if (newNameRef.current) newNameRef.current.value = '';
-    if (newDescRef.current) newDescRef.current.value = '';
+    setNewId('');
+    setNewName('');
+    setNewDesc('');
+    setDescPreview(false);
     await reload();
-    setEditing({ name: slug, body: '', isNew: true });
-    notify(`Skill "${slug}" created`, 'success');
+    setEditing({ name: id, body: description, isNew: true });
+    notify(`Skill "${id}" created`, 'success');
   };
 
   const saveSkill = async () => {
@@ -475,29 +513,83 @@ export function MemoryDialog({
               ))}
             </div>
             <form
-              className="know-dlg__foot"
+              className="know-dlg__foot know-dlg__create"
               onSubmit={(event) => {
                 event.preventDefault();
                 void createSkill();
               }}
             >
-              <input
-                ref={newNameRef}
-                className="know-dlg__input"
-                placeholder="New skill name, e.g. Run tests"
-                aria-label="New skill name"
-                spellCheck={false}
-              />
-              <input
-                ref={newDescRef}
-                className="know-dlg__input"
-                placeholder="Description, e.g. Run the full test suite"
-                aria-label="New skill description"
-                spellCheck={false}
-              />
+              <div className="know-dlg__create-row">
+                <input
+                  className="know-dlg__input know-dlg__input--id"
+                  placeholder="id, e.g. run-tests"
+                  aria-label="New skill id"
+                  spellCheck={false}
+                  value={newId}
+                  onChange={(event) => {
+                    idTouchedRef.current = true;
+                    setNewId(event.target.value);
+                  }}
+                />
+                <input
+                  className="know-dlg__input"
+                  placeholder="Name, e.g. Run tests"
+                  aria-label="New skill name"
+                  value={newName}
+                  onChange={(event) => {
+                    setNewName(event.target.value);
+                    if (!idTouchedRef.current) {
+                      setNewId(
+                        event.target.value
+                          .trim()
+                          .toLowerCase()
+                          .replace(/\s+/g, '-')
+                          .replace(/[^a-z0-9-]/g, ''),
+                      );
+                    }
+                  }}
+                />
+              </div>
+              <div className="know-dlg__toolbar">
+                <button type="button" title="Bold" onClick={() => applySkillMd('bold')}><strong>B</strong></button>
+                <button type="button" title="Italic" onClick={() => applySkillMd('italic')}><Italic size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Code" onClick={() => applySkillMd('code')}><SquareCode size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Strikethrough" onClick={() => applySkillMd('strike')}><Strikethrough size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Bullet list" onClick={() => applySkillMd('bullet')}><List size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Quote" onClick={() => applySkillMd('quote')}><Quote size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Heading" onClick={() => applySkillMd('heading')}><Heading2 size={11} strokeWidth={1.5} /></button>
+                <button type="button" title="Link" onClick={() => applySkillMd('code')}><Link2 size={11} strokeWidth={1.5} /></button>
+                <button
+                  type="button"
+                  className={descPreview ? 'is-on' : ''}
+                  title="Toggle preview"
+                  onClick={() => setDescPreview((prev) => !prev)}
+                >
+                  {descPreview ? 'Edit' : 'Preview'}
+                </button>
+              </div>
+              {descPreview ? (
+                <div className="know-dlg__preview">
+                  {newDesc.trim() ? (
+                    renderMarkdown(newDesc)
+                  ) : (
+                    <span className="know-dlg__empty">Nothing to preview yet.</span>
+                  )}
+                </div>
+              ) : (
+                <textarea
+                  ref={newDescRef}
+                  className="know-dlg__desc"
+                  placeholder="Description shown in the # picker, then step-by-step instructions…"
+                  aria-label="New skill description"
+                  rows={3}
+                  value={newDesc}
+                  onChange={(event) => setNewDesc(event.target.value)}
+                />
+              )}
               <button type="submit" className="know-dlg__add">
                 <Plus size={12} strokeWidth={2} />
-                Add
+                Add skill
               </button>
             </form>
           </>
