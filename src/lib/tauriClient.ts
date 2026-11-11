@@ -429,11 +429,10 @@ export interface CliAppInfo {
   binary: string;
   name: string;
   version: string;
+  /** Default model read from the app's own config, if any. */
   model: string;
   /** Default reasoning effort read from the app's own config, if any. */
   effort: string;
-  /** The app's known model catalog (config default first). */
-  models: string[];
 }
 
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
