@@ -1916,9 +1916,20 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
   };
 
-  const providerLabel = active ? `${active.name || active.type}${active.model ? ' · ' + active.model : ''}` : 'No provider';
-  // Selected effort level of the active model (shown on the composer pill).
-  const activeEffort = active?.models.find((m) => m.name === active.model)?.effort ?? '';
+  // What the composer pill and model picker highlight: this menu's default
+  // agent when it pins a provider/model, else the global chat selection.
+  const agentProvider = defaultAgent?.providerId
+    ? providers.find((p) => p.id === defaultAgent.providerId) ?? null
+    : null;
+  const pointedProvider = agentProvider ?? active;
+  const pointedModel = agentProvider
+    ? defaultAgent?.model || agentProvider.model
+    : active?.model ?? '';
+  const providerLabel = pointedProvider
+    ? `${pointedProvider.name || pointedProvider.type}${pointedModel ? ' · ' + pointedModel : ''}`
+    : 'No provider';
+  // Selected effort level of the pointed model (composer pill chip).
+  const activeEffort = pointedProvider?.models.find((m) => m.name === pointedModel)?.effort ?? '';
 
   /** The group name in the header: custom name > auto title > default. */
   const headerTitle =
@@ -2549,7 +2560,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                 title="Change provider or model"
                 onClick={() => setModelDialogOpen(true)}
               >
-                <span className={`explorer-ai__model-dot explorer-ai__model-dot--${active && active.apiKey && active.baseUrl ? 'ok' : 'warn'}`} />
+                <span className={`explorer-ai__model-dot explorer-ai__model-dot--${pointedProvider && pointedProvider.apiKey && pointedProvider.baseUrl ? 'ok' : 'warn'}`} />
                 <span className="explorer-ai__model-pill-name">{providerLabel}</span>
                 {activeEffort && <span className="explorer-ai__model-pill-effort">{activeEffort}</span>}
                 <ChevronDown size={11} strokeWidth={1.75} />
@@ -2587,7 +2598,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       {modelDialogOpen && (
         <ModelPickerDialog
           providers={providers}
-          activeId={active?.id ?? ''}
+          activeId={pointedProvider?.id ?? ''}
+          activeModel={pointedModel}
           onClose={() => setModelDialogOpen(false)}
           onEffort={(providerId, modelId, effort) => {
             const list = providers.map((p) =>
@@ -2654,12 +2666,16 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
 function ModelPickerDialog({
   providers,
   activeId,
+  activeModel,
   onClose,
   onPick,
   onEffort,
 }: {
   providers: AiProviderEntry[];
   activeId: string;
+  /** The model the default agent will actually use (may differ from the
+   * provider's active mirror). */
+  activeModel?: string;
   onClose: () => void;
   onPick: (providerId: string, modelName: string) => void;
   onEffort: (providerId: string, modelId: string, effort: string | undefined) => void;
@@ -2708,7 +2724,7 @@ function ModelPickerDialog({
               <p className="model-dlg__empty">No models — add some in Settings → AI Provider.</p>
             )}
             {viewed?.models.map((model) => {
-              const isChosen = viewed.id === activeId && model.name === viewed.model;
+              const isChosen = viewed.id === activeId && model.name === (activeModel || viewed.model);
               const levels = model.reasoningLevels ?? [];
               const isExpanded = expandedId === model.id;
               return (
