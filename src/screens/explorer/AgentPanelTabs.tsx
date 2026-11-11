@@ -522,6 +522,99 @@ async function fileToAvatar(file: File): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
+export function AgentDetailsDialog({
+  agent,
+  onClose,
+  onEdit,
+}: {
+  agent: AgentEntry;
+  onClose: () => void;
+  onEdit?: () => void;
+}) {
+  const provider = agent.providerId
+    ? loadProviders().find((p) => p.id === agent.providerId)
+    : undefined;
+  const providerName = provider?.name ?? 'global active provider';
+  const model = agent.model || provider?.model || '(active model)';
+  return (
+    <div
+      className="know-overlay"
+      role="presentation"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="know-dlg" role="dialog" aria-modal="true" aria-label="Agent details">
+        <header className="know-dlg__head">
+          <div>
+            <strong className="know-dlg__title">{agent.name}</strong>
+            <p className="know-dlg__sub">
+              {agent.username ? `@${agent.username}` : ''}
+              {agent.team ? ` · ${agent.team}` : ''}
+              {agent.tier ? ` · ${agent.tier} agent` : ''}
+            </p>
+          </div>
+          <button type="button" className="know-dlg__close" onClick={onClose} aria-label="Close details">
+            <X size={13} strokeWidth={1.5} />
+          </button>
+        </header>
+        <div className="know-dlg__body know-dlg__body--editor">
+          {agent.role && <p className="apanel-dlg__role">{agent.role}</p>}
+          {agent.description && (
+            <div className="apanel-dlg__desc">{renderMarkdown(agent.description)}</div>
+          )}
+          <div className="apanel-dlg__rows">
+            <div className="apanel-dlg__row">
+              <span>Provider</span>
+              <code>{providerName} · {model}</code>
+            </div>
+            <div className="apanel-dlg__row">
+              <span>Tools</span>
+              <code>{agent.tools.length > 0 ? agent.tools.join(', ') : 'all enabled tools'}</code>
+            </div>
+            <div className="apanel-dlg__row">
+              <span>Skills</span>
+              <code>{agent.skills.length > 0 ? agent.skills.join(', ') : '—'}</code>
+            </div>
+            <div className="apanel-dlg__row">
+              <span>MCP</span>
+              <code>{agent.mcpServers.length > 0 ? agent.mcpServers.join(', ') : '—'}</code>
+            </div>
+            {agent.team && agent.username && (
+              <div className="apanel-dlg__row">
+                <span>Memory</span>
+                <code>.pigry/teams/{agent.team}/agents/{agent.username}/memory.vector.json</code>
+              </div>
+            )}
+          </div>
+          {agent.builtIn ? (
+            <p className="apanel-dlg__note">
+              Built-in {agent.tier === 'default' ? 'default' : 'base'} agent — hard-coded in the
+              app, cannot be edited or deleted.
+            </p>
+          ) : (
+            onEdit && (
+              <div className="apanel-dlg__actions">
+                <button
+                  type="button"
+                  className="know-editor__btn know-editor__btn--primary"
+                  onClick={() => {
+                    onClose();
+                    onEdit();
+                  }}
+                >
+                  <Pencil size={11} strokeWidth={1.5} />
+                  Edit agent
+                </button>
+              </div>
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const [agents, setAgents] = useState<AgentEntry[]>(() => loadAgents());
   // Full-detail viewer for one agent (built-in or extension).
@@ -791,90 +884,23 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
           </div>
         );
       })()}
+/** Full-detail dialog for one agent — shared by the Agents tab and the
+ * chat bubbles (click an agent to inspect it). */
+
       {viewing && (
-        <div
-          className="know-overlay"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setViewing(null);
-          }}
-        >
-          <div className="know-dlg" role="dialog" aria-modal="true" aria-label="Agent details">
-            <header className="know-dlg__head">
-              <div>
-                <strong className="know-dlg__title">{viewing.name}</strong>
-                <p className="know-dlg__sub">
-                  {viewing.username ? `@${viewing.username}` : ''}
-                  {viewing.team ? ` · ${viewing.team}` : ''}
-                  {viewing.tier ? ` · ${viewing.tier} agent` : ''}
-                </p>
-              </div>
-              <button type="button" className="know-dlg__close" onClick={() => setViewing(null)} aria-label="Close details">
-                <X size={13} strokeWidth={1.5} />
-              </button>
-            </header>
-            <div className="know-dlg__body know-dlg__body--editor">
-              {viewing.role && <p className="apanel-dlg__role">{viewing.role}</p>}
-              {viewing.description && (
-                <div className="apanel-dlg__desc">{renderMarkdown(viewing.description)}</div>
-              )}
-              <div className="apanel-dlg__rows">
-                <div className="apanel-dlg__row">
-                  <span>Provider</span>
-                  <code>
-                    {(() => {
-                      const provider = viewing.providerId
-                        ? loadProviders().find((p) => p.id === viewing.providerId)
-                        : undefined;
-                      const name = provider?.name ?? 'global active provider';
-                      const model = viewing.model || provider?.model || '(active model)';
-                      return `${name} · ${model}`;
-                    })()}
-                  </code>
-                </div>
-                <div className="apanel-dlg__row">
-                  <span>Tools</span>
-                  <code>{viewing.tools.length > 0 ? viewing.tools.join(', ') : 'all enabled tools'}</code>
-                </div>
-                <div className="apanel-dlg__row">
-                  <span>Skills</span>
-                  <code>{viewing.skills.length > 0 ? viewing.skills.join(', ') : '—'}</code>
-                </div>
-                <div className="apanel-dlg__row">
-                  <span>MCP</span>
-                  <code>{viewing.mcpServers.length > 0 ? viewing.mcpServers.join(', ') : '—'}</code>
-                </div>
-                {viewing.team && viewing.username && (
-                  <div className="apanel-dlg__row">
-                    <span>Memory</span>
-                    <code>.pigry/teams/{viewing.team}/agents/{viewing.username}/memory.vector.json</code>
-                  </div>
-                )}
-              </div>
-              {viewing.builtIn ? (
-                <p className="apanel-dlg__note">
-                  Built-in {viewing.tier === 'default' ? 'default' : 'base'} agent — hard-coded in
-                  the app, cannot be edited or deleted.
-                </p>
-              ) : (
-                <div className="apanel-dlg__actions">
-                  <button
-                    type="button"
-                    className="know-editor__btn know-editor__btn--primary"
-                    onClick={() => {
-                      setViewing(null);
-                      setDescPreview(false);
-                      setDraft({ ...viewing, isNew: false });
-                    }}
-                  >
-                    <Pencil size={11} strokeWidth={1.5} />
-                    Edit agent
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <AgentDetailsDialog
+          agent={viewing}
+          onClose={() => setViewing(null)}
+          onEdit={
+            viewing.builtIn
+              ? undefined
+              : () => {
+                  setViewing(null);
+                  setDescPreview(false);
+                  setDraft({ ...viewing, isNew: false });
+                }
+          }
+        />
       )}
       <h4 className="apanel__group-title">Extension agents</h4>
       <div className="apanel__servers">

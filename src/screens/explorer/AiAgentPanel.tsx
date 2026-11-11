@@ -63,6 +63,7 @@ import {
   PluginsTab,
 } from './AgentPanelTabs';
 import { MemoryDialog, SkillsDialog } from './RepoKnowledge';
+import { AgentDetailsDialog } from './AgentPanelTabs';
 import { useRepository } from '../../hooks/useRepository';
 import { relativeTime } from '../../lib/relativeTime';
 import {
@@ -655,6 +656,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // @mention autocomplete — typing `@` opens the agent picker; the picked
   // @username directs the message at that agent (its provider/model reply).
   const [mention, setMention] = useState<MentionState | null>(null);
+  // Clicking an agent avatar/name in the chat opens its full profile.
+  const [viewingAgent, setViewingAgent] = useState<AgentEntry | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
   // The @ picker lists only THIS menu's agents (team members + the menu's
   // default agent) plus pigry's base agents — other teams stay out of the way.
@@ -1806,7 +1809,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               const isUser = message.role === 'user';
               const editing = editingIndex === index;
               const replyAgent = !isUser && message.agent
-                ? loadAgents().find((entry) => entry.username === message.agent)
+                ? allAgents().find((entry) => entry.username === message.agent)
                 : null;
               return (
                 <div
@@ -1814,23 +1817,42 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                   className={`explorer-ai__card explorer-ai__msg ${isUser ? 'explorer-ai__msg--user' : ''}${message.error ? ' explorer-ai__msg--error' : ''}`}
                 >
                     <div className="explorer-ai__msg-meta">
-                      <span
-                        className="explorer-ai__avatar"
-                        style={replyAgent ? agentAvatarStyle(replyAgent.username) : undefined}
-                      >
-                        {isUser && ghUser?.avatarUrl ? (
-                          <img src={ghUser.avatarUrl} alt={ghUser.name} />
-                        ) : replyAgent?.avatar ? (
-                          <img src={replyAgent.avatar} alt={replyAgent.name} />
-                        ) : replyAgent ? (
-                          agentMonogram(message.agent)
-                        ) : (
-                          isUser ? 'You' : 'AI'
-                        )}
-                      </span>
-                      <span className="explorer-ai__msg-name">
-                        {isUser ? ghUser?.login || 'You' : agentDisplayName(message.agent)}
-                      </span>
+                      {replyAgent && (
+                        <button
+                          type="button"
+                          className="explorer-ai__msg-agent-btn"
+                          title={`View ${replyAgent.name}'s profile`}
+                          onClick={() => setViewingAgent(replyAgent)}
+                        >
+                          <span
+                            className="explorer-ai__avatar"
+                            style={agentAvatarStyle(replyAgent.username)}
+                          >
+                            {replyAgent?.avatar ? (
+                              <img src={replyAgent.avatar} alt={replyAgent.name} />
+                            ) : (
+                              agentMonogram(message.agent)
+                            )}
+                          </span>
+                          <span className="explorer-ai__msg-name">
+                            {agentDisplayName(message.agent)}
+                          </span>
+                        </button>
+                      )}
+                      {!replyAgent && (
+                        <>
+                          <span className="explorer-ai__avatar">
+                            {isUser && ghUser?.avatarUrl ? (
+                              <img src={ghUser.avatarUrl} alt={ghUser.name} />
+                            ) : (
+                              isUser ? 'You' : 'AI'
+                            )}
+                          </span>
+                          <span className="explorer-ai__msg-name">
+                            {isUser ? ghUser?.login || 'You' : agentDisplayName(message.agent)}
+                          </span>
+                        </>
+                      )}
                       {message.time && (
                         <span className="explorer-ai__msg-time">{fmtMsgTime(message.time)}</span>
                       )}
@@ -2239,6 +2261,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           notify={notify}
         />
       )}
+        {viewingAgent && (
+          <AgentDetailsDialog
+            agent={viewingAgent}
+            onClose={() => setViewingAgent(null)}
+          />
+        )}
     </aside>
   );
 }

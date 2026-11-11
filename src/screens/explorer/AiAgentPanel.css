@@ -1284,3 +1284,21 @@
   border-bottom: 1px solid var(--cyan);
   background: color-mix(in srgb, var(--cyan) 18%, transparent);
 }
+
+.explorer-ai__msg-agent-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.explorer-ai__msg-agent-btn:hover .explorer-ai__msg-name {
+  color: var(--accent);
+  text-decoration: underline;
+}
