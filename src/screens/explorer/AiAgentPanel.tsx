@@ -1088,14 +1088,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const send = async () => {
     const text = input.trim();
     if (!text || sending) return;
-    // An @mention directs the turn at that agent — it answers in character
-    // through its own provider/model. No mention = the menu's default agent
-    // (first enabled member of the panel's team) answers.
-    const target =
-      firstMentionedAgent(
-        text,
-        allAgents().filter((agent) => agent.enabled && agent.username),
-      ) ?? defaultAgent ?? null;
+    // @mentions direct the turn: one mention (or none — the menu's default
+    // agent) answers sequentially; TWO OR MORE mentions fan out in PARALLEL
+    // — every tagged agent runs its own turn in its own provider process
+    // simultaneously, and the replies land as separate bubbles.
+    const mentioned = mentionedAgents(
+      text,
+      allAgents().filter((agent) => agent.enabled && agent.username),
+    );
+    const target = mentioned[0] ?? defaultAgent ?? null;
     if (!active) {
       setMessages((m) => [
         ...m,
@@ -1280,6 +1281,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setInput('');
     setImages([]);
     closeMention();
+    if (mentioned.length >= 2) {
+      await doSendParallel(history, mentioned);
+      return;
+    }
     await doSend(history, target);
   };
 
@@ -1324,6 +1329,247 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         // never block the UI on a hook
       }
     }
+  };
+
+  /** PARALLEL FAN-OUT — runs each tagged agent's turn in its own isolated
+   * provider call (the backend spawns one curl process per call, so agents
+   * genuinely work simultaneously on separate CPU processes). Each turn is
+   * self-contained: no shared mutable state, no progressive streaming; the
+   * finished reply lands as its own bubble the moment it completes. */
+  const doSendParallel = async (
+    history: ChatMessage[],
+    targets: AgentEntry[],
+  ): Promise<void> => {
+    setSending(true);
+    setReplyingAs(targets.map((t) => '@' + t.username).join(' + '));
+    const replies = new Map<string, ChatMessage>();
+    try {
+      const settled = await Promise.allSettled(
+        targets.map((target) => runIsolatedTurn(history, target)),
+      );
+      // Land replies in the original mention order (not completion order).
+      for (let i = 0; i < targets.length; i++) {
+        const outcome = settled[i];
+        const target = targets[i];
+        if (outcome.status === 'fulfilled') {
+          replies.set(target.username, outcome.value);
+        } else {
+          const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+          replies.set(target.username, {
+            role: 'assistant',
+            text: message,
+            time: now(),
+            agent: target.username,
+            owner: ownerName,
+            error: true,
+          });
+        }
+      }
+      // Append every reply atomically per agent.
+      setMessages((current) => {
+        let updated = current;
+        for (const target of targets) {
+          const reply = replies.get(target.username);
+          if (reply) updated = [...updated, reply];
+        }
+        return updated;
+      });
+      // after-reply hooks run once for the whole parallel batch.
+      try {
+        await runEventHooks('after-reply', repository?.localPath ?? '.');
+      } catch {
+        // never block the UI on a hook
+      }
+    } finally {
+      setSending(false);
+      setReplyingAs('');
+    }
+  };
+
+  /** One self-contained agent turn for the parallel fan-out: same payload,
+   * tool allowlist and agentic loop as runTurn, but it never touches the
+   * shared message list mid-run — the finished reply is returned instead. */
+  const runIsolatedTurn = async (
+    history: ChatMessage[],
+    target: AgentEntry,
+  ): Promise<ChatMessage> => {
+    const last = history[history.length - 1];
+    const provider = (() => {
+      if (target.providerId) {
+        const found = allProviders.find((p) => p.id === target.providerId);
+        if (found) return { ...found, model: target.model || found.model };
+      }
+      return active;
+    })();
+    const repliedAs = target.username;
+    if (isCliProvider(provider)) {
+      const cli = provider.type === 'claude-code' ? 'claude' : 'codex';
+      const output = await cliAgentRun(cli, last.text);
+      return {
+        role: 'assistant',
+        text: output || '(no output)',
+        time: now(),
+        agent: repliedAs,
+        owner: ownerName,
+      };
+    }
+    const isAnthropic = provider.apiFormat === 'anthropic';
+    const rawEndpoint = resolveEndpoint(provider);
+    const endpoint = isAnthropic ? anthropicEndpoint(rawEndpoint) : rawEndpoint;
+    const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const mediaTypeOf = (dataUrl: string) =>
+      dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
+    const profile = '\n\n[Your agent profile]\n' + agentProfileText(target);
+    const toolNudge =
+      '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
+    const fullText = last.text + (last.context ?? '') + profile + toolNudge;
+    const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
+    const content = isAnthropic
+      ? turnImages.length > 0
+        ? [
+            { type: 'text', text: fullText },
+            ...turnImages.map((image) => ({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaTypeOf(image.dataUrl),
+                data: base64Of(image.dataUrl),
+              },
+            })),
+          ]
+        : fullText
+      : turnImages.length > 0
+        ? [
+            { type: 'text', text: fullText },
+            ...turnImages.map((image) => ({
+              type: 'image_url',
+              image_url: { url: image.dataUrl },
+            })),
+          ]
+        : fullText;
+    const agentAllowed = target.tools ?? [];
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL].filter(
+      (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
+    );
+    const anthropicTools = tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.input_schema,
+    }));
+    const openaiTools = tools.map((tool) => ({
+      type: 'function',
+      function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+    }));
+
+    let assistantText = '';
+    let replyError = false;
+    const toolEvents: string[] = [];
+    const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
+    for (let iter = 0; iter < 8; iter++) {
+      const payload = isAnthropic
+        ? { model: provider.model || 'claude-sonnet', max_tokens: 4096, tools: anthropicTools, messages: apiMessages }
+        : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, stream: false };
+      const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
+      const parsed = safeParse(result.body);
+      if (!result.ok) {
+        const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
+        replyError = true;
+        assistantText = String(err?.error?.message ?? err?.message ?? err?.code ?? result.error ?? `HTTP ${result.status}`);
+        break;
+      }
+      if (isAnthropic) {
+        const blocks = (parsed?.content ?? []) as Array<{
+          type?: string;
+          text?: string;
+          id?: string;
+          name?: string;
+          input?: Record<string, unknown>;
+        }>;
+        const textPart = blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+        const calls = blocks.filter((b) => b.type === 'tool_use');
+        if (calls.length === 0) {
+          assistantText = textPart;
+          break;
+        }
+        if (textPart) assistantText += (assistantText ? '\n\n' : '') + textPart;
+        apiMessages.push({ role: 'assistant', content: blocks });
+        const results: Array<Record<string, unknown>> = [];
+        for (const call of calls) {
+          const tool = tools.find((t) => t.name === call.name);
+          const input = call.input ?? {};
+          const output = await runToolCall(tool, String(call.name), input);
+          toolEvents.push(toolLabel(String(call.name), input, output));
+          results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
+        }
+        apiMessages.push({ role: 'user', content: results });
+        if (pendingImages.length > 0) {
+          const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+          apiMessages.push({
+            role: 'user',
+            content: [
+              { type: 'text', text: '[read_image attached these images — look at them and continue]' },
+              ...imgs.map((image) => ({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: mediaTypeOf(image.dataUrl),
+                  data: base64Of(image.dataUrl),
+                },
+              })),
+            ],
+          });
+        }
+      } else {
+        const message = (parsed as {
+          choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>;
+        })?.choices?.[0]?.message;
+        const calls = message?.tool_calls ?? [];
+        if (calls.length === 0) {
+          assistantText = message?.content ?? '';
+          break;
+        }
+        if (message?.content) assistantText += (assistantText ? '\n\n' : '') + message.content;
+        apiMessages.push({ role: 'assistant', content: message?.content ?? '', tool_calls: calls });
+        for (const call of calls) {
+          const name = String(call.function?.name ?? '');
+          let input: Record<string, unknown> = {};
+          try {
+            input = JSON.parse(call.function?.arguments || '{}') as Record<string, unknown>;
+          } catch {
+            // malformed arguments — runToolCall reports the failure
+          }
+          const tool = tools.find((t) => t.name === name);
+          const output = await runToolCall(tool, name, input);
+          toolEvents.push(toolLabel(name, input, output));
+          apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
+          if (pendingImages.length > 0) {
+            const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+            apiMessages.push({
+              role: 'user',
+              content: [
+                { type: 'text', text: '[read_image attached these images — look at them and continue]' },
+                ...imgs.map((image) => ({
+                  type: 'image_url',
+                  image_url: { url: image.dataUrl },
+                })),
+              ],
+            });
+          }
+        }
+      }
+    }
+    if (!replyError && !assistantText) {
+      assistantText = toolEvents.length > 0 ? 'Done — see the tool activity above.' : '(empty reply)';
+    }
+    return {
+      role: 'assistant',
+      text: assistantText,
+      time: now(),
+      agent: repliedAs,
+      owner: ownerName,
+      ...(replyError ? { error: true } : {}),
+      ...(toolEvents.length > 0 ? { toolEvents } : {}),
+    };
   };
 
   const runTurn = async (
