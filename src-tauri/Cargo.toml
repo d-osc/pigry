@@ -30,6 +30,7 @@ notify = "7"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 chromiumoxide = { version = "0.7", features = ["tokio-runtime"] }
+pdf-extract = "0.7"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

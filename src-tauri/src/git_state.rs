@@ -1378,6 +1378,17 @@ fn mime_for(path: &str) -> &'static str {
     }
 }
 
+/// Extracts the text of a text-based PDF (not scanned pages). Powers the
+/// agent's read_pdf tool.
+pub fn read_pdf_text(repo_path: &Path, path: &str, limit: usize) -> Result<String> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    let bytes = std::fs::read(&full).map_err(|e| format!("failed to read {path}: {e}"))?;
+    let text = pdf_extract::extract_text_from_mem(&bytes)
+        .map_err(|e| format!("failed to extract pdf text from {path}: {e} (scanned/image PDFs have no text layer)"))?;
+    Ok(text.chars().take(limit).collect())
+}
+
 /// Reads a binary file (images, pdfs, office docs) as base64 for the
 /// preview viewers. Same traversal guard as the text reader.
 pub fn read_binary_file(repo_path: &Path, path: &str) -> Result<BinaryFileContent> {

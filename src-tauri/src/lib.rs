@@ -200,6 +200,7 @@ pub fn run() {
             commands::web_search,
             commands::browser_devtools,
             commands::browser,
+            commands::read_pdf_text,
             commands::browser_page,
         ])
         .build(tauri::generate_context!())

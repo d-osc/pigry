@@ -745,6 +745,10 @@ export async function openInBrowser(url: string): Promise<string> {
   return invoke('browser', { url });
 }
 
+export async function readPdfText(path: string, limit?: number): Promise<string> {
+  return invoke('read_pdf_text', { path, limit: limit ?? null });
+}
+
 export async function browserDevtools(
   action: DevtoolsAction,
   opts?: { url?: string; js?: string; waitMs?: number },

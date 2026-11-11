@@ -1700,6 +1700,19 @@ pub async fn browser_devtools(
 
 /// Opens a URL in the user's default browser window (visible, not headless).
 #[tauri::command]
+pub async fn read_pdf_text(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    limit: Option<usize>,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_pdf_text(&repo_path, &path, limit.unwrap_or(12_000))
+}
+
+#[tauri::command]
 pub async fn browser(
     url: String,
 ) -> Result<String, String> {

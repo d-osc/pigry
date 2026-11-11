@@ -36,6 +36,9 @@ import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type Ski
 import { listSkills } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
 import { browserDevtools, openInBrowser, type DevtoolsAction } from '../../lib/tauriClient';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+import { readPdfText } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -224,6 +227,84 @@ const READ_IMAGE_TOOL: ToolSpec = {
   },
 };
 
+/** b64 string -> ArrayBuffer (documents arrive base64 from the backend). */
+function b64ToArrayBuffer(data: string): ArrayBuffer {
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer as ArrayBuffer;
+}
+
+/** Word/Excel/PDF readers — extract TEXT the agent can reason about. */
+const DOC_TOOLS: ToolSpec[] = [
+  {
+    id: 'read_pdf',
+    name: 'read_pdf',
+    description:
+      'Extract the text of a PDF in the working tree (text-based PDFs; scanned/image PDFs have no text layer).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Repo-relative .pdf path' },
+        limit: { type: 'number', description: 'Max characters returned (default 12000)' },
+      },
+      required: ['path'],
+    },
+    run: async (input) => {
+      const path = String(input.path ?? '');
+      const text = await readPdfText(path, Number(input.limit ?? 12000) || undefined);
+      return text || '(no text extracted — the PDF may be scanned images)';
+    },
+  },
+  {
+    id: 'read_word',
+    name: 'read_word',
+    description:
+      'Extract the text of a .docx Word document in the working tree (paragraphs in document order).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Repo-relative .docx path' },
+      },
+      required: ['path'],
+    },
+    run: async (input) => {
+      const path = String(input.path ?? '');
+      const bin = await readBinaryFile(path);
+      const text = await mammoth
+        .extractRawText({ arrayBuffer: b64ToArrayBuffer(bin.data) })
+        .then((result: { value: string }) => result.value);
+      return text.slice(0, 12000) || '(empty document)';
+    },
+  },
+  {
+    id: 'read_excel',
+    name: 'read_excel',
+    description:
+      'Extract the content of an .xlsx spreadsheet in the working tree — every sheet as CSV rows (values only, no formatting).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Repo-relative .xlsx path' },
+      },
+      required: ['path'],
+    },
+    run: async (input) => {
+      const path = String(input.path ?? '');
+      const bin = await readBinaryFile(path);
+      const wb = XLSX.read(b64ToArrayBuffer(bin.data), { type: 'array' });
+      const parts: string[] = [];
+      for (const name of wb.SheetNames) {
+        const sheet = wb.Sheets[name];
+        parts.push(`## sheet: ${name}`);
+        parts.push(XLSX.utils.sheet_to_csv(sheet).slice(0, 6000));
+      }
+      const text = parts.join('\n').trim();
+      return text.slice(0, 12000) || '(empty workbook)';
+    },
+  },
+];
+
 /** Web tools — search + headless browser (backend curls/launches, no CORS). */
 const WEB_TOOLS: ToolSpec[] = [
   {
@@ -326,6 +407,9 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
   if (name === 'web_search') return `web_search: ${String(input.query ?? '?')}`;
   if (name === 'playwright') return `playwright → ${String(input.url ?? '?')}`;
   if (name === 'read_image') return `read_image → ${String(input.path ?? '?')}`;
+  if (name === 'read_pdf') return `read_pdf → ${String(input.path ?? '?')}`;
+  if (name === 'read_word') return `read_word → ${String(input.path ?? '?')}`;
+  if (name === 'read_excel') return `read_excel → ${String(input.path ?? '?')}`;
   return name;
 }
 
@@ -1216,7 +1300,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({
