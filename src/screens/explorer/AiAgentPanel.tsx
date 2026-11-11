@@ -613,9 +613,21 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // @username directs the message at that agent (its provider/model reply).
   const [mention, setMention] = useState<MentionState | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
+  // The @ picker lists only THIS menu's agents (team members + the menu's
+  // default agent) plus pigry's base agents — other teams stay out of the way.
+  const teamAgents = useMemo(
+    () =>
+      allAgents().filter(
+        (agent) =>
+          agent.enabled &&
+          agent.username &&
+          (agent.tier === 'base' || agent.team === team),
+      ),
+    [team, repository?.headOid],
+  );
   const mentionList = useMemo(
-    () => (mention ? mentionCandidates(loadAgents(), mention.query) : []),
-    [mention],
+    () => (mention ? mentionCandidates(teamAgents, mention.query) : []),
+    [mention, teamAgents],
   );
   const mentionPos = Math.min(mentionIdx, Math.max(0, mentionList.length - 1));
 
@@ -1090,7 +1102,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     // Agents defined on the Agents tab — the model can reference them by name.
     try {
-      const agents = allAgents().filter((agent) => agent.enabled);
+      const agents = allAgents().filter(
+        (agent) =>
+          agent.enabled &&
+          agent.username &&
+          (agent.tier === 'base' || agent.team === team),
+      );
       if (agents.length > 0) {
         context +=
           `\n\n[Available agents]\n` +
@@ -2143,7 +2160,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           {attachedFiles.length > 0 ? ` +${attachedFiles.length} attached` : ''}
           {defaultAgent
             ? ` · default @${defaultAgent.username} answers — @ to tag another agent`
-            : loadAgents().some((agent) => agent.enabled && agent.username)
+            : teamAgents.some((agent) => agent.enabled && agent.username)
               ? ' · @ to tag an agent'
               : ''}
         </div>
