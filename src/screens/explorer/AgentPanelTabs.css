@@ -706,28 +706,149 @@
   font-weight: 600;
 }
 
-/* Agent details dialog rows + view buttons. */
-.apanel__view-btn {
-  display: inline-flex;
+/* Agent details dialog — hero header, sections, capability chips. */
+.apanel-dlg__hero {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-card);
+  gap: 14px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgb(139 157 255 / 8%), transparent);
+}
+
+.apanel-dlg__hero-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.apanel-dlg__name {
+  font-size: var(--fs-md);
+  color: var(--text-primary);
+}
+
+.apanel-dlg__sub {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
   color: var(--text-muted);
-  cursor: pointer;
+}
+
+.apanel-dlg__tier {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
   flex-shrink: 0;
 }
 
-.apanel__view-btn:hover {
-  border-color: var(--accent);
+.apanel-dlg__tier--default {
+  background: rgb(139 157 255 / 15%);
   color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.apanel-dlg__tier--base {
+  background: rgb(98 206 231 / 12%);
+  color: var(--cyan, #62cee7);
+  border: 1px solid var(--cyan, #62cee7);
+}
+
+.apanel-dlg__tier--extension {
+  background: rgb(109 214 173 / 12%);
+  color: var(--success, #6dd6ad);
+  border: 1px solid var(--success, #6dd6ad);
+}
+
+.apanel-dlg__section {
+  margin: 10px 0 0;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.apanel-dlg__cap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.apanel-dlg__cap-label {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.apanel-dlg__cap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.apanel-dlg__chip {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.apanel-dlg__chip--tool {
+  background: rgb(139 157 255 / 12%);
+  color: var(--accent);
+  border: 1px solid rgb(139 157 255 / 35%);
+}
+
+.apanel-dlg__chip--skill {
+  background: rgb(181 154 255 / 12%);
+  color: var(--purple, #b59aff);
+  border: 1px solid rgb(181 154 255 / 35%);
+}
+
+.apanel-dlg__chip--mcp {
+  background: rgb(237 182 117 / 12%);
+  color: var(--warning, #edb675);
+  border: 1px solid rgb(237 182 117 / 35%);
+}
+
+.apanel-dlg__cap-none {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.apanel-dlg__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+
+.apanel-dlg__avatar--blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--text-primary);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.apanel-dlg__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .apanel-dlg__role {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--accent);
@@ -775,42 +896,4 @@
   display: flex;
   gap: 8px;
   margin-top: 4px;
-}
-
-.apanel-dlg__avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  object-fit: cover;
-  flex-shrink: 0;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
-}
-
-.apanel-dlg__avatar--blank {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent);
-  color: var(--text-primary);
-  font-size: 26px;
-  font-weight: 700;
-}
-
-.know-dlg__head--profile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.apanel-dlg__body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.apanel__server .apanel__avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  flex-shrink: 0;
 }

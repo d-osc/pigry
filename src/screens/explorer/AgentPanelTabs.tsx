@@ -544,8 +544,8 @@ export function AgentDetailsDialog({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="know-dlg" role="dialog" aria-modal="true" aria-label="Agent details">
-        <header className="know-dlg__head know-dlg__head--profile">
+      <div className="know-dlg apanel-dlg" role="dialog" aria-modal="true" aria-label="Agent details">
+        <header className="apanel-dlg__hero">
           {agent.avatar ? (
             <img className="apanel-dlg__avatar" src={agent.avatar} alt="" />
           ) : (
@@ -553,39 +553,35 @@ export function AgentDetailsDialog({
               {agent.name.charAt(0).toUpperCase()}
             </span>
           )}
-          <div>
-            <strong className="know-dlg__title">{agent.name}</strong>
-            <p className="know-dlg__sub">
+          <div className="apanel-dlg__hero-text">
+            <strong className="apanel-dlg__name">{agent.name}</strong>
+            <p className="apanel-dlg__sub">
               {agent.username ? `@${agent.username}` : ''}
               {agent.team ? ` · ${agent.team}` : ''}
-              {agent.tier ? ` · ${agent.tier} agent` : ''}
             </p>
+            {agent.role && <p className="apanel-dlg__role">{agent.role}</p>}
           </div>
+          {agent.tier && (
+            <span className={`apanel-dlg__tier apanel-dlg__tier--${agent.tier}`}>
+              {agent.tier === 'default' ? 'default agent' : agent.tier === 'base' ? 'base agent' : 'extension'}
+            </span>
+          )}
           <button type="button" className="know-dlg__close" onClick={onClose} aria-label="Close details">
             <X size={13} strokeWidth={1.5} />
           </button>
         </header>
         <div className="know-dlg__body know-dlg__body--editor apanel-dlg__body">
-          {agent.role && <p className="apanel-dlg__role">{agent.role}</p>}
           {agent.description && (
-            <div className="apanel-dlg__desc">{renderMarkdown(agent.description)}</div>
+            <>
+              <h4 className="apanel-dlg__section">About</h4>
+              <div className="apanel-dlg__desc">{renderMarkdown(agent.description)}</div>
+            </>
           )}
+          <h4 className="apanel-dlg__section">Setup</h4>
           <div className="apanel-dlg__rows">
             <div className="apanel-dlg__row">
               <span>Provider</span>
               <code>{providerName} · {model}</code>
-            </div>
-            <div className="apanel-dlg__row">
-              <span>Tools</span>
-              <code>{agent.tools.length > 0 ? agent.tools.join(', ') : 'all enabled tools'}</code>
-            </div>
-            <div className="apanel-dlg__row">
-              <span>Skills</span>
-              <code>{agent.skills.length > 0 ? agent.skills.join(', ') : '—'}</code>
-            </div>
-            <div className="apanel-dlg__row">
-              <span>MCP</span>
-              <code>{agent.mcpServers.length > 0 ? agent.mcpServers.join(', ') : '—'}</code>
             </div>
             {agent.team && agent.username && (
               <div className="apanel-dlg__row">
@@ -593,6 +589,45 @@ export function AgentDetailsDialog({
                 <code>.pigry/teams/{agent.team}/agents/{agent.username}/memory.vector.json</code>
               </div>
             )}
+          </div>
+          <h4 className="apanel-dlg__section">Capabilities</h4>
+          <div className="apanel-dlg__caps">
+            <div className="apanel-dlg__cap">
+              <span className="apanel-dlg__cap-label">Tools</span>
+              <div className="apanel-dlg__cap-chips">
+                {agent.tools.length > 0
+                  ? agent.tools.map((tool) => (
+                      <code key={tool} className="apanel-dlg__chip apanel-dlg__chip--tool">
+                        {tool}
+                      </code>
+                    ))
+                  : <span className="apanel-dlg__cap-none">all enabled tools</span>}
+              </div>
+            </div>
+            <div className="apanel-dlg__cap">
+              <span className="apanel-dlg__cap-label">Skills</span>
+              <div className="apanel-dlg__cap-chips">
+                {agent.skills.length > 0
+                  ? agent.skills.map((skill) => (
+                      <code key={skill} className="apanel-dlg__chip apanel-dlg__chip--skill">
+                        #{skill}
+                      </code>
+                    ))
+                  : <span className="apanel-dlg__cap-none">—</span>}
+              </div>
+            </div>
+            <div className="apanel-dlg__cap">
+              <span className="apanel-dlg__cap-label">MCP</span>
+              <div className="apanel-dlg__cap-chips">
+                {agent.mcpServers.length > 0
+                  ? agent.mcpServers.map((server) => (
+                      <code key={server} className="apanel-dlg__chip apanel-dlg__chip--mcp">
+                        {server}
+                      </code>
+                    ))
+                  : <span className="apanel-dlg__cap-none">—</span>}
+              </div>
+            </div>
           </div>
           {agent.builtIn ? (
             <p className="apanel-dlg__note">
