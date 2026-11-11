@@ -1698,6 +1698,20 @@ pub async fn browser_devtools(
     }
 }
 
+/// Opens a URL in the user's default browser window (visible, not headless).
+#[tauri::command]
+pub async fn browser(
+    url: String,
+) -> Result<String, String> {
+    let url = url.trim().to_string();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("url must start with http:// or https://".to_string());
+    }
+    tauri_plugin_opener::open_url(url.clone(), None::<&str>)
+        .map_err(|e| format!("failed to open browser: {e}"))?;
+    Ok(format!("opened {url} in the default browser"))
+}
+
 #[tauri::command]
 pub async fn web_search(
     query: String,

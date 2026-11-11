@@ -35,7 +35,7 @@ import { allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills } from '../../lib/skills';
 import { webSearch, browserPage } from '../../lib/tauriClient';
-import { browserDevtools, type DevtoolsAction } from '../../lib/tauriClient';
+import { browserDevtools, openInBrowser, type DevtoolsAction } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -233,6 +233,23 @@ const WEB_TOOLS: ToolSpec[] = [
     run: async (input) => {
       const page = await browserPage(String(input.url ?? ''), Number(input.wait_ms ?? 1200) || undefined);
       return `title: ${page.title}\nurl: ${page.url}\n\n${page.text}`;
+    },
+  },
+  {
+    id: 'browser',
+    name: 'browser',
+    description:
+      'Open a URL in the user’s visible default browser window (the user can see and interact with the page). Use this to SHOW results/pages to the user — read content yourself with playwright instead.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'The http(s) URL to open' },
+      },
+      required: ['url'],
+    },
+    run: async (input) => {
+      const url = String(input.url ?? '');
+      return openInBrowser(url);
     },
   },
 ];

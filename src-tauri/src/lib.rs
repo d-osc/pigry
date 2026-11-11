@@ -199,6 +199,7 @@ pub fn run() {
             commands::memory_search,
             commands::web_search,
             commands::browser_devtools,
+            commands::browser,
             commands::browser_page,
         ])
         .build(tauri::generate_context!())

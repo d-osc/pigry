@@ -741,6 +741,10 @@ export async function browserPage(url: string, waitMs?: number): Promise<Browser
 
 export type DevtoolsAction = 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'close';
 
+export async function openInBrowser(url: string): Promise<string> {
+  return invoke('browser', { url });
+}
+
 export async function browserDevtools(
   action: DevtoolsAction,
   opts?: { url?: string; js?: string; waitMs?: number },
