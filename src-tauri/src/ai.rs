@@ -164,6 +164,48 @@ pub struct CliDetectResult {
     /// Default model read from each app's own config, if any.
     pub claude_model: String,
     pub codex_model: String,
+    /// Every detected CLI coding agent — the generic scan result.
+    pub apps: Vec<CliAppInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliAppInfo {
+    /// Binary to run (also the provider `type` on the frontend).
+    pub binary: String,
+    /// Display name for the provider.
+    pub name: String,
+    pub version: String,
+    /// Default model read from the app's own config, if any.
+    pub model: String,
+}
+
+/// The CLI coding agents pigry knows how to detect — (binary, display name).
+/// Config-model readers exist for claude/codex; the rest report no model.
+const DETECTABLE_APPS: &[(&str, &str)] = &[
+    ("claude", "Claude Code"),
+    ("codex", "Codex"),
+    ("copilot", "GitHub Copilot"),
+    ("zcode", "ZCode"),
+    ("autoclaw", "AutoClaw"),
+    ("workbuddy", "WorkBuddy"),
+    ("traework", "TraeWork"),
+    ("conebuddy", "ConeBuddy"),
+    ("traecode", "TraeCode"),
+    ("opencode", "OpenCode"),
+    ("cursor-agent", "Cursor"),
+    ("cursor", "Cursor"),
+    ("openclaw", "OpenClaw"),
+];
+
+/// Reads the configured default model for a detected app (per-app config
+/// files; unknown apps report none).
+fn read_app_model(binary: &str) -> String {
+    match binary {
+        "claude" => read_claude_model(),
+        "codex" => read_codex_model(),
+        _ => String::new(),
+    }
 }
 
 fn cli_version(exe: &str) -> String {
@@ -294,6 +336,26 @@ pub fn cli_detect() -> CliDetectResult {
     } else {
         read_codex_model()
     };
+    // Generic scan — every detectable binary the machine has.
+    let mut apps: Vec<CliAppInfo> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for (binary, name) in DETECTABLE_APPS {
+        let version = cli_version(binary);
+        if version.is_empty() {
+            continue;
+        }
+        // `cursor-agent` wins over `cursor` when both exist.
+        if seen.iter().any(|b| b == *binary || (*binary == "cursor" && b == "cursor-agent")) {
+            continue;
+        }
+        seen.push(binary.to_string());
+        apps.push(CliAppInfo {
+            binary: binary.to_string(),
+            name: name.to_string(),
+            version,
+            model: read_app_model(binary),
+        });
+    }
     CliDetectResult {
         claude: !claude_version.is_empty(),
         codex: !codex_version.is_empty(),
@@ -303,6 +365,7 @@ pub fn cli_detect() -> CliDetectResult {
         copilot_version,
         claude_model,
         codex_model,
+        apps,
     }
 }
 
@@ -327,7 +390,12 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, Strin
             let flat = prompt.replace(['\r', '\n'], " ");
             cmd.args(["-p", &flat]);
         }
-        other => return Err(format!("unknown CLI agent: {other}")),
+        // Generic CLI coding agent — flattened prompt as the sole argument.
+        other => {
+            prompt_via_stdin = false;
+            let flat = prompt.replace(['\r', '\n'], " ");
+            cmd.args([&flat]);
+        }
     }
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.current_dir(Path::new(cwd));

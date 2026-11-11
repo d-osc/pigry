@@ -424,6 +424,14 @@ export async function ghOpenUrl(url: string): Promise<void> {
   return invoke('gh_open_url', { url });
 }
 
+/** One detected CLI coding agent (also the provider `type` on the frontend). */
+export interface CliAppInfo {
+  binary: string;
+  name: string;
+  version: string;
+  model: string;
+}
+
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
 export interface CliDetectResult {
   claude: boolean;
@@ -435,26 +443,31 @@ export interface CliDetectResult {
   /** Default model read from each app's own config (empty when unset). */
   claudeModel: string;
   codexModel: string;
+  /** Every detected CLI coding agent — the generic scan result. */
+  apps: CliAppInfo[];
 }
 
-/** Detect installed CLI coding agents (claude / codex / copilot). */
+const NO_CLI_DETECT: CliDetectResult = {
+  claude: false,
+  codex: false,
+  copilot: false,
+  claudeVersion: '',
+  codexVersion: '',
+  copilotVersion: '',
+  claudeModel: '',
+  codexModel: '',
+  apps: [],
+};
+
+/** Detect installed CLI coding agents (claude / codex / copilot / …). */
 export async function cliDetect(): Promise<CliDetectResult> {
-  if (!isTauri())
-    return {
-      claude: false,
-      codex: false,
-      copilot: false,
-      claudeVersion: '',
-      codexVersion: '',
-      copilotVersion: '',
-      claudeModel: '',
-      codexModel: '',
-    };
-  return invoke('cli_detect');
+  if (!isTauri()) return { ...NO_CLI_DETECT, apps: [] };
+  const result = (await invoke('cli_detect')) as CliDetectResult;
+  return { ...NO_CLI_DETECT, ...result, apps: result.apps ?? [] };
 }
 
-/** Runs a prompt through claude / codex / copilot (blocking until the agent finishes). */
-export async function cliAgentRun(cli: 'claude' | 'codex' | 'copilot', prompt: string): Promise<string> {
+/** Runs a prompt through an installed CLI coding agent (blocking until it finishes). */
+export async function cliAgentRun(cli: string, prompt: string): Promise<string> {
   if (!isTauri()) throw new Error('CLI agents require the desktop app');
   return invoke<string>('cli_agent_run', { cli, prompt });
 }

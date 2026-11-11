@@ -245,9 +245,12 @@ export function ProviderManager() {
         added.push(name);
       };
       const detected = await cliDetect();
-      if (detected.claude) addDetected('claude-code', 'Claude Code', detected.claudeModel);
-      if (detected.codex) addDetected('codex', 'Codex', detected.codexModel);
-      if (detected.copilot) addDetected('copilot', 'GitHub Copilot');
+      // Generic scan — every detected CLI coding agent becomes a provider.
+      // zcode's CLI kind is distinct from the HTTP zcode providers.
+      for (const app of detected.apps) {
+        const type = app.binary === 'zcode' ? 'zcode-cli' : app.binary;
+        addDetected(type, app.name, app.model);
+      }
       try {
         const zcode = await detectZcodeGlm();
         if (zcode && !hasType('zcode')) {

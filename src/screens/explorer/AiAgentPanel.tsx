@@ -1547,8 +1547,14 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       : '';
     const repliedAs = target.username;
     if (isCliProvider(provider)) {
+      // The provider type IS the CLI binary (claude-code → claude,
+      // zcode-cli → zcode).
       const cli =
-        provider.type === 'claude-code' ? 'claude' : provider.type === 'copilot' ? 'copilot' : 'codex';
+        provider.type === 'claude-code'
+          ? 'claude'
+          : provider.type === 'zcode-cli'
+            ? 'zcode'
+            : provider.type;
       const output = await cliAgentRun(cli, last.text);
       return {
         role: 'assistant',
@@ -1763,8 +1769,14 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setReplyingAs(repliedAs);
 
     if (isCliProvider(provider)) {
+      // The provider type IS the CLI binary (claude-code → claude,
+      // zcode-cli → zcode).
       const cli =
-        provider.type === 'claude-code' ? 'claude' : provider.type === 'copilot' ? 'copilot' : 'codex';
+        provider.type === 'claude-code'
+          ? 'claude'
+          : provider.type === 'zcode-cli'
+            ? 'zcode'
+            : provider.type;
       let working = history;
       try {
         const output = await cliAgentRun(cli, last.text);

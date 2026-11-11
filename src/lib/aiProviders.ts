@@ -248,7 +248,22 @@ function applyRegistryDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
 }
 
 /** Provider types that come from the installed-AI-apps scan. */
-const APP_PROVIDER_TYPES = new Set(['claude-code', 'codex', 'copilot']);
+const APP_PROVIDER_TYPES = new Set([
+  'claude-code',
+  'codex',
+  'copilot',
+  'claude',
+  'zcode-cli',
+  'autoclaw',
+  'workbuddy',
+  'traework',
+  'conebuddy',
+  'traecode',
+  'opencode',
+  'cursor-agent',
+  'cursor',
+  'openclaw',
+]);
 
 /** Marks scanned-app providers so they group under "Installed AI apps" —
  * self-healing for entries added before the flag existed. */
@@ -477,7 +492,25 @@ export function providerStatus(entry: AiProviderEntry): 'ok' | 'warn' {
   return 'ok';
 }
 
+/** Provider types backed by an installed CLI coding agent. */
+const CLI_PROVIDER_TYPES = new Set([
+  'claude-code',
+  'codex',
+  'copilot',
+  'claude',
+  'zcode-cli',
+  'autoclaw',
+  'workbuddy',
+  'traework',
+  'conebuddy',
+  'traecode',
+  'opencode',
+  'cursor-agent',
+  'cursor',
+  'openclaw',
+]);
+
 /** True when this provider talks to a CLI agent instead of an HTTP API. */
 export function isCliProvider(entry: AiProviderEntry): boolean {
-  return entry.type === 'claude-code' || entry.type === 'codex' || entry.type === 'copilot';
+  return CLI_PROVIDER_TYPES.has(entry.type);
 }
