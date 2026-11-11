@@ -33,12 +33,14 @@ import {
   type McpServer,
   type McpTransport,
 } from '../../lib/mcpServers';
+import { listSkills } from '../../lib/skills';
 import {
   applyPlugin,
   INSTRUCTIONS_PATH,
   AGENT_TEAMS,
   allAgents,
   builtinAgents,
+
   loadAgents,
   loadHooks,
   loadPlugins,
@@ -57,9 +59,15 @@ import { loadProviders, type AiProviderEntry } from '../../lib/aiProviders';
 import {
   MentionMenu,
   applyMention,
+  type MentionState,
   detectMention,
   mentionCandidates,
-  type MentionState,
+  skillCandidates,
+  detectSkillToken,
+  applySkillToken,
+  SkillMenu,
+  type SkillEntry,
+  type SkillTokenState,
 } from '../../lib/mentions';
 import { useRepository } from '../../hooks/useRepository';
 import './AgentPanelTabs.css';
@@ -537,6 +545,42 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   // @mention autocomplete in the description — typing `@` opens the agent
   // picker; picking inserts the `@username` tag into the markdown text.
   const [descMention, setDescMention] = useState<MentionState | null>(null);
+  // #skill twin of the description's @mention picker.
+  const [descSkill, setDescSkill] = useState<SkillTokenState | null>(null);
+  const [descSkillIdx, setDescSkillIdx] = useState(0);
+  // Skill metadata for the # picker (id/name/description).
+  const [skillMetas, setSkillMetas] = useState<SkillEntry[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listSkills()
+      .then((list) => {
+        if (!cancelled) setSkillMetas(list);
+      })
+      .catch(() => {
+        // skill listing unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const descSkillList = useMemo(
+    () => (descSkill ? skillCandidates(skillMetas, descSkill.query) : []),
+    [descSkill, skillMetas],
+  );
+  const descSkillPos = Math.min(descSkillIdx, Math.max(0, descSkillList.length - 1));
+
+  const pickDescSkill = (skill: SkillEntry) => {
+    if (!draft || !descSkill) return;
+    const caret = descRef.current?.selectionStart ?? draft.description.length;
+    const next = applySkillToken(draft.description, descSkill, caret, skill.name || skill.id);
+    setDraft({ ...draft, description: next.value });
+    setDescSkill(null);
+    setDescSkillIdx(0);
+    requestAnimationFrame(() => {
+      descRef.current?.focus();
+      descRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
   const [descMentionIdx, setDescMentionIdx] = useState(0);
   const descMentionList = useMemo(
     () => (descMention ? mentionCandidates(allAgents(), descMention.query) : []),
@@ -988,30 +1032,73 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                       label="Mention an agent"
                     />
                   )}
+                  {descSkill && !descMention && (
+                    <SkillMenu
+                      candidates={descSkillList}
+                      highlighted={descSkillPos}
+                      onHover={setDescSkillIdx}
+                      onPick={pickDescSkill}
+                      onOutside={() => {
+                        setDescSkill(null);
+                        setDescSkillIdx(0);
+                      }}
+                      anchorRef={descRef}
+                      direction="down"
+                      label="Use a skill"
+                    />
+                  )}
                   <textarea
                     ref={descRef}
                     rows={3}
                     value={draft.description}
-                    placeholder={'**CI Bot** runs the test suite\n- reports failures\n@other-agent to tag a teammate'}
+                    placeholder={'**CI Bot** runs the test suite\n- reports failures\n@other-agent tags a teammate, #skill-name uses a skill'}
                     onChange={(event) => {
                       const { value, selectionStart } = event.target;
                       setDraft({ ...draft, description: value });
-                      setDescMention(detectMention(value, selectionStart ?? value.length));
+                      const caret = selectionStart ?? value.length;
+                      const at = detectMention(value, caret);
+                      setDescMention(at);
                       setDescMentionIdx(0);
+                      setDescSkill(at ? null : detectSkillToken(value, caret));
+                      setDescSkillIdx(0);
                     }}
                     onKeyDown={(event) => {
-                      if (!descMention || descMentionList.length === 0) return;
-                      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                        event.preventDefault();
-                        const delta = event.key === 'ArrowUp' ? -1 : 1;
-                        setDescMentionIdx((i) => (i + delta + descMentionList.length) % descMentionList.length);
-                      } else if (event.key === 'Enter' || event.key === 'Tab') {
-                        event.preventDefault();
-                        pickDescMention(descMentionList[descMentionPos]);
-                      } else if (event.key === 'Escape') {
-                        event.preventDefault();
-                        setDescMention(null);
-                        setDescMentionIdx(0);
+                      if (descMention && descMentionList.length > 0) {
+                        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          const delta = event.key === 'ArrowUp' ? -1 : 1;
+                          setDescMentionIdx((i) => (i + delta + descMentionList.length) % descMentionList.length);
+                          return;
+                        }
+                        if (event.key === 'Enter' || event.key === 'Tab') {
+                          event.preventDefault();
+                          pickDescMention(descMentionList[descMentionPos]);
+                          return;
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setDescMention(null);
+                          setDescMentionIdx(0);
+                          return;
+                        }
+                      }
+                      if (descSkill && descSkillList.length > 0) {
+                        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                          event.preventDefault();
+                          const delta = event.key === 'ArrowUp' ? -1 : 1;
+                          setDescSkillIdx((i) => (i + delta + descSkillList.length) % descSkillList.length);
+                          return;
+                        }
+                        if (event.key === 'Enter' || event.key === 'Tab') {
+                          event.preventDefault();
+                          pickDescSkill(descSkillList[descSkillPos]);
+                          return;
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setDescSkill(null);
+                          setDescSkillIdx(0);
+                        }
                       }
                     }}
                   />

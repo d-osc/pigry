@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import { allAgents, builtinAgents } from '../../lib/agentExtras';
+import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
+import { listSkills } from '../../lib/skills';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
@@ -408,6 +410,50 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     [mention],
   );
   const mentionPos = Math.min(mentionIdx, Math.max(0, mentionList.length - 1));
+
+  // #skill autocomplete — typing `#` opens the skill picker; the picked
+  // #name tag attaches that skill's content to the turn.
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [skillTok, setSkillTok] = useState<SkillTokenState | null>(null);
+  const [skillIdx, setSkillIdx] = useState(0);
+  const skillList = useMemo(
+    () => (skillTok ? skillCandidates(skills, skillTok.query) : []),
+    [skillTok, skills],
+  );
+  const skillPos = Math.min(skillIdx, Math.max(0, skillList.length - 1));
+
+  const closeSkill = () => {
+    setSkillTok(null);
+    setSkillIdx(0);
+  };
+
+  /** Commits the picked skill into the composer text. */
+  const pickSkill = (skill: SkillEntry) => {
+    if (!skillTok) return;
+    const caret = textareaRef.current?.selectionStart ?? input.length;
+    const next = applySkillToken(input, skillTok, caret, skill.name || skill.id);
+    setInput(next.value);
+    closeSkill();
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  // Load skill metadata once for the picker.
+  useEffect(() => {
+    let cancelled = false;
+    listSkills()
+      .then((list) => {
+        if (!cancelled) setSkills(list);
+      })
+      .catch(() => {
+        // skill listing unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const closeMention = () => {
     setMention(null);
@@ -798,6 +844,35 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
     if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
+    // #tagged skills ride along in FULL — `#<id|name>` in the message calls
+    // that skill explicitly.
+    try {
+      const tagTokens = [
+        ...new Set(
+          [...text.matchAll(/(?:^|\s)#([\w-]+)/g)].map((match) => match[1].toLowerCase()),
+        ),
+      ];
+      if (tagTokens.length > 0) {
+        const all = await listSkills();
+        const matches = all.filter(
+          (skill) =>
+            tagTokens.includes(skill.id.toLowerCase()) ||
+            tagTokens.includes(skill.name.toLowerCase()),
+        );
+        for (const skill of matches) {
+          try {
+            const md = (
+              await readWorktreeFile(`.pigry/skills/${skill.id}.md`)
+            ).content;
+            context += `\n\n[Skill: ${skill.name || skill.id}]\n${md.slice(0, 4000)}`;
+          } catch {
+            // unreadable skill file — skip
+          }
+        }
+      }
+    } catch {
+      // skill listing unavailable
+    }
     // Project instructions (.pigry/instructions.md) — always ride along.
     try {
       const instructions = (await readInstructions()).trim();
@@ -1683,18 +1758,34 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                 label="Mention an agent"
               />
             )}
+            {skillTok && !mention && (
+              <SkillMenu
+                candidates={skillList}
+                highlighted={skillPos}
+                onHover={setSkillIdx}
+                onPick={pickSkill}
+                onOutside={closeSkill}
+                anchorRef={textareaRef}
+                direction="up"
+                label="Use a skill"
+              />
+            )}
             <textarea
               ref={textareaRef}
               className="ai-composer__input"
-              placeholder={`Ask AI to improve this file… (markdown supported, paste images, @ to tag an agent)`}
+              placeholder={`Ask AI to improve this file… (markdown supported, paste images, @ agent, # skill)`}
               aria-label="Ask AI"
               value={input}
               rows={2}
               onChange={(event) => {
                 const { value, selectionStart } = event.target;
                 setInput(value);
-                setMention(detectMention(value, selectionStart ?? value.length));
+                const caret = selectionStart ?? value.length;
+                const at = detectMention(value, caret);
+                setMention(at);
                 setMentionIdx(0);
+                setSkillTok(at ? null : detectSkillToken(value, caret));
+                setSkillIdx(0);
               }}
               onPaste={handlePaste}
               onKeyDown={(event) => {
@@ -1713,6 +1804,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                   if (event.key === 'Escape') {
                     event.preventDefault();
                     closeMention();
+                    return;
+                  }
+                }
+                if (skillTok && skillList.length > 0) {
+                  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                    event.preventDefault();
+                    const delta = event.key === 'ArrowUp' ? -1 : 1;
+                    setSkillIdx((i) => (i + delta + skillList.length) % skillList.length);
+                    return;
+                  }
+                  if (event.key === 'Enter' || event.key === 'Tab') {
+                    event.preventDefault();
+                    pickSkill(skillList[skillPos]);
+                    return;
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    closeSkill();
                     return;
                   }
                 }

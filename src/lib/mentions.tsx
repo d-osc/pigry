@@ -6,7 +6,7 @@
  * assistant reply tags that agent into the thread — agent-to-agent. */
 
 import { useEffect, useRef } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Hash } from 'lucide-react';
 import type { AgentEntry } from './agentExtras';
 
 /** An active @token being typed: where it starts + the fragment after @. */
@@ -180,6 +180,128 @@ export function MentionMenu({
           <span className="mention-menu__name">{agent.name}</span>
           <span className="mention-menu__user">@{agent.username}</span>
           {agent.team && <span className="mention-menu__team">{agent.team}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** ---- #skill tokens — the skill twin of @mentions ---- */
+
+/** Metadata for one skill (.pigry/skills/<id>.md). */
+export interface SkillEntry {
+  /** File slug — the stable id. */
+  id: string;
+  /** Human name (heading or frontmatter); falls back to the id. */
+  name: string;
+  /** First paragraph / frontmatter description. */
+  description: string;
+}
+
+/** An active #token being typed: where it starts + the fragment after #. */
+export interface SkillTokenState {
+  start: number;
+  query: string;
+}
+
+/** An #token at the caret: preceded by start-of-text or whitespace. */
+const SKILL_TOKEN_RE = /(^|\s)#([\w-]*)$/;
+
+/** Detects an #skill token ending at `caret` — null when the caret isn't in
+ * one. Markdown headings (`# Title`) trigger it too; picking nothing closes
+ * it, so heading typing is only mildly noisy. */
+export function detectSkillToken(value: string, caret: number): SkillTokenState | null {
+  const match = value.slice(0, caret).match(SKILL_TOKEN_RE);
+  if (!match) return null;
+  return { start: caret - match[2].length - 1, query: match[2].toLowerCase() };
+}
+
+/** Replaces the active #token with the picked `#<name> ` (trailing space). */
+export function applySkillToken(
+  value: string,
+  state: SkillTokenState,
+  caret: number,
+  token: string,
+): { value: string; caret: number } {
+  const tag = `#${token} `;
+  return {
+    value: value.slice(0, state.start) + tag + value.slice(caret),
+    caret: state.start + tag.length,
+  };
+}
+
+/** Skills matching the #query (id or name). */
+export function skillCandidates(skills: SkillEntry[], query: string): SkillEntry[] {
+  const q = query.toLowerCase();
+  if (q === '') return skills;
+  return skills.filter((skill) => {
+    const hay = `${skill.id} ${skill.name}`.toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+/** The skill twin of MentionMenu — same layout, # token. */
+export function SkillMenu({
+  candidates,
+  highlighted,
+  onHover,
+  onPick,
+  onOutside,
+  anchorRef,
+  direction = 'up',
+  label,
+}: {
+  candidates: SkillEntry[];
+  highlighted: number;
+  onHover: (index: number) => void;
+  onPick: (skill: SkillEntry) => void;
+  onOutside?: () => void;
+  anchorRef?: React.RefObject<HTMLElement | null>;
+  direction?: 'up' | 'down';
+  label: string;
+}) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const item = listRef.current?.children[highlighted] as HTMLElement | undefined;
+    item?.scrollIntoView({ block: 'nearest' });
+  }, [highlighted]);
+  useEffect(() => {
+    if (!onOutside) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (listRef.current?.contains(target)) return;
+      if (anchorRef?.current?.contains(target)) return;
+      onOutside();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [onOutside, anchorRef]);
+  if (candidates.length === 0) return null;
+  const pick = (event: React.SyntheticEvent, skill: SkillEntry) => {
+    event.preventDefault(); // the field must keep focus
+    onPick(skill);
+  };
+  return (
+    <div ref={listRef} className={`mention-menu mention-menu--${direction}`} role="listbox" aria-label={label}>
+      {candidates.map((skill, index) => (
+        <button
+          key={skill.id}
+          type="button"
+          role="option"
+          aria-selected={index === highlighted}
+          className={`mention-menu__item${index === highlighted ? ' mention-menu__item--on' : ''}`}
+          onMouseDown={(event) => pick(event, skill)}
+          onClick={(event) => pick(event, skill)}
+          onMouseEnter={() => onHover(index)}
+        >
+          <span className="mention-menu__avatar">
+            <Hash size={11} strokeWidth={1.5} />
+          </span>
+          <span className="mention-menu__name">{skill.name}</span>
+          <span className="mention-menu__user">#{skill.id}</span>
+          {skill.description && (
+            <span className="mention-menu__team">{skill.description}</span>
+          )}
         </button>
       ))}
     </div>
