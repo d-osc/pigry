@@ -58,9 +58,8 @@ export function ProviderManager() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyVisible, setKeyVisible] = useState(false);
   const [nameEditing, setNameEditing] = useState(false);
-  const [modelAdding, setModelAdding] = useState(false);
-  const [modelEditingId, setModelEditingId] = useState('');
-  const [modelRename, setModelRename] = useState('');
+  /** 'new' = add dialog; an AiModelEntry = edit dialog prefilled with it. */
+  const [modelDialog, setModelDialog] = useState<AiModelEntry | 'new' | null>(null);
   const [tests, setTests] = useState<Record<string, ModelTestState>>({});
   const nameInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -127,12 +126,16 @@ export function ProviderManager() {
     notify(`Provider "${entry.name}" deleted`, 'success');
   };
 
-  const saveNewModel = (model: AiModelEntry) => {
+  /** Dialog Save — appends a new model or replaces the edited one in place. */
+  const saveModelDialog = (model: AiModelEntry) => {
     if (!selected) return;
-    const models = [...selected.models, model];
+    const exists = selected.models.some((m) => m.id === model.id);
+    const models = exists
+      ? selected.models.map((m) => (m.id === model.id ? model : m))
+      : [...selected.models, model];
     patch(selected.id, { models, model: selected.model || model.name });
-    setModelAdding(false);
-    notify(`Model "${model.name}" added`, 'success');
+    setModelDialog(null);
+    notify(`Model "${model.name}" ${exists ? 'updated' : 'added'}`, 'success');
   };
 
   /** Sends a 1-token ping with this model through the provider's wire format. */
@@ -404,8 +407,7 @@ export function ProviderManager() {
             <button
               type="button"
               className="prov-mgr__ghost-btn"
-              onClick={() => setModelAdding(true)}
-              disabled={modelAdding}
+              onClick={() => setModelDialog('new')}
             >
               <Plus size={12} strokeWidth={1.75} />
               Add model
@@ -420,29 +422,7 @@ export function ProviderManager() {
               const test = tests[model.id];
               return (
                 <div key={model.id} className={`prov-mgr__model${model.enabled ? '' : ' prov-mgr__model--off'}`}>
-                  {modelEditingId === model.id ? (
-                    <input
-                      className="prov-mgr__control prov-mgr__model-name-input"
-                      value={modelRename}
-                      autoFocus
-                      onChange={(event) => setModelRename(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          patchModel(selected.id, model.id, { name: modelRename.trim() || model.name });
-                          setModelEditingId('');
-                        }
-                        if (event.key === 'Escape') setModelEditingId('');
-                      }}
-                      onBlur={() => {
-                        patchModel(selected.id, model.id, { name: modelRename.trim() || model.name });
-                        setModelEditingId('');
-                      }}
-                      aria-label="Model name"
-                      spellCheck={false}
-                    />
-                  ) : (
-                    <span className="prov-mgr__model-name">{model.name}</span>
-                  )}
+                  <span className="prov-mgr__model-name">{model.name}</span>
                   {model.context && <span className="prov-mgr__badge">{model.context}</span>}
                   {model.vision && <span className="prov-mgr__badge">Vision</span>}
                   <span className="prov-mgr__model-actions">
@@ -467,12 +447,9 @@ export function ProviderManager() {
                     <button
                       type="button"
                       className="prov-mgr__model-btn"
-                      title="Rename model"
-                      aria-label={`Rename ${model.name}`}
-                      onClick={() => {
-                        setModelEditingId(model.id);
-                        setModelRename(model.name);
-                      }}
+                      title="Edit model settings"
+                      aria-label={`Edit ${model.name}`}
+                      onClick={() => setModelDialog(model)}
                     >
                       <Pencil size={12} strokeWidth={1.5} />
                     </button>
@@ -515,7 +492,13 @@ export function ProviderManager() {
         </section>
       </div>
 
-      {modelAdding && <AddModelDialog onCancel={() => setModelAdding(false)} onSave={saveNewModel} />}
+      {modelDialog && (
+        <AddModelDialog
+          initial={modelDialog === 'new' ? null : modelDialog}
+          onCancel={() => setModelDialog(null)}
+          onSave={saveModelDialog}
+        />
+      )}
     </div>
   );
 }

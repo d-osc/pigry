@@ -33,21 +33,33 @@ function contextBadge(tokens: number): string {
 }
 
 interface Props {
+  /** Existing model — the dialog prefills and Save updates it in place. */
+  initial?: AiModelEntry | null;
   onCancel: () => void;
   onSave: (model: AiModelEntry) => void;
 }
 
-export function AddModelDialog({ onCancel, onSave }: Props) {
+export function AddModelDialog({ initial, onCancel, onSave }: Props) {
   const [smart, setSmart] = useState(true);
-  const [modelId, setModelId] = useState('');
-  const [contextWindow, setContextWindow] = useState('');
-  const [maxOutputTokens, setMaxOutputTokens] = useState('');
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [inputTypes, setInputTypes] = useState<string[]>([]);
-  const [capabilities, setCapabilities] = useState<string[]>([]);
-  const [levels, setLevels] = useState<string[]>([]);
+  const [modelId, setModelId] = useState(initial?.name ?? '');
+  const [contextWindow, setContextWindow] = useState(
+    initial?.contextWindow ? String(initial.contextWindow) : '',
+  );
+  const [maxOutputTokens, setMaxOutputTokens] = useState(
+    initial?.maxOutputTokens ? String(initial.maxOutputTokens) : '',
+  );
+  const [advancedOpen, setAdvancedOpen] = useState(
+    Boolean(initial && (initial.inputTypes?.length || initial.capabilities?.length || initial.reasoningLevels?.length || initial.reasoningMapping)),
+  );
+  const [inputTypes, setInputTypes] = useState<string[]>(() => {
+    if (initial?.inputTypes) return initial.inputTypes.filter((t) => t !== 'text');
+    // Legacy entries only had the vision flag.
+    return initial?.vision ? ['image'] : [];
+  });
+  const [capabilities, setCapabilities] = useState<string[]>(initial?.capabilities ?? []);
+  const [levels, setLevels] = useState<string[]>(initial?.reasoningLevels ?? []);
   const [levelDraft, setLevelDraft] = useState<string | null>(null);
-  const [mapping, setMapping] = useState('');
+  const [mapping, setMapping] = useState(initial?.reasoningMapping ?? '');
   const [error, setError] = useState('');
   const idInputRef = useRef<HTMLInputElement | null>(null);
   const levelInputRef = useRef<HTMLInputElement | null>(null);
@@ -89,14 +101,17 @@ export function AddModelDialog({ onCancel, onSave }: Props) {
   };
 
   const resetForm = () => {
-    setModelId('');
-    setContextWindow('');
-    setMaxOutputTokens('');
-    setInputTypes([]);
-    setCapabilities([]);
-    setLevels([]);
+    // Editing: reset back to the model's saved values; adding: clear everything.
+    setModelId(initial?.name ?? '');
+    setContextWindow(initial?.contextWindow ? String(initial.contextWindow) : '');
+    setMaxOutputTokens(initial?.maxOutputTokens ? String(initial.maxOutputTokens) : '');
+    setInputTypes(
+      initial?.inputTypes ? initial.inputTypes.filter((t) => t !== 'text') : initial?.vision ? ['image'] : [],
+    );
+    setCapabilities(initial?.capabilities ?? []);
+    setLevels(initial?.reasoningLevels ?? []);
     setLevelDraft(null);
-    setMapping('');
+    setMapping(initial?.reasoningMapping ?? '');
     setError('');
     idInputRef.current?.focus();
   };
@@ -112,10 +127,10 @@ export function AddModelDialog({ onCancel, onSave }: Props) {
     const maxOut = Number(maxOutputTokens.replace(/[,\s_]/g, ''));
     const types = ['text', ...inputTypes];
     const model: AiModelEntry = {
-      id: newId('m'),
+      id: initial?.id ?? newId('m'),
       name,
       vision: types.includes('image'),
-      enabled: true,
+      enabled: initial?.enabled ?? true,
     };
     if (ctx > 0) {
       model.contextWindow = ctx;
@@ -138,9 +153,9 @@ export function AddModelDialog({ onCancel, onSave }: Props) {
 
   return (
     <div className="amdlg__overlay" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-      <div className="amdlg" role="dialog" aria-label="Add model">
+      <div className="amdlg" role="dialog" aria-label={initial ? 'Edit model' : 'Add model'}>
         <header className="amdlg__head">
-          <span className="amdlg__title">Add model</span>
+          <span className="amdlg__title">{initial ? 'Edit model' : 'Add model'}</span>
           <button type="button" className="amdlg__close" aria-label="Close" onClick={onCancel}>
             <X size={14} strokeWidth={1.75} />
           </button>
