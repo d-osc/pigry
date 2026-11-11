@@ -458,7 +458,7 @@ function textFromOpenAI(parsed: Record<string, unknown> | null): string {
  * back to the generic label when the handle is unknown. */
 function agentDisplayName(username?: string): string {
   if (username) {
-    const agent = loadAgents().find((entry) => entry.username === username);
+    const agent = allAgents().find((entry) => entry.username === username);
     if (agent?.name) return agent.name;
   }
   return 'AI Agent';
@@ -476,7 +476,7 @@ function agentTint(username: string): string {
 /** The agent's monogram — first letter of its display name. */
 function agentMonogram(username?: string): string {
   if (username) {
-    const agent = loadAgents().find((entry) => entry.username === username);
+    const agent = allAgents().find((entry) => entry.username === username);
     if (agent?.name) return agent.name.trim().charAt(0).toUpperCase() || 'AI';
   }
   return 'AI';
