@@ -34,7 +34,7 @@ import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCo
 import { allAgents, builtinAgents } from '../../lib/agentExtras';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills } from '../../lib/skills';
-import { webSearch, browserPage } from '../../lib/tauriClient';
+import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
 import { browserDevtools, openInBrowser, type DevtoolsAction } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
@@ -196,6 +196,34 @@ const FILE_TOOLS: ToolSpec[] = [
   },
 ];
 
+/** Images the read_image tool captured this tool round — flushed into the
+ * conversation as visible image blocks after the tool result. */
+let pendingImages: string[] = [];
+
+const READ_IMAGE_TOOL: ToolSpec = {
+  id: 'read_image',
+  name: 'read_image',
+  description:
+    'Read an image file (png/jpg/gif/webp) from the working tree — the image is attached and you WILL see it in the next turn. Use it to describe, review or compare visuals (UI screenshots, diagrams, photos).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Repo-relative image path' },
+    },
+    required: ['path'],
+  },
+  run: async (input) => {
+    const path = String(input.path ?? '');
+    const img = await readBinaryFile(path);
+    if (!img.mime.startsWith('image/')) {
+      return `error: ${path} is not an image (${img.mime})`;
+    }
+    const dataUrl = `data:${img.mime};base64,${img.data}`;
+    pendingImages.push(dataUrl);
+    return `read_image → ${path} (${img.mime}, ${Math.round(img.size / 1024)} KB) — the image is attached to your next turn`;
+  },
+};
+
 /** Web tools — search + headless browser (backend curls/launches, no CORS). */
 const WEB_TOOLS: ToolSpec[] = [
   {
@@ -297,6 +325,7 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
   if (name === 'list_files') return `list_files (${output.split('\n').length} paths)`;
   if (name === 'web_search') return `web_search: ${String(input.query ?? '?')}`;
   if (name === 'playwright') return `playwright → ${String(input.url ?? '?')}`;
+  if (name === 'read_image') return `read_image → ${String(input.path ?? '?')}`;
   return name;
 }
 
@@ -1187,7 +1216,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...WEB_TOOLS, ...DEVTOOLS_TOOLS].filter(
       (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
     );
     const anthropicTools = tools.map((tool) => ({
@@ -1204,6 +1233,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     let replyError = false;
     let assistantText = '';
     const toolEvents: string[] = [];
+    pendingImages.length = 0;
     try {
       if (tools.length === 0) {
         // No tools allowed — plain single-shot reply (legacy path).
@@ -1267,6 +1297,23 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
             }
             apiMessages.push({ role: 'user', content: results });
+            if (pendingImages.length > 0) {
+              const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+              apiMessages.push({
+                role: 'user',
+                content: [
+                  { type: 'text', text: '[read_image attached these images — look at them and continue]' },
+                  ...imgs.map((image) => ({
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: mediaTypeOf(image.dataUrl),
+                      data: base64Of(image.dataUrl),
+                    },
+                  })),
+                ],
+              });
+            }
           } else {
             const message = (parsed as {
               choices?: Array<{ message?: { content?: string; tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }> } }>;
@@ -1290,6 +1337,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               const output = await runToolCall(tool, name, input);
               toolEvents.push(toolLabel(name, input, output));
               apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
+              if (pendingImages.length > 0) {
+                const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+                apiMessages.push({
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: '[read_image attached these images — look at them and continue]' },
+                    ...imgs.map((image) => ({
+                      type: 'image_url',
+                      image_url: { url: image.dataUrl },
+                    })),
+                  ],
+                });
+              }
             }
           }
         }
