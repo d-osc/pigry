@@ -1436,10 +1436,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   ): Promise<ChatMessage> => {
     const last = history[history.length - 1];
     const provider = (() => {
-      if (target.providerId) {
-        const found = allProviders.find((p) => p.id === target.providerId);
-        if (found) return { ...found, model: target.model || found.model };
+      if (target.model) {
+        // Pinned model — on the agent's provider when set, else the chat's.
+        const found = target.providerId
+          ? allProviders.find((p) => p.id === target.providerId)
+          : null;
+        if (found) return { ...found, model: target.model };
+        return { ...active, model: target.model };
       }
+      // No model assigned — follow the chat selection entirely.
       return active;
     })();
     const baseSpec = modelSpecOf(provider);
@@ -1635,10 +1640,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // A tagged agent chats through its own provider/model when configured;
     // otherwise the globally active provider answers.
     const provider = (() => {
-      if (target?.providerId) {
-        const found = allProviders.find((p) => p.id === target.providerId);
-        if (found) return { ...found, model: target.model || found.model };
+      if (target?.model) {
+        // Pinned model — on the agent's provider when set, else the chat's.
+        const found = target.providerId
+          ? allProviders.find((p) => p.id === target.providerId)
+          : null;
+        if (found) return { ...found, model: target.model };
+        return { ...active, model: target.model };
       }
+      // No model assigned — follow the chat selection entirely.
       return active;
     })();
     const baseSpec = modelSpecOf(provider);
