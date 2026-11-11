@@ -433,6 +433,8 @@ export interface CliAppInfo {
   model: string;
   /** Default reasoning effort read from the app's own config, if any. */
   effort: string;
+  /** Whether chat turns can actually run through this CLI right now. */
+  usable: boolean;
 }
 
 /** One detected desktop AI app (inventory — no local chat API). */
@@ -480,7 +482,11 @@ export async function cliDetect(): Promise<CliDetectResult> {
   return {
     ...NO_CLI_DETECT,
     ...result,
-    apps: (result.apps ?? []).map((a) => ({ ...a, effort: a.effort ?? '' })),
+    apps: (result.apps ?? []).map((a) => ({
+      ...a,
+      effort: a.effort ?? '',
+      usable: a.usable !== false,
+    })),
     desktop: result.desktop ?? [],
   };
 }

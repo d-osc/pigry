@@ -139,6 +139,8 @@ export interface AiProviderEntry {
   kind: 'builtin' | 'custom';
   /** Added automatically by the installed-AI-apps scan (not user-created). */
   detected?: boolean;
+  /** Measured chat usability from the last scan (false = broken/unusable). */
+  usable?: boolean;
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */
   type: string;
   apiFormat: AiApiFormat;

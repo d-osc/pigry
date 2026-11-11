@@ -254,6 +254,9 @@ pub struct CliAppInfo {
     pub model: String,
     /// Default reasoning effort read from the app's own config, if any.
     pub effort: String,
+    /// Whether chat turns can actually run through this CLI right now
+    /// (login gates / missing prompt modes make some unusable).
+    pub usable: bool,
 }
 
 /// The CLI coding agents pigry knows how to detect — (binary, display name).
@@ -309,6 +312,36 @@ fn read_app_effort(binary: &str) -> String {
         }
     }
     String::new()
+}
+
+/// Cheap usability probe per CLI — chat turns must actually be able to run.
+/// claude gates on login; zcode is TUI-only (no non-interactive prompt mode);
+/// codex exposes a login status check; unknown CLIs are assumed usable.
+fn cli_usable(binary: &str) -> bool {
+    match binary {
+        "claude" => {
+            let out = Command::new("cmd")
+                .args(["/C", "claude", "config", "get", "model"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            match out {
+                Ok(o) => !String::from_utf8_lossy(&o.stdout).contains("Not logged in"),
+                Err(_) => false,
+            }
+        }
+        "codex" => {
+            let out = Command::new("cmd")
+                .args(["/C", "codex", "login", "status"])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output();
+            match out {
+                Ok(o) => String::from_utf8_lossy(&o.stdout).contains("Logged in"),
+                Err(_) => false,
+            }
+        }
+        "zcode" => false,
+        _ => true,
+    }
 }
 
 /// Reads the configured default model from Gemini CLI's settings.json
@@ -507,6 +540,7 @@ pub fn cli_detect() -> CliDetectResult {
             version,
             model: read_app_model(binary),
             effort: read_app_effort(binary),
+            usable: cli_usable(binary),
         });
     }
     CliDetectResult {

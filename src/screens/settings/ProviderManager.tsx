@@ -218,6 +218,7 @@ export function ProviderManager() {
         baseUrl = '',
         apiKey = '',
         enabled = true,
+        usable = true,
       ) => {
         // The app's config is the source of truth: a detected provider's
         // model list mirrors exactly what the app's config declares.
@@ -234,19 +235,24 @@ export function ProviderManager() {
         if (existing) {
           // Backfill/refresh from the app's config — and drop stale entries
           // that earlier (hardcoded-catalog) scans may have merged in.
+          const needsUsable = existing.usable !== usable;
           if (configModels.length > 0) {
             const same =
               existing.model === model &&
               existing.models.length === configModels.length &&
-              existing.models.every((m, i) => m.name === configModels[i]);
+              existing.models.every((m, i) => m.name === configModels[i]) &&
+              !needsUsable;
             if (!same) {
               next = next.map((p) =>
                 p.id === existing.id
-                  ? { ...p, model, models: buildModels() }
+                  ? { ...p, model, models: buildModels(), usable }
                   : p,
               );
               mutated = true;
             }
+          } else if (needsUsable) {
+            next = next.map((p) => (p.id === existing.id ? { ...p, usable } : p));
+            mutated = true;
           }
           return;
         }
@@ -302,12 +308,12 @@ export function ProviderManager() {
             : app.model
               ? [app.model]
               : [];
-        addDetected(type, app.name, configModels, app.effort);
+        addDetected(type, app.name, configModels, app.effort, '', '', true, app.usable !== false);
       }
       // Desktop AI apps — listed as detected inventory (they run in their
       // own window with their own login; disabled until the user opts in).
       for (const desktopApp of detected.desktop) {
-        addDetected(desktopApp.id, desktopApp.name, [], '', '', '', false);
+        addDetected(desktopApp.id, desktopApp.name, [], '', '', '', false, false);
       }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.

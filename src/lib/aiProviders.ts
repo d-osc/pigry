@@ -113,7 +113,8 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
     enabled: raw.enabled !== false,
     models: [],
   };
-  if (raw.detected === true) entry.detected = true;
+    if (raw.detected === true) entry.detected = true;
+    if (raw.usable === false) entry.usable = false;
   const rawModels = Array.isArray(raw.models) ? raw.models : [];
   entry.models = rawModels
     .map((m) => {
@@ -515,6 +516,8 @@ export function anthropicEndpoint(baseUrl: string): string {
 /** Status dot: green = ready to chat, orange = missing key/base URL. */
 export function providerStatus(entry: AiProviderEntry): 'ok' | 'warn' {
   if (!entry.enabled) return 'warn';
+  // Measured unusable (login gate / no prompt mode) at the last scan.
+  if (entry.usable === false) return 'warn';
   // CLI agents run through their own app's login — no endpoint needed.
   if (isCliProvider(entry)) return 'ok';
   if (!entry.baseUrl.trim()) return 'warn';
