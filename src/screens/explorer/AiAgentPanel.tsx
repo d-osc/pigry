@@ -35,7 +35,7 @@ import {
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
-import { effortPayloadFragment } from '../../lib/aiProviders';
+import { effortPayloadFragment, providerStatus } from '../../lib/aiProviders';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills, getSkillContent } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
@@ -2680,7 +2680,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                 title={`Change provider or model — ${providerLabel}${activeEffort ? ` · effort ${activeEffort}` : ''}`}
                 onClick={() => setModelDialogOpen(true)}
               >
-                <span className={`explorer-ai__model-dot explorer-ai__model-dot--${pointedProvider && pointedProvider.apiKey && pointedProvider.baseUrl ? 'ok' : 'warn'}`} />
+                <span className={`explorer-ai__model-dot explorer-ai__model-dot--${pointedProvider ? providerStatus(pointedProvider) : 'warn'}`} />
                 <span className="explorer-ai__model-pill-name">{pointedModel || providerLabel}</span>
                 {activeEffort && <span className="explorer-ai__model-pill-effort">{activeEffort}</span>}
                 <ChevronDown size={11} strokeWidth={1.75} />
@@ -2833,7 +2833,7 @@ function ModelPickerDialog({
                 className={`model-dlg__provider${provider.id === viewId ? ' model-dlg__provider--active' : ''}`}
                 onClick={() => setViewId(provider.id)}
               >
-                <span className={`model-dlg__dot model-dlg__dot--${provider.apiKey && provider.baseUrl ? 'ok' : 'warn'}`} />
+                <span className={`model-dlg__dot model-dlg__dot--${providerStatus(provider)}`} />
                 <span className="model-dlg__provider-name">{provider.name}</span>
                 <span className="model-dlg__provider-count">{provider.models.length}</span>
               </button>

@@ -471,6 +471,8 @@ export function anthropicEndpoint(baseUrl: string): string {
 /** Status dot: green = ready to chat, orange = missing key/base URL. */
 export function providerStatus(entry: AiProviderEntry): 'ok' | 'warn' {
   if (!entry.enabled) return 'warn';
+  // CLI agents run through their own app's login — no endpoint needed.
+  if (isCliProvider(entry)) return 'ok';
   if (!entry.baseUrl.trim()) return 'warn';
   return 'ok';
 }
