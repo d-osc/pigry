@@ -2650,6 +2650,10 @@ function ModelPickerDialog({
   const activeProvider = providers.find((p) => p.id === activeId) ?? null;
   const [viewId, setViewId] = useState(activeProvider?.id ?? providers[0]?.id ?? '');
   const viewed = providers.find((p) => p.id === viewId) ?? providers[0] ?? null;
+  /** Model whose Effort selector is expanded ("Mode" toggle). */
+  const [expandedId, setExpandedId] = useState<string | null>(
+    activeProvider?.models.find((m) => m.name === activeProvider.model && m.reasoningLevels?.length)?.id ?? null,
+  );
 
   return (
     <div
@@ -2689,13 +2693,11 @@ function ModelPickerDialog({
             {viewed?.models.map((model) => {
               const isChosen = viewed.id === activeId && model.name === viewed.model;
               const levels = model.reasoningLevels ?? [];
+              const isExpanded = expandedId === model.id;
               return (
                 <div key={model.id} className="model-dlg__model-block">
-                  <button
-                    type="button"
+                  <div
                     className={`model-dlg__model${isChosen ? ' model-dlg__model--chosen' : ''}${model.enabled ? '' : ' model-dlg__model--off'}`}
-                    onClick={() => onPick(viewed.id, model.name)}
-                    disabled={!model.enabled}
                   >
                     {isChosen ? (
                       <Check size={13} strokeWidth={2} className="model-dlg__check" />
@@ -2705,8 +2707,37 @@ function ModelPickerDialog({
                     <span className="model-dlg__model-name">{model.name}</span>
                     {model.context && <span className="model-dlg__badge">{model.context}</span>}
                     {model.vision && <span className="model-dlg__badge">Vision</span>}
-                  </button>
-                  {levels.length > 0 && (
+                    {model.effort && (
+                      <span className="model-dlg__badge model-dlg__badge--effort">{model.effort}</span>
+                    )}
+                    <span className="model-dlg__row-gap" />
+                    {levels.length > 0 && (
+                      <button
+                        type="button"
+                        className="model-dlg__row-btn"
+                        title="Show effort levels"
+                        aria-expanded={isExpanded}
+                        onClick={() => setExpandedId(isExpanded ? null : model.id)}
+                      >
+                        Mode
+                        {isExpanded ? (
+                          <ChevronDown size={11} strokeWidth={1.75} />
+                        ) : (
+                          <ChevronRight size={11} strokeWidth={1.75} />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="model-dlg__row-btn model-dlg__row-btn--use"
+                      title="Use this model for chat"
+                      disabled={!model.enabled}
+                      onClick={() => onPick(viewed.id, model.name)}
+                    >
+                      Use
+                    </button>
+                  </div>
+                  {isExpanded && levels.length > 0 && (
                     <div className="model-dlg__effort" aria-label={`Effort for ${model.name}`}>
                       <span className="model-dlg__effort-label">Effort</span>
                       <button

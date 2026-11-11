@@ -1353,3 +1353,51 @@
   font-size: var(--fs-2xs);
   color: var(--accent);
 }
+
+/* Model rows: read-only info row with Mode / Use action buttons */
+
+.model-dlg__model {
+  cursor: default;
+}
+
+.model-dlg__row-gap {
+  flex: 1;
+}
+
+.model-dlg__row-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  font-size: var(--fs-2xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.model-dlg__row-btn:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.model-dlg__row-btn--use {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+
+.model-dlg__row-btn--use:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.model-dlg__row-btn--use:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.model-dlg__badge--effort {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
