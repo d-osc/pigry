@@ -217,6 +217,7 @@ export function ProviderManager() {
         effort = '',
         baseUrl = '',
         apiKey = '',
+        enabled = true,
       ) => {
         // The app's config is the source of truth: a detected provider's
         // model list mirrors exactly what the app's config declares.
@@ -261,7 +262,7 @@ export function ProviderManager() {
             baseUrl,
             apiKey,
             model,
-            enabled: true,
+            enabled,
             models: buildModels(),
           },
         ];
@@ -302,6 +303,11 @@ export function ProviderManager() {
               ? [app.model]
               : [];
         addDetected(type, app.name, configModels, app.effort);
+      }
+      // Desktop AI apps — listed as detected inventory (they run in their
+      // own window with their own login; disabled until the user opts in).
+      for (const desktopApp of detected.desktop) {
+        addDetected(desktopApp.id, desktopApp.name, [], '', '', '', false);
       }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.
@@ -548,8 +554,18 @@ export function ProviderManager() {
             <div className="prov-mgr__hint-row">
               <p className="prov-mgr__footnote">
                 Runs through the installed{' '}
-                {selected.type === 'claude-code' ? 'claude' : selected.type === 'copilot' ? 'copilot' : 'codex'} CLI —
+                {selected.type === 'claude-code' ? 'claude' : selected.type === 'copilot' ? 'copilot' : selected.type === 'zcode-cli' ? 'zcode' : 'codex'} CLI —
                 uses that app's own login and subscription. Base URL and API key are not needed.
+              </p>
+            </div>
+          )}
+
+          {['claude-desktop', 'chatgpt-desktop', 'gemini-desktop'].includes(selected.type) && (
+            <div className="prov-mgr__hint-row">
+              <p className="prov-mgr__footnote">
+                Desktop app detected — pigry lists it once installed. The app runs in its own
+                window with its own login; it manages its model there. Disabled by default since
+                chat can't be routed into the desktop app directly.
               </p>
             </div>
           )}
@@ -568,9 +584,9 @@ export function ProviderManager() {
 
           <div className="prov-mgr__models">
             {selected.models.length === 0 &&
-              (isCliProvider(selected) ? (
+              (isCliProvider(selected) || selected.detected ? (
                 <p className="prov-mgr__models-empty">
-                  This app picks its own model at run time — nothing to configure here.
+                  This app manages its own model inside the app — nothing to configure here.
                 </p>
               ) : (
                 <p className="prov-mgr__models-empty">No models — add one above.</p>

@@ -166,6 +166,80 @@ pub struct CliDetectResult {
     pub codex_model: String,
     /// Every detected CLI coding agent — the generic scan result.
     pub apps: Vec<CliAppInfo>,
+    /// Detected desktop AI apps (no local API — inventory + config location).
+    pub desktop: Vec<DesktopAppInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopAppInfo {
+    /// Provider id on the frontend (e.g. "gemini-desktop").
+    pub id: String,
+    /// Display name.
+    pub name: String,
+    pub version: String,
+    /// Config/install location on disk.
+    pub path: String,
+}
+
+/// Detects installed desktop AI apps by their well-known data directories.
+fn detect_desktop_apps() -> Vec<DesktopAppInfo> {
+    let mut out: Vec<DesktopAppInfo> = Vec::new();
+    let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let roaming = std::env::var("APPDATA").unwrap_or_default();
+    let push = |out: &mut Vec<DesktopAppInfo>, id: &str, name: &str, version: String, path: String| {
+        out.push(DesktopAppInfo {
+            id: id.to_string(),
+            name: name.to_string(),
+            version,
+            path,
+        });
+    };
+    // Claude Desktop (Anthropic)
+    let claude_roaming = Path::new(&roaming).join("Claude");
+    let claude_local = Path::new(&local).join("AnthropicClaude");
+    if claude_roaming.is_dir() || claude_local.is_dir() {
+        push(
+            &mut out,
+            "claude-desktop",
+            "Claude Desktop",
+            String::new(),
+            claude_roaming.display().to_string(),
+        );
+    }
+    // ChatGPT Desktop (OpenAI, MSIX)
+    let chatgpt = Path::new(&local).join("OpenAI.ChatGPT-Desktop");
+    if chatgpt.is_dir() {
+        push(
+            &mut out,
+            "chatgpt-desktop",
+            "ChatGPT Desktop",
+            String::new(),
+            chatgpt.display().to_string(),
+        );
+    }
+    // Gemini Desktop (Google) — version from the app-<ver> data dir.
+    let gemini = Path::new(&local).join("Google").join("Gemini");
+    if gemini.is_dir() {
+        let version = std::fs::read_dir(&gemini)
+            .ok()
+            .and_then(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .map(|e| e.file_name().to_string_lossy().to_string())
+                    .filter(|n| n.starts_with("app-"))
+                    .max()
+            })
+            .and_then(|n| n.strip_prefix("app-").map(|s| s.to_string()))
+            .unwrap_or_default();
+        push(
+            &mut out,
+            "gemini-desktop",
+            "Gemini Desktop",
+            version,
+            gemini.display().to_string(),
+        );
+    }
+    out
 }
 
 #[derive(Serialize)]
@@ -445,6 +519,7 @@ pub fn cli_detect() -> CliDetectResult {
         claude_model,
         codex_model,
         apps,
+        desktop: detect_desktop_apps(),
     }
 }
 

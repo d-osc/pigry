@@ -285,6 +285,9 @@ const APP_PROVIDER_TYPES = new Set([
   'cursor-agent',
   'cursor',
   'openclaw',
+  'claude-desktop',
+  'chatgpt-desktop',
+  'gemini-desktop',
 ]);
 
 /** Marks scanned-app providers so they group under "Installed AI apps" —

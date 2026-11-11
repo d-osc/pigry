@@ -435,6 +435,14 @@ export interface CliAppInfo {
   effort: string;
 }
 
+/** One detected desktop AI app (inventory — no local chat API). */
+export interface DesktopAppInfo {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+}
+
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
 export interface CliDetectResult {
   claude: boolean;
@@ -448,6 +456,8 @@ export interface CliDetectResult {
   codexModel: string;
   /** Every detected CLI coding agent — the generic scan result. */
   apps: CliAppInfo[];
+  /** Detected desktop AI apps. */
+  desktop: DesktopAppInfo[];
 }
 
 const NO_CLI_DETECT: CliDetectResult = {
@@ -460,16 +470,18 @@ const NO_CLI_DETECT: CliDetectResult = {
   claudeModel: '',
   codexModel: '',
   apps: [],
+  desktop: [],
 };
 
-/** Detect installed CLI coding agents (claude / codex / copilot / …). */
+/** Detect installed CLI coding agents + desktop AI apps. */
 export async function cliDetect(): Promise<CliDetectResult> {
-  if (!isTauri()) return { ...NO_CLI_DETECT, apps: [] };
+  if (!isTauri()) return { ...NO_CLI_DETECT, apps: [], desktop: [] };
   const result = (await invoke('cli_detect')) as CliDetectResult;
   return {
     ...NO_CLI_DETECT,
     ...result,
     apps: (result.apps ?? []).map((a) => ({ ...a, effort: a.effort ?? '' })),
+    desktop: result.desktop ?? [],
   };
 }
 
