@@ -699,3 +699,74 @@
   font-size: var(--fs-2xs);
   font-weight: 600;
 }
+
+/* Agent details dialog rows + view buttons. */
+.apanel__view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.apanel__view-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.apanel-dlg__role {
+  margin: 0 0 4px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.apanel-dlg__desc {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+
+.apanel-dlg__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.apanel-dlg__row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--fs-2xs);
+}
+
+.apanel-dlg__row > span {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 64px;
+}
+
+.apanel-dlg__row > code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.apanel-dlg__note {
+  margin: 6px 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--warning, #edb675);
+}
+
+.apanel-dlg__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
