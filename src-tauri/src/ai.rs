@@ -263,15 +263,23 @@ fn home_file(rel: &str) -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// Reads the configured default model from Claude Code's settings.json.
+/// Reads the configured default model from Claude Code's config:
+/// settings.json first, then the global ~/.claude.json.
 fn read_claude_model() -> String {
-    let Some(path) = home_file(".claude/settings.json") else {
-        return String::new();
-    };
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return String::new();
-    };
-    parse_claude_model(&text)
+    if let Some(path) = home_file(".claude/settings.json") {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let model = parse_claude_model(&text);
+            if !model.is_empty() {
+                return model;
+            }
+        }
+    }
+    if let Some(path) = home_file(".claude.json") {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            return parse_claude_model(&text);
+        }
+    }
+    String::new()
 }
 
 /// Parses `"model": "…"` out of Claude Code settings content.

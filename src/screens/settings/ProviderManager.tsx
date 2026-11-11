@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { aiChat, cliDetect } from '../../lib/tauriClient';
-import { detectZcodeGlm } from '../../lib/zcode';
+import { detectZcodeGlm, ZCODE_DEFAULT_MODEL } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
   activeProviderId,
@@ -210,20 +210,23 @@ export function ProviderManager() {
       let next = [...loadProviders()];
       let mutated = false;
       const hasType = (type: string) => next.some((p) => p.type === type);
-      // Providers already added by an earlier scan (before the flag existed)
-      // get marked too, so they move out of "Custom providers".
-      const markDetected = (type: string, namePrefix?: string) => {
-        next = next.map((p) => {
-          if (p.type === type && !p.detected && (!namePrefix || p.name.startsWith(namePrefix))) {
-            mutated = true;
-            return { ...p, detected: true };
-          }
-          return p;
-        });
-      };
       const addDetected = (type: string, name: string, model = '', baseUrl = '', apiKey = '') => {
-        if (hasType(type)) {
-          markDetected(type, type === 'zcode' ? 'ZCode' : undefined);
+        const existing = next.find((p) => p.type === type);
+        if (existing) {
+          // Backfill the app's config model onto a provider that was added
+          // before the app's model was known.
+          if (model && !existing.model && (existing.models?.length ?? 0) === 0) {
+            next = next.map((p) =>
+              p.id === existing.id
+                ? {
+                    ...p,
+                    model,
+                    models: [{ id: newId('m'), name: model, vision: false, enabled: true }],
+                  }
+                : p,
+            );
+            mutated = true;
+          }
           return;
         }
         next = [
@@ -245,21 +248,29 @@ export function ProviderManager() {
         added.push(name);
       };
       const detected = await cliDetect();
+      // ZCode's GLM model comes from its decrypted credential store.
+      let zcodeModel = '';
+      try {
+        const zcode = await detectZcodeGlm();
+        if (zcode) {
+          zcodeModel = zcode.model;
+          if (!hasType('zcode')) {
+            addDetected('zcode', zcode.name, zcode.model, zcode.baseUrl, zcode.apiKey);
+          }
+        }
+      } catch {
+        // ZCode desktop not installed / unreadable
+      }
       // Generic scan — every detected CLI coding agent becomes a provider.
       // zcode's CLI kind is distinct from the HTTP zcode providers;
       // claude's canonical type is claude-code (matches earlier entries).
       for (const app of detected.apps) {
         const type =
           app.binary === 'zcode' ? 'zcode-cli' : app.binary === 'claude' ? 'claude-code' : app.binary;
-        addDetected(type, app.name, app.model);
-      }
-      try {
-        const zcode = await detectZcodeGlm();
-        if (zcode && !hasType('zcode')) {
-          addDetected('zcode', zcode.name, zcode.model, zcode.baseUrl, zcode.apiKey);
-        }
-      } catch {
-        // ZCode desktop not installed / unreadable
+        // The zcode CLI runs on ZCode's coding plan — its model is GLM.
+        const model =
+          app.binary === 'zcode' ? zcodeModel || ZCODE_DEFAULT_MODEL : app.model;
+        addDetected(type, app.name, model);
       }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.
@@ -525,9 +536,14 @@ export function ProviderManager() {
           </div>
 
           <div className="prov-mgr__models">
-            {selected.models.length === 0 && (
-              <p className="prov-mgr__models-empty">No models — add one above.</p>
-            )}
+            {selected.models.length === 0 &&
+              (isCliProvider(selected) ? (
+                <p className="prov-mgr__models-empty">
+                  This app picks its own model at run time — nothing to configure here.
+                </p>
+              ) : (
+                <p className="prov-mgr__models-empty">No models — add one above.</p>
+              ))}
             {selected.models.map((model) => {
               const test = tests[model.id];
               return (
