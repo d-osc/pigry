@@ -247,12 +247,32 @@ function applyRegistryDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
   return list;
 }
 
+/** Provider types that come from the installed-AI-apps scan. */
+const APP_PROVIDER_TYPES = new Set(['claude-code', 'codex', 'copilot']);
+
+/** Marks scanned-app providers so they group under "Installed AI apps" —
+ * self-healing for entries added before the flag existed. */
+function markAppProviders(list: AiProviderEntry[]): AiProviderEntry[] {
+  for (const entry of list) {
+    if (entry.kind === 'builtin') continue;
+    if (
+      APP_PROVIDER_TYPES.has(entry.type) ||
+      (entry.type === 'zcode' && entry.name.startsWith('ZCode'))
+    ) {
+      entry.detected = true;
+    }
+  }
+  return list;
+}
+
 export function loadProviders(): AiProviderEntry[] {
   try {
     const raw = localStorage.getItem(LIST_KEY);
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
-      return applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate))));
+      return markAppProviders(
+        applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate)))),
+      );
     }
     const legacy = localStorage.getItem('pigry:ai-provider');
     if (legacy) {
@@ -265,13 +285,15 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = applyRegistryDefaults(
-        ensureZaiTestProvider(
-          ensureZaiDefaults([
-            makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-            makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
-            entry,
-          ]),
+      const list = markAppProviders(
+        applyRegistryDefaults(
+          ensureZaiTestProvider(
+            ensureZaiDefaults([
+              makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+              makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+              entry,
+            ]),
+          ),
         ),
       );
       saveProviders(list, activeProviderId());
@@ -280,7 +302,9 @@ export function loadProviders(): AiProviderEntry[] {
   } catch {
     // fall through to seed
   }
-  const seeded = applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults())));
+  const seeded = markAppProviders(
+    applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults()))),
+  );
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
 }

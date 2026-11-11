@@ -208,15 +208,18 @@ export function ProviderManager() {
     const added: string[] = [];
     try {
       let next = [...loadProviders()];
+      let mutated = false;
       const hasType = (type: string) => next.some((p) => p.type === type);
       // Providers already added by an earlier scan (before the flag existed)
       // get marked too, so they move out of "Custom providers".
       const markDetected = (type: string, namePrefix?: string) => {
-        next = next.map((p) =>
-          p.type === type && !p.detected && (!namePrefix || p.name.startsWith(namePrefix))
-            ? { ...p, detected: true }
-            : p,
-        );
+        next = next.map((p) => {
+          if (p.type === type && !p.detected && (!namePrefix || p.name.startsWith(namePrefix))) {
+            mutated = true;
+            return { ...p, detected: true };
+          }
+          return p;
+        });
       };
       const addDetected = (type: string, name: string, model = '', baseUrl = '', apiKey = '') => {
         if (hasType(type)) {
@@ -253,7 +256,8 @@ export function ProviderManager() {
       } catch {
         // ZCode desktop not installed / unreadable
       }
-      if (added.length > 0) {
+      if (added.length > 0 || mutated) {
+        // Persist new providers AND re-grouping marks for earlier scans.
         commit(next);
         notify('Added AI apps: ' + added.join(', '), 'success');
       } else if (!silent) {
