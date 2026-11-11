@@ -323,6 +323,8 @@ interface BuiltinSpec {
   emoji: string;
   /** Tool allowlist (empty/omitted = all enabled tools). */
   tools?: string[];
+  /** Base-skill ids always active for this agent. */
+  skills?: string[];
 }
 
 /** Tier 1 — one default agent per workspace menu/team. Answers every
@@ -337,6 +339,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🔍',
     tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'browser', 'agent_lookup', 'agent_contacts'],
+    skills: ['file-navigation'],
   },
   {
     username: 'commit-graph',
@@ -347,6 +350,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '📈',
     tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'web_search', 'playwright', 'browser', 'agent_lookup', 'agent_contacts'],
+    skills: ['history-analysis', 'bug-triage'],
   },
   {
     username: 'merge-branch',
@@ -357,6 +361,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🌿',
     tools: ['read_diff', 'read_file', 'list_files', 'read_history', 'search_code', 'stage_changes', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['merge-conflict', 'git-commit-style'],
   },
   {
     username: 'push-commits',
@@ -367,6 +372,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🚀',
     tools: ['stage_changes', 'commit', 'read_diff', 'read_history', 'list_files', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['push-review', 'git-commit-style'],
   },
   {
     username: 'stashes-code',
@@ -377,6 +383,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '📦',
     tools: ['stash', 'list_files', 'read_diff', 'read_file', 'agent_lookup', 'agent_contacts'],
+    skills: ['stash-management'],
   },
   {
     username: 'cherry-pick',
@@ -387,6 +394,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🍒',
     tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['cherry-pick-flow'],
   },
   {
     username: 'branches',
@@ -397,6 +405,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🌳',
     tools: ['list_files', 'read_history', 'read_file', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['branch-ops'],
   },
   {
     username: 'working-changes',
@@ -407,6 +416,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '✏️',
     tools: ['stage_changes', 'commit', 'read_diff', 'read_file', 'list_files', 'read_image', 'search_code', 'agent_lookup', 'agent_contacts'],
+    skills: ['git-commit-style', 'code-review'],
   },
   {
     username: 'copilot',
@@ -416,6 +426,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     description: 'General-purpose assistant for the Copilot chat.',
     tier: 'default',
     emoji: '✨',
+    skills: ['web-research', 'docs-writing'],
   },
   {
     username: 'pull-requests',
@@ -426,6 +437,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🔀',
     tools: ['github_pull_requests', 'github_issues', 'read_diff', 'read_file', 'list_files', 'web_search', 'browser', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['pr-writing', 'code-review'],
   },
   {
     username: 'releases',
@@ -436,6 +448,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🏷️',
     tools: ['github_releases', 'github_actions', 'read_file', 'list_files', 'read_pdf', 'agent_lookup', 'agent_contacts'],
+    skills: ['release-notes'],
   },
   {
     username: 'issues',
@@ -446,6 +459,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🎯',
     tools: ['github_issues', 'github_projects', 'search_code', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['issue-triage'],
   },
   {
     username: 'actions',
@@ -456,6 +470,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '⚙️',
     tools: ['github_actions', 'read_file', 'run_command', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['ci-debugging'],
   },
   {
     username: 'projects',
@@ -466,6 +481,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '📋',
     tools: ['github_projects', 'github_issues', 'agent_lookup', 'agent_contacts'],
+    skills: ['project-board'],
   },
   {
     username: 'wiki',
@@ -476,6 +492,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '📚',
     tools: ['github_wiki', 'read_file', 'write_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['docs-writing'],
   },
   {
     username: 'security-and-quality',
@@ -486,6 +503,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '🛡️',
     tools: ['github_security', 'search_code', 'read_file', 'list_files', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['security-review'],
   },
   {
     username: 'insights',
@@ -496,6 +514,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'default',
     emoji: '📊',
     tools: ['read_history', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['repo-insights'],
   },
   {
     username: 'code-reviewer',
@@ -506,6 +525,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🧐',
     tools: ['read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['code-review'],
   },
   {
     username: 'test-writer',
@@ -516,6 +536,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🧪',
     tools: ['read_file', 'write_file', 'list_files', 'search_code', 'run_command', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['run-tests'],
   },
   {
     username: 'docs-writer',
@@ -526,6 +547,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '📝',
     tools: ['read_file', 'write_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['docs-writing'],
   },
   {
     username: 'refactorer',
@@ -536,6 +558,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🛠️',
     tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['refactor-safety'],
   },
   {
     username: 'bug-hunter',
@@ -546,6 +569,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🐞',
     tools: ['read_file', 'search_code', 'read_diff', 'read_history', 'run_command', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['bug-triage'],
   },
   {
     username: 'git-expert',
@@ -556,6 +580,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🔧',
     tools: ['read_history', 'read_diff', 'list_files', 'read_file', 'run_command', 'agent_lookup', 'agent_contacts'],
+    skills: ['git-commit-style', 'history-analysis'],
   },
   {
     username: 'security-auditor',
@@ -566,6 +591,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tier: 'base',
     emoji: '🛡️',
     tools: ['read_file', 'search_code', 'list_files', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['security-review'],
   },
 ];
 
@@ -601,12 +627,12 @@ function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
     team: spec.team,
     description: spec.description,
     enabled: true,
-    skills: [],
     mcpServers: [],
     builtIn: true,
     tier: spec.tier,
     avatar: builtinAvatar(spec.username, spec.emoji),
     tools: spec.tools ?? [],
+    skills: spec.skills ?? [],
   };
 }
 
