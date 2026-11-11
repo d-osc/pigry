@@ -308,29 +308,50 @@ pub fn cli_detect() -> CliDetectResult {
 
 /// Runs a prompt through an installed CLI coding agent (blocking; these take
 /// up to a few minutes — the frontend shows a Thinking state while waiting).
+/// claude/codex read the prompt from STDIN so multi-line chat text survives
+/// cmd's argv quoting; copilot takes it as a (newline-flattened) argument.
 pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str) -> Result<String, String> {
     // npm-installed CLIs are .cmd shims — spawn through cmd /C so PATH resolution works.
     let mut cmd = Command::new("cmd");
     cmd.arg("/C").arg(cli);
+    let mut prompt_via_stdin = true;
     match cli {
         "claude" => {
-            cmd.args(["-p", prompt, "--output-format", "text"]);
+            cmd.args(["-p", "--output-format", "text"]);
         }
         "codex" => {
-            cmd.args(["exec", prompt]);
+            cmd.args(["exec", "-"]);
         }
         "copilot" => {
-            cmd.args(["-p", prompt]);
+            prompt_via_stdin = false;
+            let flat = prompt.replace(['\r', '\n'], " ");
+            cmd.args(["-p", &flat]);
         }
         other => return Err(format!("unknown CLI agent: {other}")),
     }
     cmd.creation_flags(CREATE_NO_WINDOW);
     cmd.current_dir(Path::new(cwd));
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if prompt_via_stdin {
+        cmd.stdin(Stdio::piped());
+    } else {
+        cmd.stdin(Stdio::null());
+    }
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let output = cmd
-        .output()
+    let mut child = cmd
+        .spawn()
         .map_err(|e| format!("{cli} not available: {e}"))?;
+    if prompt_via_stdin {
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(prompt.as_bytes())
+                .map_err(|e| format!("{cli}: failed to write prompt: {e}"))?;
+        }
+        // dropping stdin closes the pipe — the CLI sees EOF and runs
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("{cli} failed while running: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     if !output.status.success() && stdout.trim().is_empty() {
