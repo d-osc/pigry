@@ -1442,7 +1442,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       }
       return active;
     })();
-    const spec = modelSpecOf(provider);
+    const baseSpec = modelSpecOf(provider);
+    // The agent's own effort selection wins over the model entry's.
+    const spec = baseSpec ? { ...baseSpec, effort: target.effort || baseSpec.effort } : null;
     setImageGate(spec);
     const repliedAs = target.username;
     if (isCliProvider(provider)) {
@@ -1639,7 +1641,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       }
       return active;
     })();
-    const spec = modelSpecOf(provider);
+    const baseSpec = modelSpecOf(provider);
+    // A tagged agent's own effort selection wins over the model entry's.
+    const spec = baseSpec ? { ...baseSpec, effort: target?.effort || baseSpec.effort } : null;
     setImageGate(spec);
     const repliedAs = target?.username ?? agentUsername;
     setReplyingAs(repliedAs);

@@ -45,6 +45,9 @@ export interface AgentEntry {
   providerId?: string;
   /** Model id the agent uses (optional — falls back to the global active). */
   model?: string;
+  /** Reasoning/effort level this agent forces on its model (optional —
+   * falls back to the model entry's own selection). */
+  effort?: string;
   /** Avatar image (data URL) — optional. */
   avatar?: string;
   description: string;

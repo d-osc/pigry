@@ -531,6 +531,7 @@ export function AgentDetailsDialog({
     : undefined;
   const providerName = provider?.name ?? 'global active provider';
   const model = agent.model || provider?.model || '(active model)';
+  const modelEntry = provider?.models.find((m) => m.name === (agent.model || provider?.model));
   return (
     <div
       className="know-overlay"
@@ -576,7 +577,7 @@ export function AgentDetailsDialog({
           <div className="apanel-dlg__rows">
             <div className="apanel-dlg__row">
               <span>Provider</span>
-              <code>{providerName} · {model}</code>
+              <code>{providerName} · {model}{agent.effort ? ` · effort ${agent.effort}` : modelEntry?.effort ? ` · effort ${modelEntry.effort}` : ''}</code>
             </div>
             {agent.team && agent.username && (
               <div className="apanel-dlg__row">
@@ -831,6 +832,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
       team: draft.team?.trim() || undefined,
       providerId: draft.providerId || undefined,
       model: draft.model || undefined,
+      effort: draft.effort || undefined,
       avatar: draft.avatar,
       description: draft.description.trim(),
       enabled: draft.enabled,
@@ -1102,7 +1104,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
               <select
                 value={draft.providerId ?? ''}
                 onChange={(event) =>
-                  setDraft({ ...draft, providerId: event.target.value, model: '' })
+                  setDraft({ ...draft, providerId: event.target.value, model: '', effort: undefined })
                 }
               >
                 <option value="">Global active provider</option>
@@ -1117,7 +1119,9 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
               <span>Model</span>
               <select
                 value={draft.model ?? ''}
-                onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+                onChange={(event) =>
+                  setDraft({ ...draft, model: event.target.value, effort: undefined })
+                }
                 disabled={!draft.providerId}
               >
                 <option value="">Provider default</option>
@@ -1128,6 +1132,26 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                       {m.name}
                     </option>
                   ))}
+              </select>
+            </label>
+            <label className="apanel__field">
+              <span>Effort</span>
+              <select
+                value={draft.effort ?? ''}
+                onChange={(event) =>
+                  setDraft({ ...draft, effort: event.target.value || undefined })
+                }
+                disabled={!draft.providerId || !draft.model}
+                title="Reasoning effort this agent forces on its model"
+              >
+                <option value="">Model default</option>
+                {(providers
+                  .find((p) => p.id === draft.providerId)
+                  ?.models.find((m) => m.name === draft.model)?.reasoningLevels ?? []).map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
               </select>
             </label>
             <div className="apanel__field">
