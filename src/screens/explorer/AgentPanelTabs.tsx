@@ -1160,7 +1160,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                 }
                 disabled={!draft.providerId}
               >
-                <option value="">Provider default</option>
+                <option value="">Follow chat (global active)</option>
                 {(providers.find((p) => p.id === draft.providerId)?.models ?? [])
                   .filter((m) => m.enabled)
                   .map((m) => (

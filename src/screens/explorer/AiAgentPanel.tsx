@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import {
-  AGENT_TEAMS, allAgents, builtinAgents } from '../../lib/agentExtras';
+  AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
 import { effortPayloadFragment } from '../../lib/aiProviders';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills, getSkillContent } from '../../lib/skills';
@@ -2609,6 +2609,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             saveProviders(list, providerId);
             setProviders(list);
             setActiveId(providerId);
+            // This menu's default agent follows the chat pick — write the
+            // provider/model through to its override. A stored effort only
+            // survives if the new model offers that level.
+            if (defaultAgent) {
+              const picked = list
+                .find((p) => p.id === providerId)
+                ?.models.find((m) => m.name === modelName);
+              const effort =
+                defaultAgent.effort && picked?.reasoningLevels?.includes(defaultAgent.effort)
+                  ? defaultAgent.effort
+                  : undefined;
+              setAgentOverride({ ...defaultAgent, providerId, model: modelName, effort });
+            }
             setModelDialogOpen(false);
           }}
         />
