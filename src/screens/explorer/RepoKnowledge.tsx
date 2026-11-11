@@ -281,6 +281,8 @@ export function MemoryDialog({
   const [loaded, setLoaded] = useState(false);
   /** Uncontrolled new-skill name (read from the DOM on submit). */
   const newNameRef = useRef<HTMLInputElement | null>(null);
+  /** Uncontrolled new-skill description (one line). */
+  const newDescRef = useRef<HTMLInputElement | null>(null);
   /** Currently open skill: name + body being edited. */
   const [editing, setEditing] = useState<{ name: string; body: string; isNew: boolean } | null>(null);
 
@@ -350,8 +352,13 @@ export function MemoryDialog({
     } catch {
       // not found → good, we can create it
     }
-    await writeWorktreeFile(`${SKILLS_DIR}${slug}.md`, `# ${name}\n\n`);
+    const description = newDescRef.current?.value.trim() ?? '';
+    await writeWorktreeFile(
+      `${SKILLS_DIR}${slug}.md`,
+      `# ${name}\n\n${description}\n\n`,
+    );
     if (newNameRef.current) newNameRef.current.value = '';
+    if (newDescRef.current) newDescRef.current.value = '';
     await reload();
     setEditing({ name: slug, body: '', isNew: true });
     notify(`Skill "${slug}" created`, 'success');
@@ -479,6 +486,13 @@ export function MemoryDialog({
                 className="know-dlg__input"
                 placeholder="New skill name, e.g. Run tests"
                 aria-label="New skill name"
+                spellCheck={false}
+              />
+              <input
+                ref={newDescRef}
+                className="know-dlg__input"
+                placeholder="Description, e.g. Run the full test suite"
+                aria-label="New skill description"
                 spellCheck={false}
               />
               <button type="submit" className="know-dlg__add">
