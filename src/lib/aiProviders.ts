@@ -91,12 +91,18 @@ function seedDefaults(): AiProviderEntry[] {
 }
 
 /** Fills in fields added after the flat single-model era. */
+/** Legacy type → canonical type (the generic scan uses binary names). */
+const CANONICAL_TYPES: Record<string, string> = {
+  claude: 'claude-code',
+};
+
 function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiProviderEntry {
+  const rawType = String(raw.type ?? 'custom');
   const entry: AiProviderEntry = {
     id: String(raw.id ?? uid('p')),
     name: String(raw.name ?? 'Provider'),
     kind: raw.kind === 'builtin' ? 'builtin' : 'custom',
-    type: String(raw.type ?? 'custom'),
+    type: CANONICAL_TYPES[rawType] ?? rawType,
     apiFormat:
       raw.apiFormat === 'anthropic'
         ? 'anthropic'
@@ -247,6 +253,21 @@ function applyRegistryDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
   return list;
 }
 
+/** Drops duplicate scanned-app entries (same app type added twice under
+ * different ids — e.g. before type canonicalization). Keeps the first. */
+function dedupeAppProviders(list: AiProviderEntry[]): AiProviderEntry[] {
+  const seen = new Set<string>();
+  const out: AiProviderEntry[] = [];
+  for (const entry of list) {
+    if (entry.kind !== 'builtin' && APP_PROVIDER_TYPES.has(entry.type)) {
+      if (seen.has(entry.type)) continue;
+      seen.add(entry.type);
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
 /** Provider types that come from the installed-AI-apps scan. */
 const APP_PROVIDER_TYPES = new Set([
   'claude-code',
@@ -287,7 +308,9 @@ export function loadProviders(): AiProviderEntry[] {
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
       return markAppProviders(
-        applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(list.map(migrate)))),
+        applyRegistryDefaults(
+          ensureZaiTestProvider(ensureZaiDefaults(dedupeAppProviders(list.map(migrate)))),
+        ),
       );
     }
     const legacy = localStorage.getItem('pigry:ai-provider');
@@ -304,11 +327,13 @@ export function loadProviders(): AiProviderEntry[] {
       const list = markAppProviders(
         applyRegistryDefaults(
           ensureZaiTestProvider(
-            ensureZaiDefaults([
-              makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-              makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
-              entry,
-            ]),
+            ensureZaiDefaults(
+              dedupeAppProviders([
+                makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+                makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+                entry,
+              ]),
+            ),
           ),
         ),
       );
