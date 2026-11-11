@@ -1514,3 +1514,18 @@
     animation: none !important;
   }
 }
+
+/* Model + effort this reply used — tiny chip in the bubble header */
+.explorer-ai__msg-used {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  background: var(--bg-input);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1541,6 +1541,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // The agent's own effort selection wins over the model entry's.
     const spec = baseSpec ? { ...baseSpec, effort: target.effort || baseSpec.effort } : null;
     setImageGate(spec);
+    // What this turn actually used — shown on the reply bubble.
+    const usedLabel = provider.model
+      ? `${provider.model}${spec?.effort ? ' · ' + spec.effort : ''}`
+      : '';
     const repliedAs = target.username;
     if (isCliProvider(provider)) {
       const cli =
@@ -1552,6 +1556,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         time: now(),
         agent: repliedAs,
         owner: ownerName,
+        ...(usedLabel ? { used: usedLabel } : {}),
       };
     }
     const isAnthropic = provider.apiFormat === 'anthropic';
@@ -1720,6 +1725,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       time: now(),
       agent: repliedAs,
       owner: ownerName,
+      ...(usedLabel ? { used: usedLabel } : {}),
       ...(replyError ? { error: true } : {}),
       ...(toolEvents.length > 0 ? { toolEvents } : {}),
     };
@@ -1749,6 +1755,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     // A tagged agent's own effort selection wins over the model entry's.
     const spec = baseSpec ? { ...baseSpec, effort: target?.effort || baseSpec.effort } : null;
     setImageGate(spec);
+    // What this turn actually used — shown on the reply bubble.
+    const usedLabel = provider.model
+      ? `${provider.model}${spec?.effort ? ' · ' + spec.effort : ''}`
+      : '';
     const repliedAs = target?.username ?? agentUsername;
     setReplyingAs(repliedAs);
 
@@ -1758,7 +1768,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       let working = history;
       try {
         const output = await cliAgentRun(cli, last.text);
-        working = [...history, { role: 'assistant', text: output || '(no output)', time: now(), agent: repliedAs, owner: ownerName }];
+        working = [...history, { role: 'assistant', text: output || '(no output)', time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}) }];
         setMessages(working);
       } catch (error) {
         working = [...history, { role: 'assistant', text: error instanceof Error ? error.message : String(error), error: true, time: now(), agent: repliedAs, owner: ownerName }];
@@ -1853,7 +1863,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             assistantText = String(err?.error?.message ?? err?.message ?? result.error ?? 'Empty reply');
           }
         }
-        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName, ...(replyError ? { error: true } : {}) }];
+        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}), ...(replyError ? { error: true } : {}) }];
         setMessages(working);
       } else {
         // Agentic loop: the model may call file tools; results feed back
@@ -1967,6 +1977,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             time: now(),
             agent: repliedAs,
             owner: ownerName,
+            ...(usedLabel ? { used: usedLabel } : {}),
             ...(replyError ? { error: true } : {}),
             ...(toolEvents.length > 0 ? { toolEvents } : {}),
           },
@@ -2326,6 +2337,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                             {isUser ? ghUser?.login || 'You' : agentDisplayName(message.agent)}
                           </span>
                         </>
+                      )}
+                      {!isUser && message.used && (
+                        <span className="explorer-ai__msg-used" title="Model and effort this reply used">
+                          {message.used}
+                        </span>
                       )}
                       {message.time && (
                         <span className="explorer-ai__msg-time">{fmtMsgTime(message.time)}</span>

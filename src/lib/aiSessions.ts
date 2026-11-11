@@ -23,6 +23,8 @@ export interface AiChatMessage {
   agent?: string;
   /** Repo-owner username that wrote this message (user side). */
   owner?: string;
+  /** Model (+ effort) this reply actually used, e.g. "gpt-6.1-sol · high". */
+  used?: string;
   /** Tool calls the agent made this turn (display only). */
   toolEvents?: string[];
 }
