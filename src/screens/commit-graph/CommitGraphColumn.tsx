@@ -60,8 +60,9 @@ export function CommitGraphColumn({
     <svg
       className="commit-graph__svg"
       width={width}
-      height={ROW_HEIGHT}
+      height="100%"
       viewBox={`0 0 ${width} ${ROW_HEIGHT}`}
+      preserveAspectRatio="none"
       aria-hidden="true"
     >
       {/* Lanes passing straight through this row. The invisible wide line

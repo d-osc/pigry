@@ -243,6 +243,46 @@
   gap: 5px;
 }
 
+/* Resizable columns: drag the header edge; double-click resets the column. */
+.commit-head__cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.commit-col-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -7px;
+  width: 13px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.commit-col-resize::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 6px;
+  width: 1px;
+  background: transparent;
+}
+
+.commit-col-resize:hover::after,
+.commit-col-resize--active::after {
+  background: var(--accent);
+}
+
+.commit-history__table--resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
 .commit-row:not(.commit-row--head) {
   border-bottom: 1px solid var(--border-subtle);
 }
@@ -259,12 +299,16 @@
 
 .commit-row__graph {
   display: block;
-  height: 40px;
+  /* Stretch to the row's real content height (40px minus the 1px bottom
+     border) so lane lines meet seamlessly across rows instead of showing
+     a 1px gap at every row boundary. */
+  align-self: stretch;
   overflow: hidden;
 }
 
 .commit-graph__svg {
   display: block;
+  height: 100%;
 }
 
 /* Invisible lane hit-areas: only the stroke is hoverable, and hovering

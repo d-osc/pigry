@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 import {
   ArrowDown,
   CalendarRange,
@@ -37,6 +38,25 @@ export function avatarTone(initials: string) {
   let hash = 0;
   for (let i = 0; i < initials.length; i += 1) hash = (hash * 31 + initials.charCodeAt(i)) >>> 0;
   return AVATAR_TONES[hash % AVATAR_TONES.length];
+}
+
+/** Columns resizable by dragging their header edge (px width; 0 = default).
+ *  The graph column stays fixed; the message column flexes by default and
+ *  absorbs whatever space the other columns don't use. */
+type ResizableCol = 'message' | 'author' | 'commit' | 'time';
+const COL_MIN: Record<ResizableCol, number> = { message: 160, author: 96, commit: 60, time: 70 };
+const COL_MAX = 600;
+const GRAPH_COLS_KEY = 'pigry:graph-cols';
+
+function loadColWidths(): Record<ResizableCol, number> {
+  const defaults: Record<ResizableCol, number> = { message: 0, author: 0, commit: 0, time: 0 };
+  try {
+    const raw = localStorage.getItem(GRAPH_COLS_KEY);
+    if (raw) return { ...defaults, ...(JSON.parse(raw) as Record<ResizableCol, number>) };
+  } catch {
+    // corrupt cache — defaults
+  }
+  return defaults;
 }
 
 function RefIcon({ name }: { name: string }) {
@@ -174,35 +194,53 @@ export function CommitGraphScreen({
   /** How many graph rows are rendered before "Show more" (lanes stay
    * correct because each row carries its lane assignment from the walk). */
   const [visibleCount, setVisibleCount] = useState(200);
-  /** author email → GitHub profile image url (fetched via gh api). */
-  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
-  // Fetch GitHub profile images for commit authors (desktop only, 7-day cache).
+  /** Per-repo author email → GitHub profile image url (fetched via gh api). */
+  const [avatarMaps, setAvatarMaps] = useState<Record<string, Record<string, string>>>({});
+  const repoPath = repository?.localPath ?? '';
+  const avatarMap = avatarMaps[repoPath] ?? {};
+  // Fetch GitHub profile images for commit authors (desktop only, 7-day cache,
+  // keyed per repository so switching repos always gets the right authors).
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || !repoPath) return;
     let cancelled = false;
-    try {
-      const cached = localStorage.getItem('pigry:avatars');
-      if (cached) {
-        const parsed = JSON.parse(cached) as { at: number; map: Record<string, string> };
-        if (Date.now() - parsed.at < 7 * 24 * 3600 * 1000 && parsed.map) {
-          setAvatarMap(parsed.map);
-          return;
+    const cacheKey = `pigry:avatars:${repoPath}`;
+    Promise.resolve()
+      .then(() => {
+        try {
+          localStorage.removeItem('pigry:avatars'); // legacy global cache
+          const cached = localStorage.getItem(cacheKey);
+          if (cached) {
+            const parsed = JSON.parse(cached) as { at: number; map: Record<string, string> };
+            const nonEmpty = parsed.map && Object.keys(parsed.map).length > 0;
+            if (Date.now() - parsed.at < 7 * 24 * 3600 * 1000 && nonEmpty) return parsed.map;
+          }
+        } catch {
+          // cache parse failure — refetch
         }
-      }
-    } catch {
-      // cache parse failure — refetch
-    }
-    commitAvatars()
+        return null;
+      })
+      .then((cachedMap) => {
+        if (cancelled) return null;
+        if (cachedMap) {
+          setAvatarMaps((prev) => ({ ...prev, [repoPath]: cachedMap }));
+          return null;
+        }
+        return commitAvatars();
+      })
       .then((list) => {
-        if (cancelled) return;
+        if (cancelled || !list) return;
         const map: Record<string, string> = {};
         for (const item of list) map[item.email] = item.avatarUrl;
-        setAvatarMap(map);
-        try {
-          localStorage.setItem('pigry:avatars', JSON.stringify({ at: Date.now(), map }));
-        } catch {
-          // storage full — skip persist
+        // Empty result is not cached — the next mount retries (gh may have
+        // been signed out or the remote unavailable the first time).
+        if (Object.keys(map).length > 0) {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), map }));
+          } catch {
+            // storage full — skip persist
+          }
         }
+        setAvatarMaps((prev) => ({ ...prev, [repoPath]: map }));
       })
       .catch(() => {
         // gh not signed in / no remote — initials fallback
@@ -210,7 +248,73 @@ export function CommitGraphScreen({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [repoPath]);
+
+  /** Drag-to-resize column widths (px; 0 = column keeps its CSS default). */
+  const [colWidths, setColWidths] = useState<Record<ResizableCol, number>>(loadColWidths);
+  const [resizingCol, setResizingCol] = useState<ResizableCol | null>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(GRAPH_COLS_KEY, JSON.stringify(colWidths));
+    } catch {
+      // storage full — skip persist
+    }
+  }, [colWidths]);
+
+  /** Shared grid template for the header and every body row. When the
+   *  message column is user-fixed, a filler track absorbs leftover space. */
+  const rowTemplate = useMemo(() => {
+    const cols: string[] = ['176px'];
+    cols.push(colWidths.message > 0 ? `${colWidths.message}px` : 'minmax(0, 1fr)');
+    if (columns.author) cols.push(colWidths.author > 0 ? `${colWidths.author}px` : '152px');
+    if (columns.commit) cols.push(colWidths.commit > 0 ? `${colWidths.commit}px` : '98px');
+    if (columns.time) cols.push(colWidths.time > 0 ? `${colWidths.time}px` : '104px');
+    if (colWidths.message > 0) cols.push('minmax(12px, 1fr)');
+    return cols.join(' ');
+  }, [colWidths, columns]);
+
+  const startResize = (col: ResizableCol, e: React.PointerEvent<HTMLSpanElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    // Measure the live cell width so first-time drags start from the
+    // column's actual rendered size (message flexes until now).
+    const cell = e.currentTarget.parentElement;
+    const startW = cell ? Math.round(cell.getBoundingClientRect().width) : 100;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    setResizingCol(col);
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.round(
+        Math.min(COL_MAX, Math.max(COL_MIN[col], startW + ev.clientX - startX)),
+      );
+      setColWidths((prev) => ({ ...prev, [col]: w }));
+    };
+    const onUp = () => {
+      target.removeEventListener('pointermove', onMove);
+      target.removeEventListener('pointerup', onUp);
+      target.removeEventListener('pointercancel', onUp);
+      setResizingCol(null);
+    };
+    target.addEventListener('pointermove', onMove);
+    target.addEventListener('pointerup', onUp);
+    target.addEventListener('pointercancel', onUp);
+  };
+
+  const resetCol = (col: ResizableCol) => {
+    setColWidths((prev) => ({ ...prev, [col]: 0 }));
+  };
+
+  const resizeHandle = (col: ResizableCol) => (
+    <span
+      className={`commit-col-resize${resizingCol === col ? ' commit-col-resize--active' : ''}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${col} column`}
+      onPointerDown={(e) => startResize(col, e)}
+      onDoubleClick={() => resetCol(col)}
+    />
+  );
 
   const rows = useMemo(() => {
     if (!history) return [];
@@ -463,15 +567,32 @@ export function CommitGraphScreen({
 
       <div className="commit-history__content">
         <div className="commit-history__main">
-        <div className="commit-history__table">
-          <div className="commit-history__head commit-row commit-row--head">
+        <div className={`commit-history__table${resizingCol ? ' commit-history__table--resizing' : ''}`}>
+          <div
+            className="commit-history__head commit-row commit-row--head"
+            style={{ gridTemplateColumns: rowTemplate }}
+          >
             <span>Graph</span>
-            <span>Commit message</span>
-            {columns.author && <span>Author</span>}
-            {columns.commit && <span>Commit</span>}
+            <span className="commit-head__cell">
+              Commit message
+              {resizeHandle('message')}
+            </span>
+            {columns.author && (
+              <span className="commit-head__cell">
+                Author
+                {resizeHandle('author')}
+              </span>
+            )}
+            {columns.commit && (
+              <span className="commit-head__cell">
+                Commit
+                {resizeHandle('commit')}
+              </span>
+            )}
             {columns.time && (
-              <span>
+              <span className="commit-head__cell">
                 Time <ArrowDown size={10} strokeWidth={1.5} />
+                {resizeHandle('time')}
               </span>
             )}
           </div>
@@ -492,6 +613,7 @@ export function CommitGraphScreen({
                 <div
                   key={row.oid}
                   className={`commit-row commit-row--clickable${selected ? ' commit-row--selected' : ''}`}
+                  style={{ gridTemplateColumns: rowTemplate }}
                   onClick={() => setSelectedCommit(row.oid)}
                   role="button"
                   tabIndex={0}
