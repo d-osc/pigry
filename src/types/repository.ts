@@ -141,6 +141,10 @@ export interface AiProviderEntry {
   detected?: boolean;
   /** Measured chat usability from the last scan (false = broken/unusable). */
   usable?: boolean;
+  /** How to launch the app's interactive session ("cli" runs launchTarget
+   * in a fresh console; "exe" starts it directly; "msix" via Start). */
+  launchKind?: string;
+  launchTarget?: string;
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */
   type: string;
   apiFormat: AiApiFormat;

@@ -180,6 +180,99 @@ pub struct DesktopAppInfo {
     pub version: String,
     /// Config/install location on disk.
     pub path: String,
+    /// How to launch the app: "exe" runs launch_target directly.
+    pub launch_kind: String,
+    pub launch_target: String,
+}
+
+/// Finds the first top-level *.exe in a directory (Claude Desktop layout).
+fn first_exe_in(dir: &Path) -> Option<String> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .find(|p| p.extension().map(|x| x.eq_ignore_ascii_case("exe")).unwrap_or(false))
+        .map(|p| p.display().to_string())
+}
+
+/// Resolves how a detected desktop app is launched.
+fn resolve_desktop_launch(id: &str, data_dir: &Path) -> (String, String) {
+    match id {
+        "gemini-desktop" => {
+            let exe = data_dir.join("Gemini.exe");
+            if exe.is_file() {
+                return ("exe".to_string(), exe.display().to_string());
+            }
+            if let Some(found) = first_exe_in(data_dir) {
+                return ("exe".to_string(), found);
+            }
+            (String::new(), String::new())
+        }
+        "claude-desktop" => {
+            let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+            let install = Path::new(&local).join("AnthropicClaude");
+            if install.is_dir() {
+                if let Some(found) = first_exe_in(&install) {
+                    return ("exe".to_string(), found);
+                }
+            }
+            if let Some(found) = first_exe_in(data_dir) {
+                return ("exe".to_string(), found);
+            }
+            (String::new(), String::new())
+        }
+        // MSIX (ChatGPT Desktop) — launched by app name through Start Apps.
+        _ => ("msix".to_string(), "ChatGPT".to_string()),
+    }
+}
+
+/// Launches a detected app: an exe directly, a CLI in a new interactive
+/// terminal, or an MSIX app through its Start entry.
+pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
+    match kind {
+        "exe" => {
+            if !Path::new(target).is_file() {
+                return Err(format!("app not found: {target}"));
+            }
+            Command::new("cmd")
+                .args(["/C", "start", "", target])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| format!("launch failed: {e}"))?;
+            Ok(format!("launched {target}"))
+        }
+        "cli" => {
+            // The CLIs are TUI/interactive — open a fresh console running them.
+            Command::new("cmd")
+                .args(["/C", "start", "pigry", "cmd", "/K", target])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| format!("launch failed: {e}"))?;
+            Ok(format!("opened {target} in a new terminal"))
+        }
+        "msix" => {
+            // Resolve the Start-Apps entry id, then launch through the shell.
+            let script = format!(
+                "(Get-StartApps | Where-Object {{ $_.Name -like '*{target}*' }} | Select-Object -First 1).AppID"
+            );
+            let out = Command::new("powershell")
+                .args(["-NoProfile", "-Command", &script])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| format!("launch failed: {e}"))?;
+            let app_id = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if app_id.is_empty() {
+                return Err(format!("no Start entry named {target}"));
+            }
+            Command::new("cmd")
+                .args(["/C", "start", &format!("shell:AppsFolder\\{app_id}")])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map_err(|e| format!("launch failed: {e}"))?;
+            Ok(format!("launched {target}"))
+        }
+        other => Err(format!("unknown launch kind: {other}")),
+    }
 }
 
 /// Detects installed desktop AI apps by their well-known data directories.
@@ -187,35 +280,42 @@ fn detect_desktop_apps() -> Vec<DesktopAppInfo> {
     let mut out: Vec<DesktopAppInfo> = Vec::new();
     let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
     let roaming = std::env::var("APPDATA").unwrap_or_default();
-    let push = |out: &mut Vec<DesktopAppInfo>, id: &str, name: &str, version: String, path: String| {
-        out.push(DesktopAppInfo {
-            id: id.to_string(),
-            name: name.to_string(),
-            version,
-            path,
-        });
+    let push = |out: &mut Vec<DesktopAppInfo>, info: DesktopAppInfo| {
+        out.push(info);
     };
     // Claude Desktop (Anthropic)
     let claude_roaming = Path::new(&roaming).join("Claude");
     let claude_local = Path::new(&local).join("AnthropicClaude");
     if claude_roaming.is_dir() || claude_local.is_dir() {
+        let (launch_kind, launch_target) =
+            resolve_desktop_launch("claude-desktop", &claude_local);
         push(
             &mut out,
-            "claude-desktop",
-            "Claude Desktop",
-            String::new(),
-            claude_roaming.display().to_string(),
+            DesktopAppInfo {
+                id: "claude-desktop".to_string(),
+                name: "Claude Desktop".to_string(),
+                version: String::new(),
+                path: claude_roaming.display().to_string(),
+                launch_kind,
+                launch_target,
+            },
         );
     }
     // ChatGPT Desktop (OpenAI, MSIX)
     let chatgpt = Path::new(&local).join("OpenAI.ChatGPT-Desktop");
     if chatgpt.is_dir() {
+        let (launch_kind, launch_target) =
+            resolve_desktop_launch("chatgpt-desktop", &chatgpt);
         push(
             &mut out,
-            "chatgpt-desktop",
-            "ChatGPT Desktop",
-            String::new(),
-            chatgpt.display().to_string(),
+            DesktopAppInfo {
+                id: "chatgpt-desktop".to_string(),
+                name: "ChatGPT Desktop".to_string(),
+                version: String::new(),
+                path: chatgpt.display().to_string(),
+                launch_kind,
+                launch_target,
+            },
         );
     }
     // Gemini Desktop (Google) — version from the app-<ver> data dir.
@@ -231,12 +331,17 @@ fn detect_desktop_apps() -> Vec<DesktopAppInfo> {
             })
             .and_then(|n| n.strip_prefix("app-").map(|s| s.to_string()))
             .unwrap_or_default();
+        let (launch_kind, launch_target) = resolve_desktop_launch("gemini-desktop", &gemini);
         push(
             &mut out,
-            "gemini-desktop",
-            "Gemini Desktop",
-            version,
-            gemini.display().to_string(),
+            DesktopAppInfo {
+                id: "gemini-desktop".to_string(),
+                name: "Gemini Desktop".to_string(),
+                version,
+                path: gemini.display().to_string(),
+                launch_kind,
+                launch_target,
+            },
         );
     }
     out
@@ -257,6 +362,10 @@ pub struct CliAppInfo {
     /// Whether chat turns can actually run through this CLI right now
     /// (login gates / missing prompt modes make some unusable).
     pub usable: bool,
+    /// How to launch the interactive app: kind "cli" runs launch_target
+    /// (the binary) in a fresh console.
+    pub launch_kind: String,
+    pub launch_target: String,
 }
 
 /// The CLI coding agents pigry knows how to detect — (binary, display name).
@@ -541,6 +650,8 @@ pub fn cli_detect() -> CliDetectResult {
             model: read_app_model(binary),
             effort: read_app_effort(binary),
             usable: cli_usable(binary),
+            launch_kind: "cli".to_string(),
+            launch_target: binary.to_string(),
         });
     }
     CliDetectResult {

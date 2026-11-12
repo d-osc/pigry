@@ -115,6 +115,10 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
   };
     if (raw.detected === true) entry.detected = true;
     if (raw.usable === false) entry.usable = false;
+    if (typeof raw.launchKind === 'string' && raw.launchKind) entry.launchKind = raw.launchKind;
+    if (typeof raw.launchTarget === 'string' && raw.launchTarget) {
+      entry.launchTarget = raw.launchTarget;
+    }
   const rawModels = Array.isArray(raw.models) ? raw.models : [];
   entry.models = rawModels
     .map((m) => {

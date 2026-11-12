@@ -435,6 +435,9 @@ export interface CliAppInfo {
   effort: string;
   /** Whether chat turns can actually run through this CLI right now. */
   usable: boolean;
+  /** How to launch the interactive app ("cli" runs launchTarget in a console). */
+  launchKind: string;
+  launchTarget: string;
 }
 
 /** One detected desktop AI app (inventory — no local chat API). */
@@ -443,6 +446,14 @@ export interface DesktopAppInfo {
   name: string;
   version: string;
   path: string;
+  launchKind: string;
+  launchTarget: string;
+}
+
+/** Launches a detected app (exe / CLI console / MSIX Start entry). */
+export async function launchApp(kind: string, target: string): Promise<string> {
+  if (!isTauri()) throw new Error('Launching apps requires the desktop app');
+  return invoke<string>('launch_app', { kind, target });
 }
 
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */

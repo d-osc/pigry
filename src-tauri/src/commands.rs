@@ -1259,6 +1259,14 @@ pub async fn cli_agent_run(
 }
 
 #[tauri::command]
+pub async fn launch_app(
+    kind: String,
+    target: String,
+) -> Result<String, String> {
+    ai::launch_app(&kind, &target)
+}
+
+#[tauri::command]
 pub async fn zcode_credentials(
 ) -> Result<ai::ZcodeCreds, String> {
     ai::zcode_creds()

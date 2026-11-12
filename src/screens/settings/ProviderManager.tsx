@@ -20,7 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { aiChat, cliDetect } from '../../lib/tauriClient';
+import { aiChat, cliDetect, launchApp } from '../../lib/tauriClient';
 import { detectZcodeGlm, ZCODE_DEFAULT_MODEL } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
@@ -219,6 +219,8 @@ export function ProviderManager() {
         apiKey = '',
         enabled = true,
         usable = true,
+        launchKind?: string,
+        launchTarget?: string,
       ) => {
         // The app's config is the source of truth: a detected provider's
         // model list mirrors exactly what the app's config declares.
@@ -233,25 +235,34 @@ export function ProviderManager() {
           }));
         const existing = next.find((p) => p.type === type);
         if (existing) {
-          // Backfill/refresh from the app's config — and drop stale entries
-          // that earlier (hardcoded-catalog) scans may have merged in.
+          // Backfill/refresh from the app's config — drop stale entries that
+          // earlier (hardcoded-catalog) scans merged in, and attach launch
+          // info for providers added before it was detected.
           const needsUsable = existing.usable !== usable;
+          const needsLaunch = Boolean(
+            launchKind && launchTarget && (!existing.launchKind || !existing.launchTarget),
+          );
           if (configModels.length > 0) {
             const same =
               existing.model === model &&
               existing.models.length === configModels.length &&
               existing.models.every((m, i) => m.name === configModels[i]) &&
-              !needsUsable;
+              !needsUsable &&
+              !needsLaunch;
             if (!same) {
               next = next.map((p) =>
                 p.id === existing.id
-                  ? { ...p, model, models: buildModels(), usable }
+                  ? { ...p, model, models: buildModels(), usable, ...(needsLaunch ? { launchKind, launchTarget } : {}) }
                   : p,
               );
               mutated = true;
             }
-          } else if (needsUsable) {
-            next = next.map((p) => (p.id === existing.id ? { ...p, usable } : p));
+          } else if (needsUsable || needsLaunch) {
+            next = next.map((p) =>
+              p.id === existing.id
+                ? { ...p, usable: needsUsable ? usable : p.usable, ...(needsLaunch ? { launchKind, launchTarget } : {}) }
+                : p,
+            );
             mutated = true;
           }
           return;
@@ -270,6 +281,7 @@ export function ProviderManager() {
             model,
             enabled,
             models: buildModels(),
+            ...(launchKind && launchTarget ? { launchKind, launchTarget } : {}),
           },
         ];
         added.push(name);
@@ -308,12 +320,34 @@ export function ProviderManager() {
             : app.model
               ? [app.model]
               : [];
-        addDetected(type, app.name, configModels, app.effort, '', '', true, app.usable !== false);
+        addDetected(
+          type,
+          app.name,
+          configModels,
+          app.effort,
+          '',
+          '',
+          true,
+          app.usable !== false,
+          app.launchKind || 'cli',
+          app.launchTarget || app.binary,
+        );
       }
       // Desktop AI apps — listed as detected inventory (they run in their
       // own window with their own login; disabled until the user opts in).
       for (const desktopApp of detected.desktop) {
-        addDetected(desktopApp.id, desktopApp.name, [], '', '', '', false, false);
+        addDetected(
+          desktopApp.id,
+          desktopApp.name,
+          [],
+          '',
+          '',
+          '',
+          false,
+          false,
+          desktopApp.launchKind,
+          desktopApp.launchTarget,
+        );
       }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.
@@ -458,6 +492,23 @@ export function ProviderManager() {
                 onClick={() => setNameEditing(true)}
               >
                 {selected.name}
+              </button>
+            )}
+            {selected.detected && selected.launchKind && selected.launchTarget && (
+              <button
+                type="button"
+                className="prov-mgr__ghost-btn"
+                title={`Launch ${selected.name}`}
+                onClick={() => {
+                  launchApp(selected.launchKind!, selected.launchTarget!)
+                    .then((message) => notify(message, 'success'))
+                    .catch((error) =>
+                      notify(error instanceof Error ? error.message : String(error), 'error'),
+                    );
+                }}
+              >
+                <Zap size={12} strokeWidth={1.5} />
+                Launch
               </button>
             )}
             <label className="prov-mgr__switch" title={selected.enabled ? 'Disable this provider' : 'Enable this provider'}>
