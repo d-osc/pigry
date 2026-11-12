@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use git2::{
-    build::CheckoutBuilder, BranchType, Delta, DiffOptions, ObjectType, Repository, Status,
-    StatusOptions,
+    build::CheckoutBuilder, BranchType, Delta, DiffFormat, DiffOptions, ObjectType, Repository,
+    Status, StatusOptions,
 };
 use serde::Serialize;
 
@@ -2679,6 +2679,33 @@ pub fn compose_commit_message(repo_path: &Path) -> Result<ComposedCommitMessage>
     let _ = total_del;
 
     Ok(ComposedCommitMessage { title, body })
+}
+
+/// Unified diff of the staged changes, truncated to `max_chars` — the raw
+/// material for AI commit-message generation.
+pub fn staged_diff_preview(repo_path: &Path, max_chars: usize) -> Result<String> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+    let mut diff = repo
+        .diff_tree_to_index(head_tree.as_ref(), None, None)
+        .map_err(err)?;
+    let _ = diff.find_similar(None);
+    let mut out = String::new();
+    diff.print(DiffFormat::Patch, |_delta, _hunk, line| {
+        if out.len() < max_chars {
+            out.push_str(&String::from_utf8_lossy(line.content()));
+        }
+        true
+    })
+    .map_err(err)?;
+    if out.len() > max_chars {
+        out.truncate(max_chars);
+        out.push_str("\n… (diff truncated)");
+    }
+    if out.trim().is_empty() {
+        return Err("nothing staged".to_string());
+    }
+    Ok(out)
 }
 
 /// A registered git submodule of the open repository.

@@ -2098,6 +2098,65 @@ fn gh_api_value(repo_path: &Path, path: &str) -> Result<serde_json::Value, Strin
     serde_json::from_str(&out).map_err(|e| e.to_string())
 }
 
+/// email/name → GitHub avatar URL for the repo's recent commits (last 100).
+/// Authors whose email isn't linked to a GitHub account are skipped.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommitAuthorAvatar {
+    pub email: String,
+    pub name: String,
+    pub avatar_url: String,
+}
+
+pub fn commit_avatars(repo_path: &Path) -> Result<Vec<CommitAuthorAvatar>, String> {
+    let (owner, name) = repo_slug(repo_path)?;
+    let value = gh_api_value(
+        repo_path,
+        &format!("repos/{owner}/{name}/commits?per_page=100"),
+    )?;
+    let commits = value
+        .as_array()
+        .ok_or_else(|| "unexpected commits response".to_string())?;
+    let mut out: Vec<CommitAuthorAvatar> = Vec::new();
+    for commit in commits {
+        let author = commit.get("author");
+        let Some(author) = author else { continue };
+        let avatar_url = author
+            .get("avatar_url")
+            .and_then(|u| u.as_str())
+            .unwrap_or_default();
+        if avatar_url.is_empty() {
+            continue;
+        }
+        let email = commit
+            .get("commit")
+            .and_then(|c| c.get("author"))
+            .and_then(|a| a.get("email"))
+            .and_then(|e| e.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let author_name = commit
+            .get("commit")
+            .and_then(|c| c.get("author"))
+            .and_then(|a| a.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if email.is_empty() {
+            continue;
+        }
+        if out.iter().any(|a| a.email == email) {
+            continue;
+        }
+        out.push(CommitAuthorAvatar {
+            email,
+            name: author_name,
+            avatar_url: avatar_url.to_string(),
+        });
+    }
+    Ok(out)
+}
+
 /// Normalize GitHub severity spellings (moderate → medium, CRITICAL → critical).
 fn sev_norm(raw: &str) -> String {
     let l = raw.to_lowercase();

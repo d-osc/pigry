@@ -1145,6 +1145,12 @@ export async function composeCommitMessage(): Promise<ComposedCommitMessage> {
   return invoke('compose_commit_message');
 }
 
+/** Unified diff of the staged changes, truncated — AI commit-message input. */
+export async function getStagedDiffPreview(maxChars = 16_000): Promise<string> {
+  if (!isTauri()) throw new Error('staged diff requires the desktop app');
+  return invoke<string>('staged_diff_preview', { maxChars });
+}
+
 // ---- Insights ----
 
 /** Git-history analytics for the Insights screen (local, offline). */

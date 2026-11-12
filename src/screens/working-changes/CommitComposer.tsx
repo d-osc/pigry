@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { composeCommitMessage } from '../../lib/tauriClient';
+import { aiCommitMessage } from '../../lib/commitAi';
 import './CommitComposer.css';
 
 const TITLE_LIMIT = 72;
@@ -51,6 +52,17 @@ export function CommitComposer() {
     if (generating || busy) return;
     setGenerating(true);
     try {
+      // AI path first: the chat's connected provider. When the app isn't
+      // connected to any provider/model this returns null — use the old way.
+      const ai = await aiCommitMessage().catch((error) => {
+        notify(error instanceof Error ? error.message : String(error), 'error');
+        return null;
+      });
+      if (ai) {
+        setMessage(ai.message);
+        notify(`Generated with ${ai.used}`, 'success');
+        return;
+      }
       const composed = await composeCommitMessage();
       setMessage(composed.body ? `${composed.title}\n\n${composed.body}` : composed.title);
     } catch (e) {

@@ -2065,6 +2065,19 @@ pub async fn compose_commit_message(
     git_state::compose_commit_message(&repo_path)
 }
 
+#[tauri::command]
+pub async fn staged_diff_preview(
+    state: State<'_, Mutex<AppState>>,
+    max_chars: Option<f64>,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    let max = max_chars.map(|n| n as usize).unwrap_or(16_000).clamp(200, 60_000);
+    git_state::staged_diff_preview(&repo_path, max)
+}
+
 /// `scope` selects the memory store inside .pigry -- "teams/<team>" is the
 /// team-wide store, "teams/<team>/agents/<username>" an agent's private one;
 /// omitted = the project-wide store (.pigry/memory.vector.json).

@@ -200,6 +200,7 @@ pub fn run() {
             commands::abort_rebase,
             commands::stage_lines,
             commands::compose_commit_message,
+            commands::staged_diff_preview,
             commands::memory_list,
             commands::memory_add,
             commands::memory_remove,
