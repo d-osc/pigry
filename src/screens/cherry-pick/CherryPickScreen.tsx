@@ -8,6 +8,7 @@ import { useRepository } from '../../hooks/useRepository';
 import {
   cherryPick,
   cherryPickAbort,
+  getBranchCommits,
   getCommitDetail,
   getCommitHistory,
   mergeStatus,
@@ -26,6 +27,8 @@ export function CherryPickScreen() {
   const headOid = repository?.headOid ?? '';
   const [rows, setRows] = useState<CommitRow[]>([]);
   const [query, setQuery] = useState('');
+  /** '' = every branch (full history); otherwise a branch ref to browse. */
+  const [branchFilter, setBranchFilter] = useState('');
   const [selected, setSelected] = useState<CommitRow | null>(null);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -40,10 +43,13 @@ export function CherryPickScreen() {
   const [loadingFile, setLoadingFile] = useState(false);
   const [splitView, setSplitView] = useState(true);
 
-  // Reload the browse list whenever HEAD moves.
+  // Reload the browse list whenever HEAD moves or the branch filter changes.
   useEffect(() => {
     let cancelled = false;
-    getCommitHistory(false)
+    const load = branchFilter
+      ? getBranchCommits(branchFilter)
+      : getCommitHistory(false);
+    load
       .then((history) => {
         if (!cancelled) setRows(history.commits);
       })
@@ -53,7 +59,7 @@ export function CherryPickScreen() {
     return () => {
       cancelled = true;
     };
-  }, [headOid]);
+  }, [headOid, branchFilter]);
 
   const selectCommit = async (row: CommitRow) => {
     // Clicking the selected row again collapses its detail.
@@ -186,6 +192,28 @@ export function CherryPickScreen() {
 
       <section className="cherry__browse">
         <h4 className="cherry__section-title">Recent commits</h4>
+        <div className="cherry__branch-row">
+          <label className="cherry__branch-label">
+            Branch
+            <select
+              className="cherry__branch-select"
+              value={branchFilter}
+              onChange={(event) => {
+                setBranchFilter(event.target.value);
+                setSelected(null);
+                setDetail(null);
+              }}
+            >
+              <option value="">All branches</option>
+              {(repository?.branches ?? []).map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.name}
+                  {b.isHead ? '  (checked out)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="cherry__search">
           <input
             type="text"
