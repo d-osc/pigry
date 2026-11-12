@@ -411,6 +411,24 @@ export function ProviderManager() {
       // Every provider template in ZCode's own catalog becomes a provider in
       // the "ZCode Providers" group — apiFormat/baseUrl/models from ZCode's
       // config; the decrypted coding-plan key only fits z.ai-hosted rules.
+      // ChatGPT family — OpenAI API provider with models from Codex's own
+      // server-cached catalog (~/.codex/models_cache.json).
+      for (const cp of detected.chatgptProviders ?? []) {
+        addDetected(
+          cp.id,
+          cp.name,
+          cp.models,
+          '',
+          cp.baseUrl,
+          '',
+          false,
+          false,
+          undefined,
+          undefined,
+          false,
+          'openai',
+        );
+      }
       for (const template of detected.zcodeProviders ?? []) {
         const apiFormat =
           template.apiType === 'anthropic-messages' ? 'anthropic' : 'openai';
@@ -459,6 +477,7 @@ export function ProviderManager() {
           app.usable !== false,
           app.launchKind || 'cli',
           app.launchTarget || app.binary,
+          app.binary === 'codex',
         );
       }
       // Desktop AI apps — listed as detected inventory (they run in their
@@ -475,6 +494,7 @@ export function ProviderManager() {
           false,
           desktopApp.launchKind,
           desktopApp.launchTarget,
+          desktopApp.id === 'chatgpt-desktop',
         );
       }
       // Claude catalog — Anthropic API provider with the account's own
@@ -551,20 +571,11 @@ export function ProviderManager() {
   const chatgptProviders = providers.filter(
     (p) => p.kind !== 'builtin' && isChatgptFamily(p) && !isClaudeFamily(p),
   );
-  const apps = providers.filter(
-    (p) =>
-      p.kind !== 'builtin' &&
-      p.detected &&
-      !p.zcodeProvider &&
-      !isChatgptFamily(p) &&
-      !isClaudeFamily(p),
-  );
   const customs = providers.filter(
     (p) =>
       p.kind !== 'builtin' &&
-      !p.detected &&
       !p.zcodeProvider &&
-      !isChatgptFamily(p) &&
+      !p.chatgptProvider &&
       !isClaudeFamily(p),
   );
 
@@ -670,7 +681,6 @@ export function ProviderManager() {
           {renderGroup('claude', 'Claude Providers', claudeProviders)}
           {renderGroup('zcode', 'ZCode Providers', zcodeProviders)}
           {renderGroup('chatgpt', 'ChatGPT Providers', chatgptProviders)}
-          {renderGroup('installed', 'Installed AI apps', apps)}
           {renderGroup('custom', 'Custom providers', customs)}
         </aside>
 
