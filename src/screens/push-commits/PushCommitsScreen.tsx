@@ -1,9 +1,10 @@
 /** Push Commits screen — the local commits waiting for the upstream, each
  * expandable with its message and files, files open as before/after compares,
- * plus the push action itself. */
-import { useEffect, useState } from 'react';
+ * plus the push action itself. The list sorts by date (toggle) and reveals
+ * older commits in batches. */
+import { useEffect, useMemo, useState } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { ArrowUpCircle, CheckCircle2, CloudUpload } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, CloudUpload } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
   pushPreview,
@@ -23,6 +24,19 @@ interface FileVersions {
   language: string;
 }
 
+const PAGE_SIZE = 40;
+const SORT_KEY = 'pigry:push-sort';
+
+function loadSortDir(): 'desc' | 'asc' {
+  try {
+    const raw = localStorage.getItem(SORT_KEY);
+    if (raw === 'asc' || raw === 'desc') return raw;
+  } catch {
+    // corrupt cache — default
+  }
+  return 'desc';
+}
+
 export function PushCommitsScreen() {
   const { repository, refresh, notify } = useRepository();
   const headOid = repository?.headOid ?? '';
@@ -33,6 +47,18 @@ export function PushCommitsScreen() {
   const [versions, setVersions] = useState<FileVersions | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [splitView, setSplitView] = useState(true);
+  /** Commit list order — newest first by default, toggle to oldest first. */
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>(loadSortDir);
+  /** How many commits are shown before "Show more". */
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SORT_KEY, JSON.stringify(sortDir));
+    } catch {
+      // storage full — skip persist
+    }
+  }, [sortDir]);
 
   // Reload whenever HEAD moves or the screen remounts.
   useEffect(() => {
@@ -90,6 +116,15 @@ export function PushCommitsScreen() {
       setPushing(false);
     }
   };
+
+  /** Date-sorted view of the unpushed commits (backend order is newest-first). */
+  const sortedCommits = useMemo(() => {
+    const commits = preview?.commits ?? [];
+    if (sortDir === 'desc') return commits;
+    return [...commits].sort((a, b) => a.timeSeconds - b.timeSeconds);
+  }, [preview, sortDir]);
+  const shownCommits = sortedCommits.slice(0, visibleCount);
+  const hasMore = sortedCommits.length > visibleCount;
 
   if (!preview) {
     return (
@@ -155,11 +190,34 @@ export function PushCommitsScreen() {
 
       {canPush && (
         <section className="push__section">
-          <h3 className="push__section-title">
-            Commits to push ({preview.ahead})
-          </h3>
+          <div className="push__list-head">
+            <h3 className="push__section-title">
+              Commits to push ({preview.ahead})
+            </h3>
+            <button
+              type="button"
+              className="push__sort-btn"
+              title={sortDir === 'desc' ? 'Newest first — click for oldest first' : 'Oldest first — click for newest first'}
+              onClick={() => {
+                setSortDir(sortDir === 'desc' ? 'asc' : 'desc');
+                setVisibleCount(PAGE_SIZE);
+              }}
+            >
+              {sortDir === 'desc' ? (
+                <>
+                  <ArrowDown size={11} strokeWidth={1.6} />
+                  Newest first
+                </>
+              ) : (
+                <>
+                  <ArrowUp size={11} strokeWidth={1.6} />
+                  Oldest first
+                </>
+              )}
+            </button>
+          </div>
           <ul className="push__commits">
-            {preview.commits.map((commit) => {
+            {shownCommits.map((commit) => {
               const open = expandedCommit === commit.oid;
               return (
                 <li key={commit.oid} className="push__commit">
@@ -263,6 +321,15 @@ export function PushCommitsScreen() {
               );
             })}
           </ul>
+          {hasMore && (
+            <button
+              type="button"
+              className="push__show-more"
+              onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            >
+              Show more — {sortedCommits.length - visibleCount} older commits
+            </button>
+          )}
         </section>
       )}
     </div>

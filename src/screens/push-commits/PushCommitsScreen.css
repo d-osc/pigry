@@ -294,3 +294,50 @@
 .push__file-view-labels span + span {
   margin-left: auto;
 }
+
+/* List header: title + date-sort toggle. */
+.push__list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.push__sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.push__sort-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Reveal older unpushed commits in batches. */
+.push__show-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.push__show-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
