@@ -1,6 +1,7 @@
-/** AI commit-message generation. Uses the chat's active provider when the
- * app is connected to one (green dot + a model, or a CLI agent); callers
- * fall back to the heuristic composer when this returns null or throws. */
+/** AI commit-message generation. Uses the agent selected in chat (the
+ * working-changes menu's default agent and the provider/model it points at,
+ * mirroring the composer's model pill) when the app is connected to one;
+ * callers fall back to the heuristic composer when this returns null. */
 import {
   activeProvider,
   anthropicEndpoint,
@@ -9,9 +10,48 @@ import {
   providerStatus,
   resolveEndpoint,
 } from './aiProviders';
+import { builtinAgents, teamForScreen } from './agentExtras';
 import { aiChat, cliAgentRun, getStagedDiffPreview } from './tauriClient';
+import type { AiProviderEntry } from '../types/repository';
 
 const MAX_DIFF_CHARS = 12_000;
+
+interface ChatTarget {
+  provider: AiProviderEntry;
+  model: string;
+  /** Label for the toast, e.g. "glm-5.3" or the provider name. */
+  used: string;
+}
+
+/** Resolves the chat's selected agent the same way the AI panel's model pill
+ * does: the default agent of this menu's team when it pins a provider/model,
+ * otherwise the global chat selection. Null = not connected. */
+function chatTarget(): ChatTarget | null {
+  const providers = loadProviders();
+  const active = activeProvider(providers);
+  const team = teamForScreen('working-changes');
+  const agent =
+    builtinAgents().find(
+      (entry) => entry.enabled && entry.tier === 'default' && entry.team === team,
+    ) ?? null;
+  const agentProvider = agent?.providerId
+    ? providers.find((p) => p.id === agent.providerId) ?? null
+    : null;
+  const provider = agentProvider ?? active;
+  if (!provider || provider.enabled === false) return null;
+  // Orange (unusable) dot or model-less HTTP provider = not connected.
+  if (providerStatus(provider) !== 'ok') return null;
+  const model = agentProvider
+    ? agent?.model || agentProvider.model || ''
+    : active?.model ?? '';
+  if (!model && !isCliProvider(provider)) return null;
+  const effort = agent?.effort || provider.models.find((m) => m.name === model)?.effort || '';
+  return {
+    provider,
+    model,
+    used: model ? (effort ? `${model} · ${effort}` : model) : provider.name,
+  };
+}
 
 function promptFor(diff: string): string {
   return [
@@ -51,16 +91,14 @@ export interface AiCommitResult {
 }
 
 /**
- * Generates a commit message through the connected AI provider.
+ * Generates a commit message through the agent selected in chat.
  * Returns `null` when the app isn't connected to a provider/model — the
  * caller then uses the old heuristic composer. Throws on provider errors.
  */
 export async function aiCommitMessage(): Promise<AiCommitResult | null> {
-  const provider = activeProvider(loadProviders());
-  if (!provider || provider.enabled === false) return null;
-  // Orange (unusable) dot or model-less HTTP provider = not connected.
-  if (providerStatus(provider) !== 'ok') return null;
-  if (!provider.model && !isCliProvider(provider)) return null;
+  const target = chatTarget();
+  if (!target) return null;
+  const { provider, model, used } = target;
 
   const diff = await getStagedDiffPreview(MAX_DIFF_CHARS);
 
@@ -73,7 +111,7 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
         : provider.type === 'zcode-cli'
           ? 'zcode'
           : provider.type;
-    text = await cliAgentRun(cli, promptFor(diff), provider.model || undefined);
+    text = await cliAgentRun(cli, promptFor(diff), model || undefined);
   } else {
     const isAnthropic = provider.apiFormat === 'anthropic';
     const endpoint = isAnthropic
@@ -81,12 +119,12 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
       : resolveEndpoint(provider);
     const payload = isAnthropic
       ? {
-          model: provider.model,
+          model,
           max_tokens: 400,
           messages: [{ role: 'user', content: promptFor(diff) }],
         }
       : {
-          model: provider.model,
+          model,
           messages: [{ role: 'user', content: promptFor(diff) }],
           temperature: 0.2,
           stream: false,
@@ -123,6 +161,5 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
 
   const message = cleanMessage(text || '');
   if (!message) return null;
-  const used = provider.model || provider.name;
   return { message, used };
 }
