@@ -2078,6 +2078,26 @@ pub async fn staged_diff_preview(
     git_state::staged_diff_preview(&repo_path, max)
 }
 
+/// External git CLI presence — the frontend shows an install notice when it
+/// is missing (local operations shell out to the user's own git).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCliStatus {
+    pub found: bool,
+    pub version: String,
+}
+
+#[tauri::command]
+pub async fn git_cli_status() -> Result<GitCliStatus, String> {
+    match crate::gitcli::git_version() {
+        Ok(version) => Ok(GitCliStatus { found: true, version }),
+        Err(_) => Ok(GitCliStatus {
+            found: false,
+            version: String::new(),
+        }),
+    }
+}
+
 /// `scope` selects the memory store inside .pigry -- "teams/<team>" is the
 /// team-wide store, "teams/<team>/agents/<username>" an agent's private one;
 /// omitted = the project-wide store (.pigry/memory.vector.json).

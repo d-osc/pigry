@@ -10,7 +10,9 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
 
-const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
+/// Generous wall-clock limit: pushing a large pack (hundreds of commits with
+/// binaries) on a slow upload legitimately takes minutes.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(600);
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,12 +23,13 @@ pub struct NetResult {
 type Result<T> = std::result::Result<T, String>;
 
 fn run_git(repo_path: &PathBuf, args: &[String]) -> Result<String> {
+    // No credential.interactive=false here: when the stored credential is
+    // expired GCM must be allowed to prompt (browser/terminal UI) — blocking
+    // the prompt turned every push/pull/fetch into
+    // "Cannot prompt because user interactivity has been disabled".
     let output = Command::new("git")
         .arg("-C")
         .arg(repo_path)
-        .arg("-c")
-        // Headless: GCM still supplies stored credentials, but never prompts.
-        .arg("credential.interactive=false")
         .args(args)
         .stdin(Stdio::null())
         .output()

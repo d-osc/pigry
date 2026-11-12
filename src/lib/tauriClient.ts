@@ -1151,6 +1151,17 @@ export async function getStagedDiffPreview(maxChars = 16_000): Promise<string> {
   return invoke<string>('staged_diff_preview', { maxChars });
 }
 
+export interface GitCliStatus {
+  found: boolean;
+  version: string;
+}
+
+/** External git CLI presence — the app shells out to the user's own git. */
+export async function gitCliStatus(): Promise<GitCliStatus> {
+  if (!isTauri()) return { found: true, version: 'browser-preview' };
+  return invoke<GitCliStatus>('git_cli_status');
+}
+
 // ---- Insights ----
 
 /** Git-history analytics for the Insights screen (local, offline). */

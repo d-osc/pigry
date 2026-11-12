@@ -95,3 +95,17 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* External git CLI missing — install notice across the top of the shell. */
+.git-missing-banner {
+  padding: 9px 18px;
+  background: #4a3418;
+  border-bottom: 1px solid #edb675;
+  color: #f2d9b6;
+  font-size: var(--fs-sm);
+}
+
+.git-missing-banner a {
+  color: #edb675;
+  font-weight: 600;
+}

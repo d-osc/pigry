@@ -10,7 +10,7 @@ import { ChevronLeft, ChevronsRight, Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
-import { getFileTree, readWorktreeFile } from '../lib/tauriClient';
+import { getFileTree, gitCliStatus, readWorktreeFile } from '../lib/tauriClient';
 import { AiAgentPanel } from '../screens/explorer/AiAgentPanel';
 import { ResizeHandle } from './ResizeHandle';
 import { teamForScreen } from '../lib/agentExtras';
@@ -65,6 +65,36 @@ function ErrorBanner() {
   const { error } = useRepository();
   if (!error) return null;
   return <div className="error-banner" role="alert">{error}</div>;
+}
+
+/** Shown when the external git CLI isn't installed/on PATH — local
+ * operations shell out to the user's own git, so nothing works without it. */
+function GitMissingBanner() {
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    gitCliStatus()
+      .then((status) => {
+        if (!cancelled && !status.found) setMissing(true);
+      })
+      .catch(() => {
+        // probe failure — assume present (backend errors are surfaced elsewhere)
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!missing) return null;
+  return (
+    <div className="git-missing-banner" role="alert">
+      <strong>Git not found.</strong> PIGRY needs the external Git CLI for commits, branches and
+      sync. Install it from{' '}
+      <a href="https://git-scm.com/downloads" target="_blank" rel="noreferrer">
+        git-scm.com
+      </a>{' '}
+      and restart the app.
+    </div>
+  );
 }
 
 function RebaseBanner({ onAbort }: { onAbort: () => void }) {
@@ -414,6 +444,7 @@ function AppShellInner() {
           setPaletteOpen(true);
         }}
       />
+      <GitMissingBanner />
       {screen === 'app-settings' ? (
         // The app settings page is repo-agnostic — it takes over the whole
         // body from wherever it was opened (workspace or Home picker).

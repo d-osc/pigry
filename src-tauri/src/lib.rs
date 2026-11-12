@@ -12,6 +12,7 @@ mod devtools;
 mod web;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
+pub mod gitcli;
 pub mod net;
 pub mod ops;
 pub mod settings;
@@ -201,6 +202,7 @@ pub fn run() {
             commands::stage_lines,
             commands::compose_commit_message,
             commands::staged_diff_preview,
+            commands::git_cli_status,
             commands::memory_list,
             commands::memory_add,
             commands::memory_remove,

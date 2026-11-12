@@ -1874,48 +1874,35 @@ fn validate_branch_name(name: &str) -> Result<()> {
 }
 
 /// Creates a branch at HEAD; optionally checks it out afterwards.
+/// Runs through the external git CLI (branch ops migrated off libgit2).
 pub fn create_branch(repo_path: &Path, name: &str, checkout: bool) -> Result<()> {
     validate_branch_name(name)?;
-    let repo = Repository::discover(repo_path).map_err(err)?;
-    let head = repo
-        .head()
-        .map_err(err)?
-        .peel_to_commit()
-        .map_err(err)?;
-    if repo.find_branch(name, BranchType::Local).is_ok() {
-        return Err(format!("branch '{name}' already exists"));
-    }
-    repo.branch(name, &head, false).map_err(err)?;
+    crate::gitcli::run_git(repo_path, &["branch", name]).map_err(|e| {
+        if e.contains("already exists") {
+            format!("branch '{name}' already exists")
+        } else {
+            e
+        }
+    })?;
     if checkout {
         checkout_branch(repo_path, name)?;
     }
     Ok(())
 }
 
-/// Checks out a local branch. Uses a safe checkout: it refuses (with an
-/// error) when uncommitted working-tree changes would be overwritten.
+/// Checks out a local branch. The external git CLI is natively safe: it
+/// refuses (with an error) when uncommitted working-tree changes would be
+/// overwritten.
 pub fn checkout_branch(repo_path: &Path, name: &str) -> Result<()> {
-    let repo = Repository::discover(repo_path).map_err(err)?;
-    let branch = repo.find_branch(name, BranchType::Local).map_err(|_| {
-        format!("branch '{name}' not found")
+    crate::gitcli::run_git(repo_path, &["checkout", name]).map_err(|e| {
+        if e.contains("did not match") || e.contains("not found") {
+            format!("branch '{name}' not found")
+        } else if e.contains("would be overwritten") || e.contains("untracked working tree") {
+            format!("cannot checkout '{name}': your local changes would be overwritten — commit or stash first")
+        } else {
+            e
+        }
     })?;
-    let refname = branch
-        .get()
-        .name()
-        .ok_or("invalid branch reference")?
-        .to_string();
-    let tree = branch.get().peel_to_tree().map_err(err)?;
-
-    let mut builder = CheckoutBuilder::new();
-    builder.safe();
-    repo.checkout_tree(tree.as_object(), Some(&mut builder))
-        .map_err(|e| {
-            format!(
-                "cannot checkout '{name}': your local changes would be overwritten — commit or stash first ({})",
-                e.message()
-            )
-        })?;
-    repo.set_head(&refname).map_err(err)?;
     Ok(())
 }
 
@@ -1941,30 +1928,22 @@ fn is_ancestor(repo: &Repository, ancestor_oid: git2::Oid, head_oid: git2::Oid) 
     Ok(false)
 }
 
-/// Deletes a merged local branch. Refuses the current branch and branches
-/// with commits not reachable from HEAD.
+/// Deletes a merged local branch. `git branch -d` natively refuses the
+/// current branch and branches with unmerged commits.
 pub fn delete_branch(repo_path: &Path, name: &str) -> Result<()> {
-    let mut repo = Repository::discover(repo_path).map_err(err)?;
-    let current = current_branch(&repo)?;
+    let current = crate::gitcli::current_branch(repo_path)?;
     if current == name {
         return Err("cannot delete the branch you are currently on".to_string());
     }
-    let mut branch = repo
-        .find_branch(name, BranchType::Local)
-        .map_err(|_| format!("branch '{name}' not found"))?;
-    let tip = branch.get().target().ok_or("branch has no commits")?;
-    let head_oid = repo
-        .head()
-        .map_err(err)?
-        .peel_to_commit()
-        .map_err(err)?
-        .id();
-    if !is_ancestor(&repo, tip, head_oid)? {
-        return Err(format!(
-            "branch '{name}' has unmerged commits — merge it into {current} first"
-        ));
-    }
-    branch.delete().map_err(err)?;
+    crate::gitcli::run_git(repo_path, &["branch", "-d", name]).map_err(|e| {
+        if e.contains("not found") || e.contains("did not match") {
+            format!("branch '{name}' not found")
+        } else if e.contains("not fully merged") {
+            format!("branch '{name}' has unmerged commits — merge it into {current} first")
+        } else {
+            e
+        }
+    })?;
     Ok(())
 }
 
@@ -1977,38 +1956,39 @@ pub fn create_branch_from(
     checkout: bool,
 ) -> Result<()> {
     validate_branch_name(name)?;
-    let repo = Repository::discover(repo_path).map_err(err)?;
-    let target = repo
-        .revparse_single(from_ref)
-        .map_err(|_| format!("cannot resolve '{from_ref}' — branch, tag or commit not found"))?
-        .peel_to_commit()
-        .map_err(|_| format!("'{from_ref}' does not point at a commit"))?;
-    if repo.find_branch(name, BranchType::Local).is_ok() {
-        return Err(format!("branch '{name}' already exists"));
-    }
-    repo.branch(name, &target, false).map_err(err)?;
+    crate::gitcli::run_git(repo_path, &["branch", name, from_ref]).map_err(|e| {
+        if e.contains("already exists") {
+            format!("branch '{name}' already exists")
+        } else if e.contains("not a valid") || e.contains("unknown revision") {
+            format!("cannot resolve '{from_ref}' — branch, tag or commit not found")
+        } else {
+            e
+        }
+    })?;
     if checkout {
         checkout_branch(repo_path, name)?;
     }
     Ok(())
 }
 
-/// Renames a local branch. Refuses the current branch (HEAD would need to
-/// move with it) and the new name colliding with an existing branch.
+/// Renames a local branch. `git branch -m` refuses the rename when the new
+/// name collides; the current branch is refused here (HEAD would need to
+/// move with it in this UI's flow).
 pub fn rename_branch(repo_path: &Path, old_name: &str, new_name: &str) -> Result<()> {
     validate_branch_name(new_name)?;
-    let mut repo = Repository::discover(repo_path).map_err(err)?;
-    let current = current_branch(&repo)?;
+    let current = crate::gitcli::current_branch(repo_path)?;
     if current == old_name {
         return Err("cannot rename the branch you are currently on".to_string());
     }
-    let mut branch = repo
-        .find_branch(old_name, BranchType::Local)
-        .map_err(|_| format!("branch '{old_name}' not found"))?;
-    if repo.find_branch(new_name, BranchType::Local).is_ok() {
-        return Err(format!("branch '{new_name}' already exists"));
-    }
-    branch.rename(new_name, false).map_err(err)?;
+    crate::gitcli::run_git(repo_path, &["branch", "-m", old_name, new_name]).map_err(|e| {
+        if e.contains("not found") {
+            format!("branch '{old_name}' not found")
+        } else if e.contains("already exists") {
+            format!("branch '{new_name}' already exists")
+        } else {
+            e
+        }
+    })?;
     Ok(())
 }
 
@@ -2016,20 +1996,22 @@ pub fn rename_branch(repo_path: &Path, old_name: &str, new_name: &str) -> Result
 /// `refs/remotes/<remote>/<name>` (with upstream tracking) and checks it out.
 /// If a local branch with that name already exists, just checks it out.
 pub fn checkout_remote_branch(repo_path: &Path, remote: &str, name: &str) -> Result<()> {
-    let repo = Repository::discover(repo_path).map_err(err)?;
-    let remote_ref = repo
-        .find_reference(&format!("refs/remotes/{remote}/{name}"))
-        .map_err(|_| format!("remote branch '{remote}/{name}' not found — fetch first"))?;
-    if repo.find_branch(name, BranchType::Local).is_ok() {
+    let track = format!("{remote}/{name}");
+    let local_exists = crate::gitcli::run_git(repo_path, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{name}")]).is_ok();
+    if local_exists {
         // Already downloaded — switch to the local one.
         return checkout_branch(repo_path, name);
     }
-    let commit = remote_ref.peel_to_commit().map_err(err)?;
-    let mut branch = repo.branch(name, &commit, false).map_err(err)?;
-    branch
-        .set_upstream(Some(&format!("{remote}/{name}")))
-        .map_err(err)?;
-    checkout_branch(repo_path, name)
+    // `git checkout` creates a tracking branch straight from the remote tip.
+    let created = crate::gitcli::run_git(repo_path, &["checkout", "-b", name, "--track", &track]);
+    if created.is_ok() {
+        return Ok(());
+    }
+    let err = created.unwrap_err();
+    if err.contains("not found") || err.contains("did not match") || err.contains("invalid reference") {
+        return Err(format!("remote branch '{remote}/{name}' not found — fetch first"));
+    }
+    Err(err)
 }
 
 /// Deletes a branch on the remote (cloud) via `git push --delete` so auth
