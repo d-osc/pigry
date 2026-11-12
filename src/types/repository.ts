@@ -189,6 +189,8 @@ export interface CommitRow {
   summary: string;
   authorName: string;
   authorInitials: string;
+  /** Commit author email — used for GitHub profile image lookup. */
+  authorEmail?: string;
   timeSeconds: number;
   /** Lane index this commit sits on. */
   lane: number;

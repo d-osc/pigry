@@ -13,7 +13,7 @@ import {
   Tag as TagIcon,
   UserRound,
 } from 'lucide-react';
-import { getCommitOidSet, isTauri } from '../../lib/tauriClient';
+import { commitAvatars, getCommitOidSet, isTauri } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
 import { useCommitHistory } from '../../hooks/useCommitHistory';
 import { relativeTime } from '../../lib/relativeTime';
@@ -174,6 +174,44 @@ export function CommitGraphScreen({
   /** How many graph rows are rendered before "Show more" (lanes stay
    * correct because each row carries its lane assignment from the walk). */
   const [visibleCount, setVisibleCount] = useState(200);
+  /** author email → GitHub profile image url (fetched via gh api). */
+  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
+  // Fetch GitHub profile images for commit authors (desktop only, 7-day cache).
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    try {
+      const cached = localStorage.getItem('pigry:avatars');
+      if (cached) {
+        const parsed = JSON.parse(cached) as { at: number; map: Record<string, string> };
+        if (Date.now() - parsed.at < 7 * 24 * 3600 * 1000 && parsed.map) {
+          setAvatarMap(parsed.map);
+          return;
+        }
+      }
+    } catch {
+      // cache parse failure — refetch
+    }
+    commitAvatars()
+      .then((list) => {
+        if (cancelled) return;
+        const map: Record<string, string> = {};
+        for (const item of list) map[item.email] = item.avatarUrl;
+        setAvatarMap(map);
+        try {
+          localStorage.setItem('pigry:avatars', JSON.stringify({ at: Date.now(), map }));
+        } catch {
+          // storage full — skip persist
+        }
+      })
+      .catch(() => {
+        // gh not signed in / no remote — initials fallback
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const rows = useMemo(() => {
     if (!history) return [];
     const q = query.trim().toLowerCase();
@@ -483,12 +521,20 @@ export function CommitGraphScreen({
                   </span>
                   {columns.author && (
                     <span className="commit-row__author">
-                      <span
-                        className="commit-row__avatar"
-                        style={{ background: tone.bg, color: tone.fg }}
-                      >
-                        {row.authorInitials}
-                      </span>
+                      {avatarMap[row.authorEmail ?? ''] ? (
+                        <img
+                          className="commit-row__avatar commit-row__avatar--img"
+                          src={avatarMap[row.authorEmail ?? '']}
+                          alt={row.authorName}
+                        />
+                      ) : (
+                        <span
+                          className="commit-row__avatar"
+                          style={{ background: tone.bg, color: tone.fg }}
+                        >
+                          {row.authorInitials}
+                        </span>
+                      )}
                       {row.authorName}
                     </span>
                   )}

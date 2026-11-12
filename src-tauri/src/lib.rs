@@ -137,6 +137,7 @@ pub fn run() {
             commands::gh_traffic,
             commands::get_commit_oid_set,
             commands::zcode_credentials,
+            commands::commit_avatars,
             commands::cli_agent_run,
             commands::cli_detect,
             commands::launch_app,

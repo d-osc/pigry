@@ -490,6 +490,19 @@ export async function zcodePlanSubscription(apiKey: string): Promise<string> {
   return invoke<string>('zcode_plan_subscription', { apiKey });
 }
 
+/** email/name → GitHub avatar URL for the repo's recent commits (gh api). */
+export interface CommitAuthorAvatar {
+  email: string;
+  name: string;
+  avatarUrl: string;
+}
+
+/** Fetches commit-author avatar urls from GitHub via the gh CLI. */
+export async function commitAvatars(): Promise<CommitAuthorAvatar[]> {
+  if (!isTauri()) throw new Error('avatars require the desktop app');
+  return invoke<CommitAuthorAvatar[]>('commit_avatars');
+}
+
 /** Aggregates Claude Code's own session-log usage (raw JSON body). */
 export async function claudeUsage(): Promise<string> {
   if (!isTauri()) throw new Error('Usage scan requires the desktop app');

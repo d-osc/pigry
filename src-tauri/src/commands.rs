@@ -1286,6 +1286,17 @@ pub async fn zcode_credentials(
 }
 
 #[tauri::command]
+pub async fn commit_avatars(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<gh::CommitAuthorAvatar>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::commit_avatars(&repo_path)
+}
+
+#[tauri::command]
 pub async fn ai_chat(
     url: String,
     api_key: String,
