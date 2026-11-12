@@ -85,16 +85,23 @@ export function BranchesScreen() {
     );
   }, [entries, branchQuery]);
 
+  /** How many branch commits are shown before "Show more". */
+  const [visibleCount, setVisibleCount] = useState(100);
   const filteredRows = useMemo(() => {
     const query = commitQuery.trim().toLowerCase();
-    if (!query) return rows;
+    if (!query) return rows.slice(0, visibleCount);
     return rows.filter(
       (row) =>
         row.oid.toLowerCase().includes(query) ||
         row.shortOid.toLowerCase().includes(query) ||
         row.summary.toLowerCase().includes(query),
     );
-  }, [rows, commitQuery]);
+  }, [rows, commitQuery, visibleCount]);
+
+  // New branch selected — collapse back to the first page.
+  useEffect(() => {
+    setVisibleCount(100);
+  }, [selectedRef]);
 
   // Select HEAD's branch by default once the list loads.
   useEffect(() => {
@@ -256,7 +263,10 @@ export function BranchesScreen() {
           className="branches__search"
           placeholder="Search commits — sha or message"
           value={commitQuery}
-          onChange={(event) => setCommitQuery(event.target.value)}
+          onChange={(event) => {
+              setCommitQuery(event.target.value);
+              setVisibleCount(100);
+            }}
         />
         <ul className="branches__rows">
           {loadingRows && <li className="branches__empty">Loading commits…</li>}
@@ -386,6 +396,17 @@ export function BranchesScreen() {
           })}
           {!loadingRows && filteredRows.length === 0 && rows.length > 0 && (
             <li className="branches__empty">No commits match the search.</li>
+          )}
+          {!loadingRows && !commitQuery.trim() && rows.length > visibleCount && (
+            <li className="branches__show-more-row">
+              <button
+                type="button"
+                className="branches__show-more"
+                onClick={() => setVisibleCount((count) => count + 100)}
+              >
+                Show more — {rows.length - visibleCount} older commits
+              </button>
+            </li>
           )}
         </ul>
       </section>

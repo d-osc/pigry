@@ -171,6 +171,9 @@ export function CommitGraphScreen({
     };
   }, [repository]);
 
+  /** How many graph rows are rendered before "Show more" (lanes stay
+   * correct because each row carries its lane assignment from the walk). */
+  const [visibleCount, setVisibleCount] = useState(200);
   const rows = useMemo(() => {
     if (!history) return [];
     const q = query.trim().toLowerCase();
@@ -211,6 +214,9 @@ export function CommitGraphScreen({
       ? `${history.total}+ commits`
       : `${history.total} commits`
     : '';
+
+  /** True when more rows exist than are currently rendered. */
+  const hasMore = rows.length > visibleCount;
 
   return (
     <div className="commit-history">
@@ -441,7 +447,7 @@ export function CommitGraphScreen({
                 : 'No commits yet — the first commit will appear here.'}
             </div>
           ) : (
-            rows.map((row) => {
+            rows.slice(0, visibleCount).map((row) => {
               const selected = row.oid === selectedCommit;
               const tone = avatarTone(row.authorInitials);
               return (
@@ -504,6 +510,15 @@ export function CommitGraphScreen({
             })
           )}
         </div>
+        {hasMore && (
+          <button
+            type="button"
+            className="commit-history__show-more"
+            onClick={() => setVisibleCount((count) => count + 200)}
+          >
+            Show more — {rows.length - visibleCount} older commits
+          </button>
+        )}
         {selectedCommit && (
           <CommitDetailPanel
             key={selectedCommit}

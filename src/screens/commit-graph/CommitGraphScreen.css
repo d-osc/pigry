@@ -534,3 +534,22 @@
   left: auto;
   right: 0;
 }
+
+/* Show more — reveal older graph rows */
+.commit-history__show-more {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.commit-history__show-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

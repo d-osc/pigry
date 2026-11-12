@@ -392,3 +392,26 @@
   font-family: var(--font-mono);
   margin-left: 4px;
 }
+
+/* Show more — reveal older branch commits */
+.branches__show-more-row {
+  list-style: none;
+}
+
+.branches__show-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.branches__show-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
