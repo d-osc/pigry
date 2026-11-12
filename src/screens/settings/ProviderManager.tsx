@@ -369,11 +369,15 @@ export function ProviderManager() {
       for (const app of detected.apps) {
         const type =
           app.binary === 'zcode' ? 'zcode-cli' : app.binary === 'claude' ? 'claude-code' : app.binary;
+        // zcode-cli: models come from ZCode desktop's own builtin config —
+        // falling back to the plan report, then the credential's model.
         const configModels =
           app.binary === 'zcode'
-            ? zcodePlanModels.length > 0
-              ? zcodePlanModels
-              : [zcodeModel || ZCODE_DEFAULT_MODEL]
+            ? (app.models ?? []).length > 0
+              ? app.models
+              : zcodePlanModels.length > 0
+                ? zcodePlanModels
+                : [zcodeModel || ZCODE_DEFAULT_MODEL]
             : app.model
               ? [app.model]
               : [];

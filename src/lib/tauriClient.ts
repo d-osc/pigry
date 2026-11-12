@@ -435,6 +435,8 @@ export interface CliAppInfo {
   effort: string;
   /** Whether chat turns can actually run through this CLI right now. */
   usable: boolean;
+  /** Models read from the app's own config (builtinModelIds for zcode). */
+  models: string[];
   /** How to launch the interactive app ("cli" runs launchTarget in a console). */
   launchKind: string;
   launchTarget: string;
@@ -509,6 +511,7 @@ export async function cliDetect(): Promise<CliDetectResult> {
       ...a,
       effort: a.effort ?? '',
       usable: a.usable !== false,
+      models: a.models ?? [],
     })),
     desktop: result.desktop ?? [],
   };

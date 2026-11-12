@@ -516,10 +516,67 @@ pub struct CliAppInfo {
     /// Whether chat turns can actually run through this CLI right now
     /// (login gates / missing prompt modes make some unusable).
     pub usable: bool,
+    /// Models read from the app's own config, if any.
+    pub models: Vec<String>,
     /// How to launch the interactive app: kind "cli" runs launch_target
     /// (the binary) in a fresh console.
     pub launch_kind: String,
     pub launch_target: String,
+}
+
+/// Reads ZCode desktop's own provider config — the authoritative
+/// builtinModelIds per provider template (e.g. the coding plan's GLM set).
+fn read_zcode_models() -> Vec<String> {
+    let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    if local.is_empty() {
+        return Vec::new();
+    }
+    let config = Path::new(&local)
+        .join("Programs")
+        .join("ZCode")
+        .join("resources")
+        .join("config")
+        .join("provider")
+        .join("zcode-builtin.json");
+    let Ok(text) = std::fs::read_to_string(config) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let rules = v
+        .get("config")
+        .and_then(|c| c.get("providerConfigRules"))
+        .and_then(|r| r.get("templateRules"))
+        .and_then(|t| t.as_array())
+        .cloned()
+        .unwrap_or_default();
+    // Prefer the coding-plan template — the one pigry's zcode providers use.
+    let mut chosen: Option<&serde_json::Value> = None;
+    for rule in &rules {
+        let access_type = rule
+            .get("config")
+            .and_then(|c| c.get("access"))
+            .and_then(|a| a.get("type"))
+            .and_then(|t| t.as_str());
+        if access_type == Some("zhipu-coding-plan-api-key") {
+            chosen = Some(rule);
+            break;
+        }
+    }
+    let rule = match chosen.or_else(|| rules.first()) {
+        Some(r) => r,
+        None => return Vec::new(),
+    };
+    rule.get("config")
+        .and_then(|c| c.get("builtinModelIds"))
+        .and_then(|m| m.as_array())
+        .map(|ids| {
+            ids.iter()
+                .filter_map(|id| id.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The CLI coding agents pigry knows how to detect — (binary, display name).
@@ -797,6 +854,17 @@ pub fn cli_detect() -> CliDetectResult {
             continue;
         }
         seen.push(binary.to_string());
+        // zcode's models come from ZCode desktop's own provider config.
+        let models = if *binary == "zcode" {
+            read_zcode_models()
+        } else {
+            let default = read_app_model(binary);
+            if default.is_empty() {
+                Vec::new()
+            } else {
+                vec![default]
+            }
+        };
         apps.push(CliAppInfo {
             binary: binary.to_string(),
             name: name.to_string(),
@@ -804,6 +872,7 @@ pub fn cli_detect() -> CliDetectResult {
             model: read_app_model(binary),
             effort: read_app_effort(binary),
             usable: cli_usable(binary),
+            models,
             launch_kind: "cli".to_string(),
             launch_target: binary.to_string(),
         });
