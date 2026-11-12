@@ -155,6 +155,22 @@ pub fn zcode_creds() -> Result<ZcodeCreds, String> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ZcodeProviderTemplate {
+    /// Template id (unique per provider).
+    pub template_id: String,
+    /// Display name (en-US).
+    pub name: String,
+    /// Credential type: "zhipu-coding-plan-api-key" or "api-key".
+    pub access_type: String,
+    /// Wire protocol: "anthropic-messages" | "openai-chat-completions" | "openai-responses".
+    pub api_type: String,
+    pub base_url: String,
+    /// Models the template declares (builtinModelIds).
+    pub models: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CliDetectResult {
     pub claude: bool,
     pub codex: bool,
@@ -169,6 +185,8 @@ pub struct CliDetectResult {
     pub apps: Vec<CliAppInfo>,
     /// Detected desktop AI apps (no local API — inventory + config location).
     pub desktop: Vec<DesktopAppInfo>,
+    /// All provider templates shipped in ZCode desktop's own config.
+    pub zcode_providers: Vec<ZcodeProviderTemplate>,
 }
 
 #[derive(Serialize)]
@@ -524,9 +542,9 @@ pub struct CliAppInfo {
     pub launch_target: String,
 }
 
-/// Reads ZCode desktop's own provider config — the authoritative
-/// builtinModelIds per provider template (e.g. the coding plan's GLM set).
-fn read_zcode_models() -> Vec<String> {
+/// Parses ZCode desktop's own provider catalog — every templateRule in
+/// zcode-builtin.json becomes a pigry provider in the "ZCode Providers" group.
+fn read_zcode_providers() -> Vec<ZcodeProviderTemplate> {
     let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
     if local.is_empty() {
         return Vec::new();
@@ -551,31 +569,66 @@ fn read_zcode_models() -> Vec<String> {
         .and_then(|t| t.as_array())
         .cloned()
         .unwrap_or_default();
-    // Prefer the coding-plan template — the one pigry's zcode providers use.
-    let mut chosen: Option<&serde_json::Value> = None;
+    // ALL templates → the ZCode Providers catalog.
+    let mut providers: Vec<ZcodeProviderTemplate> = Vec::new();
     for rule in &rules {
-        let access_type = rule
-            .get("config")
-            .and_then(|c| c.get("access"))
-            .and_then(|a| a.get("type"))
-            .and_then(|t| t.as_str());
-        if access_type == Some("zhipu-coding-plan-api-key") {
-            chosen = Some(rule);
-            break;
+        let template_id = rule
+            .get("templateId")
+            .and_then(|t| t.as_str())
+            .unwrap_or_default()
+            .to_string();
+        if template_id.is_empty() {
+            continue;
         }
+        let config = rule.get("config");
+        let models: Vec<String> = config
+            .and_then(|c| c.get("builtinModelIds"))
+            .and_then(|m| m.as_array())
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|id| id.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        providers.push(ZcodeProviderTemplate {
+            template_id,
+            name: rule
+                .get("templateNameMap")
+                .and_then(|n| n.get("en-US"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("ZCode provider")
+                .to_string(),
+            access_type: config
+                .and_then(|c| c.get("access"))
+                .and_then(|a| a.get("type"))
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            api_type: config
+                .and_then(|c| c.get("api"))
+                .and_then(|a| a.get("type"))
+                .and_then(|t| t.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            base_url: config
+                .and_then(|c| c.get("api"))
+                .and_then(|a| a.get("baseUrl"))
+                .and_then(|b| b.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            models,
+        });
     }
-    let rule = match chosen.or_else(|| rules.first()) {
-        Some(r) => r,
-        None => return Vec::new(),
-    };
-    rule.get("config")
-        .and_then(|c| c.get("builtinModelIds"))
-        .and_then(|m| m.as_array())
-        .map(|ids| {
-            ids.iter()
-                .filter_map(|id| id.as_str().map(|s| s.to_string()))
-                .collect()
-        })
+    providers
+}
+
+/// Reads ZCode desktop's own provider config — the authoritative
+/// builtinModelIds per provider template (e.g. the coding plan's GLM set).
+fn read_zcode_models() -> Vec<String> {
+    read_zcode_providers()
+        .iter()
+        .find(|p| p.access_type == "zhipu-coding-plan-api-key")
+        .map(|p| p.models.clone())
         .unwrap_or_default()
 }
 
@@ -888,6 +941,7 @@ pub fn cli_detect() -> CliDetectResult {
         codex_model,
         apps,
         desktop: detect_desktop_apps(),
+        zcode_providers: read_zcode_providers(),
     }
 }
 

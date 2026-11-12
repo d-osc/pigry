@@ -82,7 +82,10 @@ export function ProviderManager() {
   );
 
   /** z.ai coding-plan family — these expose the plan subscription API. */
-  const isZaiFamily = selected?.type === 'zcode' || selected?.type === 'zcode-cli';
+  const isZaiFamily =
+    selected?.type === 'zcode' ||
+    selected?.type === 'zcode-cli' ||
+    (selected?.zcodeProvider === true && selected?.baseUrl?.includes('api.z.ai'));
 
   // Auto-fetch once when a z.ai-family provider without plan data is selected.
   const planFetchRef = useRef('');
@@ -269,6 +272,8 @@ export function ProviderManager() {
         usable = true,
         launchKind?: string,
         launchTarget?: string,
+        zcodeProvider = false,
+        apiFormatOverride?: 'anthropic' | 'openai',
       ) => {
         // The app's config is the source of truth: a detected provider's
         // model list mirrors exactly what the app's config declares.
@@ -322,8 +327,9 @@ export function ProviderManager() {
             name,
             kind: 'custom',
             detected: true,
+            zcodeProvider: zcodeProvider || undefined,
             type,
-            apiFormat: 'openai',
+            apiFormat: apiFormatOverride ?? 'openai',
             baseUrl,
             apiKey,
             model,
@@ -338,11 +344,13 @@ export function ProviderManager() {
       // ZCode's model set comes from its OWN plan subscription report — the
       // modelCode entries the plan actually records (real usage).
       let zcodeModel = '';
+      let zcodeKey = '';
       let zcodePlanModels: string[] = [];
       try {
         const zcode = await detectZcodeGlm();
         if (zcode) {
           zcodeModel = zcode.model;
+          zcodeKey = zcode.apiKey;
           if (!hasType('zcode')) {
             addDetected(
               'zcode',
@@ -362,6 +370,28 @@ export function ProviderManager() {
         }
       } catch {
         // ZCode desktop not installed / unreadable
+      }
+      // Every provider template in ZCode's own catalog becomes a provider in
+      // the "ZCode Providers" group — apiFormat/baseUrl/models from ZCode's
+      // config; the decrypted coding-plan key only fits z.ai-hosted rules.
+      for (const template of detected.zcodeProviders ?? []) {
+        const apiFormat =
+          template.apiType === 'anthropic-messages' ? 'anthropic' : 'openai';
+        const key = template.baseUrl.includes('api.z.ai') ? zcodeKey : '';
+        addDetected(
+          `zcode-${template.templateId}`,
+          template.name,
+          template.models ?? [],
+          '',
+          template.baseUrl,
+          key,
+          Boolean(key),
+          true,
+          undefined,
+          undefined,
+          true,
+          apiFormat,
+        );
       }
       // Generic scan — every detected CLI coding agent becomes a provider.
       // zcode's CLI kind is distinct from the HTTP zcode providers;
@@ -444,8 +474,11 @@ export function ProviderManager() {
   }
 
   const builtins = providers.filter((p) => p.kind === 'builtin');
-  const apps = providers.filter((p) => p.kind !== 'builtin' && p.detected);
-  const customs = providers.filter((p) => p.kind !== 'builtin' && !p.detected);
+  const zcodeProviders = providers.filter((p) => p.zcodeProvider);
+  const apps = providers.filter((p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider);
+  const customs = providers.filter(
+    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider,
+  );
 
   const renderRow = (entry: AiProviderEntry) => {
     const status = providerStatus(entry);
@@ -513,6 +546,12 @@ export function ProviderManager() {
         <aside className="prov-mgr__rail" aria-label="Provider list">
           <span className="prov-mgr__group">Providers</span>
           {builtins.map(renderRow)}
+          {zcodeProviders.length > 0 && (
+            <>
+              <span className="prov-mgr__group">ZCode Providers</span>
+              {zcodeProviders.map(renderRow)}
+            </>
+          )}
           {apps.length > 0 && (
             <>
               <span className="prov-mgr__group">Installed AI apps</span>

@@ -119,6 +119,7 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
     if (typeof raw.launchTarget === 'string' && raw.launchTarget) {
       entry.launchTarget = raw.launchTarget;
     }
+    if (raw.zcodeProvider === true) entry.zcodeProvider = true;
     if (
       raw.planInfo &&
       typeof (raw.planInfo as Record<string, unknown>).fetchedAt === 'number' &&
@@ -301,6 +302,11 @@ const APP_PROVIDER_TYPES = new Set([
   'chatgpt-desktop',
   'gemini-desktop',
 ]);
+
+/** True for providers pulled from ZCode desktop's own catalog. */
+export function isZcodeProvider(entry: AiProviderEntry): boolean {
+  return entry.zcodeProvider === true || entry.type.startsWith('zcode-');
+}
 
 /** Marks scanned-app providers so they group under "Installed AI apps" —
  * self-healing for entries added before the flag existed. */
