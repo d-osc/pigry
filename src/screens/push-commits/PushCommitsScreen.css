@@ -341,3 +341,22 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Commit search above the list. */
+.push__search {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.push__search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.push__search::placeholder {
+  color: var(--text-muted);
+}

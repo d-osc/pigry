@@ -25,7 +25,7 @@ interface FileVersions {
 }
 
 const PAGE_SIZE = 40;
-const SORT_KEY = 'pigry:push-sort';
+const SORT_KEY = 'pigry:push-sort-v2'; // v2: resets stale persisted orders
 
 function loadSortDir(): 'desc' | 'asc' {
   try {
@@ -51,6 +51,8 @@ export function PushCommitsScreen() {
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>(loadSortDir);
   /** How many commits are shown before "Show more". */
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  /** Commit search — sha, message, or author. */
+  const [commitQuery, setCommitQuery] = useState('');
 
   useEffect(() => {
     try {
@@ -117,12 +119,25 @@ export function PushCommitsScreen() {
     }
   };
 
-  /** Date-sorted view of the unpushed commits (backend order is newest-first). */
+  /** Search + date-sorted view of the unpushed commits. The backend walk
+   * delivers oldest-first, so BOTH directions sort explicitly — desc puts
+   * the newest commit on top. */
   const sortedCommits = useMemo(() => {
     const commits = preview?.commits ?? [];
-    if (sortDir === 'desc') return commits;
-    return [...commits].sort((a, b) => a.timeSeconds - b.timeSeconds);
-  }, [preview, sortDir]);
+    const query = commitQuery.trim().toLowerCase();
+    const filtered = query
+      ? commits.filter(
+          (commit) =>
+            commit.oid.toLowerCase().includes(query) ||
+            commit.shortOid.toLowerCase().includes(query) ||
+            commit.summary.toLowerCase().includes(query) ||
+            commit.authorName.toLowerCase().includes(query),
+        )
+      : commits;
+    return [...filtered].sort((a, b) =>
+      sortDir === 'asc' ? a.timeSeconds - b.timeSeconds : b.timeSeconds - a.timeSeconds,
+    );
+  }, [preview, sortDir, commitQuery]);
   const shownCommits = sortedCommits.slice(0, visibleCount);
   const hasMore = sortedCommits.length > visibleCount;
 
@@ -192,7 +207,8 @@ export function PushCommitsScreen() {
         <section className="push__section">
           <div className="push__list-head">
             <h3 className="push__section-title">
-              Commits to push ({preview.ahead})
+              Commits to push ({preview.ahead}
+              {commitQuery.trim() && ` · ${sortedCommits.length} match`})
             </h3>
             <button
               type="button"
@@ -216,6 +232,16 @@ export function PushCommitsScreen() {
               )}
             </button>
           </div>
+          <input
+            type="text"
+            className="push__search"
+            placeholder="Search commits — sha, message, or author"
+            value={commitQuery}
+            onChange={(event) => {
+              setCommitQuery(event.target.value);
+              setVisibleCount(PAGE_SIZE);
+            }}
+          />
           <ul className="push__commits">
             {shownCommits.map((commit) => {
               const open = expandedCommit === commit.oid;
