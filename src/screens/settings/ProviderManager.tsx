@@ -335,8 +335,10 @@ export function ProviderManager() {
         added.push(name);
       };
       const detected = await cliDetect();
-      // ZCode's GLM model comes from its decrypted credential store.
+      // ZCode's model set comes from its OWN plan subscription report — the
+      // modelCode entries the plan actually records (real usage).
       let zcodeModel = '';
+      let zcodePlanModels: string[] = [];
       try {
         const zcode = await detectZcodeGlm();
         if (zcode) {
@@ -351,6 +353,12 @@ export function ProviderManager() {
               zcode.apiKey,
             );
           }
+          try {
+            const body = await zcodePlanSubscription(zcode.apiKey);
+            zcodePlanModels = planModelCodes(body);
+          } catch {
+            // plan API unreachable — fall back to the credential's model
+          }
         }
       } catch {
         // ZCode desktop not installed / unreadable
@@ -361,10 +369,11 @@ export function ProviderManager() {
       for (const app of detected.apps) {
         const type =
           app.binary === 'zcode' ? 'zcode-cli' : app.binary === 'claude' ? 'claude-code' : app.binary;
-        // The zcode CLI runs on ZCode's coding plan — its model is GLM.
         const configModels =
           app.binary === 'zcode'
-            ? [zcodeModel || ZCODE_DEFAULT_MODEL]
+            ? zcodePlanModels.length > 0
+              ? zcodePlanModels
+              : [zcodeModel || ZCODE_DEFAULT_MODEL]
             : app.model
               ? [app.model]
               : [];
@@ -826,6 +835,26 @@ interface PlanLimit {
   percentage?: number;
   nextResetTime?: number;
   usageDetails?: Array<{ modelCode?: string; usage?: number }>;
+}
+
+/** Real model codes recorded by the z.ai coding plan (usage details). */
+function planModelCodes(body: string): string[] {
+  try {
+    const limits = (JSON.parse(body)?.data?.limits ?? []) as Array<{
+      usageDetails?: Array<{ modelCode?: string }>;
+    }>;
+    const codes: string[] = [];
+    for (const limit of limits) {
+      for (const detail of limit.usageDetails ?? []) {
+        if (detail.modelCode && !codes.includes(detail.modelCode)) {
+          codes.push(detail.modelCode);
+        }
+      }
+    }
+    return codes;
+  } catch {
+    return [];
+  }
 }
 
 function parsePlanLimits(body: string): PlanLimit[] {
