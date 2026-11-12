@@ -873,3 +873,42 @@ select.prov-mgr__control {
   font-size: var(--fs-2xs);
   color: var(--text-muted);
 }
+
+/* Collapsible rail group headers */
+.prov-mgr__group-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.prov-mgr__group-btn:hover {
+  color: var(--text-secondary);
+}
+
+.prov-mgr__group-btn .prov-mgr__group {
+  flex: 1;
+}
+
+.prov-mgr__group-count {
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--bg-input);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.prov-mgr__group-btn svg {
+  flex: none;
+  transition: transform var(--transition-fast);
+}
+
+.prov-mgr__group-btn svg.is-collapsed {
+  transform: rotate(-90deg);
+}

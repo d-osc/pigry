@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Check,
+  ChevronDown,
   Eye,
   EyeOff,
   Loader2,
@@ -62,6 +63,15 @@ export function ProviderManager() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyVisible, setKeyVisible] = useState(false);
   const [nameEditing, setNameEditing] = useState(false);
+  /** Collapsed rail groups (persisted per machine). */
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('pigry:provider-groups-v2');
+      return new Set<string>(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
   /** Plan-subscription fetch state for the selected z.ai-family provider. */
   const [planLoading, setPlanLoading] = useState(false);
   const [planError, setPlanError] = useState('');
@@ -504,6 +514,40 @@ export function ProviderManager() {
     (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider && !p.claudeProvider,
   );
 
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        localStorage.setItem('pigry:provider-groups-v2', JSON.stringify([...next]));
+      } catch {
+        // session-only
+      }
+      return next;
+    });
+  };
+
+  /** One collapsible rail group: clickable header + provider rows. */
+  const renderGroup = (key: string, label: string, items: AiProviderEntry[]) => {
+    const collapsed = collapsedGroups.has(key);
+    return (
+      <div key={key} className="prov-mgr__group-block">
+        <button
+          type="button"
+          className="prov-mgr__group-btn"
+          aria-expanded={!collapsed}
+          onClick={() => toggleGroup(key)}
+        >
+          <span className="prov-mgr__group">{label}</span>
+          <span className="prov-mgr__group-count">{items.length}</span>
+          <ChevronDown size={12} strokeWidth={1.75} className={collapsed ? 'is-collapsed' : undefined} />
+        </button>
+        {!collapsed && items.map(renderRow)}
+      </div>
+    );
+  };
+
   const renderRow = (entry: AiProviderEntry) => {
     const status = providerStatus(entry);
     return (
@@ -568,28 +612,11 @@ export function ProviderManager() {
 
       <div className="prov-mgr__body">
         <aside className="prov-mgr__rail" aria-label="Provider list">
-          <span className="prov-mgr__group">Providers</span>
-          {builtins.map(renderRow)}
-          {claudeProviders.length > 0 && (
-            <>
-              <span className="prov-mgr__group">Claude Providers</span>
-              {claudeProviders.map(renderRow)}
-            </>
-          )}
-          {zcodeProviders.length > 0 && (
-            <>
-              <span className="prov-mgr__group">ZCode Providers</span>
-              {zcodeProviders.map(renderRow)}
-            </>
-          )}
-          {apps.length > 0 && (
-            <>
-              <span className="prov-mgr__group">Installed AI apps</span>
-              {apps.map(renderRow)}
-            </>
-          )}
-          <span className="prov-mgr__group">Custom providers</span>
-          {customs.map(renderRow)}
+          {renderGroup('providers', 'Providers', builtins)}
+          {renderGroup('claude', 'Claude Providers', claudeProviders)}
+          {renderGroup('zcode', 'ZCode Providers', zcodeProviders)}
+          {renderGroup('installed', 'Installed AI apps', apps)}
+          {renderGroup('custom', 'Custom providers', customs)}
         </aside>
 
         <section className="prov-mgr__detail" aria-label={`${selected.name} settings`}>
