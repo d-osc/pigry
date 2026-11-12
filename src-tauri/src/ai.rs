@@ -202,8 +202,10 @@ pub struct ClaudeProviderInfo {
     pub models: Vec<String>,
 }
 
-/// Reads Claude Code's cached account model catalog (~/.claude.json
-/// clientDataCacheSlots) — real model ids the account had access to.
+/// Reads Claude's real model catalog — every versioned claude model id
+/// found in ~/.claude.json (history/caches reference the ids the account
+/// actually uses: claude-opus-4-8, claude-fable-5-1, claude-sonnet-5-5...).
+/// App/internal ids without a version number are excluded.
 fn read_claude_catalog() -> Vec<String> {
     let home = std::env::var("USERPROFILE").unwrap_or_default();
     if home.is_empty() {
@@ -213,18 +215,44 @@ fn read_claude_catalog() -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(path) else {
         return Vec::new();
     };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
-    };
+    const EXCLUDED: &[&str] = &[
+        "claude-code",
+        "claude-desktop",
+        "claude-md-management",
+        "claude-mythos",
+        "claude-code-desktop",
+        "claude-code-setup",
+    ];
+    let bytes = text.as_bytes();
     let mut models: Vec<String> = Vec::new();
-    if let Some(slots) = v.get("clientDataCacheSlots").and_then(|s| s.as_object()) {
-        for slot in slots.values() {
-            if let Some(m) = slot.get("model").and_then(|m| m.as_str()) {
-                let m = m.trim();
-                if !m.is_empty() && !models.iter().any(|x| x == m) {
-                    models.push(m.to_string());
-                }
+    let mut idx = 0usize;
+    while let Some(pos) = text[idx..].find("claude-") {
+        let start = idx + pos;
+        let mut end = start + "claude-".len();
+        while end < bytes.len() {
+            let b = bytes[end] as char;
+            if b.is_ascii_lowercase() || b.is_ascii_digit() || b == '-' {
+                end += 1;
+            } else {
+                break;
             }
+        }
+        let id = text[start..end].trim_end_matches('-').to_string();
+        idx = end;
+        if id.len() <= "claude-".len() || EXCLUDED.contains(&id.as_str()) {
+            continue;
+        }
+        // claude-3.x generation — discontinued, not in the current picker.
+        if id.starts_with("claude-3") {
+            continue;
+        }
+        // versioned model ids contain at least one digit (claude-opus-4-8);
+        // internal names (claude-teams...) don't.
+        if !id.chars().any(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        if !models.iter().any(|x| x == &id) {
+            models.push(id);
         }
     }
     models
@@ -1068,4 +1096,40 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str, model: Option<&str>) ->
         return Err(format!("{cli} failed: {}", stderr.trim()));
     }
     Ok(stdout.trim().to_string())
+}
+
+#[cfg(test)]
+mod claude_scan_tests {
+    use super::*;
+
+    #[test]
+    fn claude_providers_detection_smoke() {
+        let det = cli_detect();
+        println!(
+            "claude_providers = {} entries; models = {:?}",
+            det.claude_providers.len(),
+            det.claude_providers
+                .first()
+                .map(|p| p.models.clone())
+                .unwrap_or_default()
+        );
+        // The anthropic-api catalog entry is unconditional.
+        assert_eq!(det.claude_providers.len(), 1);
+        assert_eq!(det.claude_providers[0].id, "claude-anthropic-api");
+    }
+}
+
+#[cfg(test)]
+mod cli_detect_full_tests {
+    use super::*;
+
+    #[test]
+    fn cli_detect_returns_claude_catalog() {
+        let det = cli_detect();
+        assert!(
+            det.claude_providers.len() >= 1,
+            "claude providers missing from cli_detect"
+        );
+        assert_eq!(det.claude_providers[0].id, "claude-anthropic-api");
+    }
 }
