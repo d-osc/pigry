@@ -29,6 +29,8 @@ export function CherryPickScreen() {
   const [query, setQuery] = useState('');
   /** '' = every branch (full history); otherwise a branch ref to browse. */
   const [branchFilter, setBranchFilter] = useState('');
+  /** How many rows are shown before "Show more" (search shows all matches). */
+  const [visibleCount, setVisibleCount] = useState(MAX_ROWS);
   const [selected, setSelected] = useState<CommitRow | null>(null);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -60,6 +62,10 @@ export function CherryPickScreen() {
       cancelled = true;
     };
   }, [headOid, branchFilter]);
+  // New list source — collapse back to the first page.
+  useEffect(() => {
+    setVisibleCount(MAX_ROWS);
+  }, [branchFilter]);
 
   const selectCommit = async (row: CommitRow) => {
     // Clicking the selected row again collapses its detail.
@@ -243,7 +249,7 @@ export function CherryPickScreen() {
                     row.shortOid.toLowerCase().includes(q) ||
                     row.summary.toLowerCase().includes(q),
                 )
-              : rows.slice(0, MAX_ROWS)
+              : rows.slice(0, visibleCount)
             );
           })().map((row) => {
             const isSelected = selected?.oid === row.oid;
@@ -396,6 +402,15 @@ export function CherryPickScreen() {
                 row.summary.toLowerCase().includes(query.trim().toLowerCase()),
             ).length === 0 && <li className="cherry__empty">No commits match the search.</li>}
         </ul>
+        {!query.trim() && visibleCount < rows.length && (
+          <button
+            type="button"
+            className="cherry__show-more"
+            onClick={() => setVisibleCount((count) => count + MAX_ROWS)}
+          >
+            Show more — {rows.length - visibleCount} older commits
+          </button>
+        )}
       </section>
 
     </div>

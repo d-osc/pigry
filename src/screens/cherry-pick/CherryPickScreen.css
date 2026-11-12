@@ -422,3 +422,41 @@
   color: var(--text-primary);
   font-size: 12px;
 }
+
+/* Show more — reveal older commits */
+.cherry__show-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cherry__show-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Show more — reveal older commits */
+.cherry__show-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cherry__show-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
