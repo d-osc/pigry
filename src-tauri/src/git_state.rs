@@ -1968,6 +1968,83 @@ pub fn delete_branch(repo_path: &Path, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Creates a branch at an arbitrary ref (branch name, `origin/x`, tag or
+/// short oid); optionally checks it out afterwards.
+pub fn create_branch_from(
+    repo_path: &Path,
+    name: &str,
+    from_ref: &str,
+    checkout: bool,
+) -> Result<()> {
+    validate_branch_name(name)?;
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let target = repo
+        .revparse_single(from_ref)
+        .map_err(|_| format!("cannot resolve '{from_ref}' — branch, tag or commit not found"))?
+        .peel_to_commit()
+        .map_err(|_| format!("'{from_ref}' does not point at a commit"))?;
+    if repo.find_branch(name, BranchType::Local).is_ok() {
+        return Err(format!("branch '{name}' already exists"));
+    }
+    repo.branch(name, &target, false).map_err(err)?;
+    if checkout {
+        checkout_branch(repo_path, name)?;
+    }
+    Ok(())
+}
+
+/// Renames a local branch. Refuses the current branch (HEAD would need to
+/// move with it) and the new name colliding with an existing branch.
+pub fn rename_branch(repo_path: &Path, old_name: &str, new_name: &str) -> Result<()> {
+    validate_branch_name(new_name)?;
+    let mut repo = Repository::discover(repo_path).map_err(err)?;
+    let current = current_branch(&repo)?;
+    if current == old_name {
+        return Err("cannot rename the branch you are currently on".to_string());
+    }
+    let mut branch = repo
+        .find_branch(old_name, BranchType::Local)
+        .map_err(|_| format!("branch '{old_name}' not found"))?;
+    if repo.find_branch(new_name, BranchType::Local).is_ok() {
+        return Err(format!("branch '{new_name}' already exists"));
+    }
+    branch.rename(new_name, false).map_err(err)?;
+    Ok(())
+}
+
+/// "Downloads" a cloud branch: creates a local branch from
+/// `refs/remotes/<remote>/<name>` (with upstream tracking) and checks it out.
+/// If a local branch with that name already exists, just checks it out.
+pub fn checkout_remote_branch(repo_path: &Path, remote: &str, name: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let remote_ref = repo
+        .find_reference(&format!("refs/remotes/{remote}/{name}"))
+        .map_err(|_| format!("remote branch '{remote}/{name}' not found — fetch first"))?;
+    if repo.find_branch(name, BranchType::Local).is_ok() {
+        // Already downloaded — switch to the local one.
+        return checkout_branch(repo_path, name);
+    }
+    let commit = remote_ref.peel_to_commit().map_err(err)?;
+    let mut branch = repo.branch(name, &commit, false).map_err(err)?;
+    branch
+        .set_upstream(Some(&format!("{remote}/{name}")))
+        .map_err(err)?;
+    checkout_branch(repo_path, name)
+}
+
+/// Deletes a branch on the remote (cloud) via `git push --delete` so auth
+/// flows through the user's credential helper like every network op.
+pub fn delete_remote_branch(
+    repo_path: &Path,
+    remote: &str,
+    name: &str,
+) -> std::result::Result<crate::net::NetResult, String> {
+    if name.is_empty() {
+        return Err("branch name is empty".to_string());
+    }
+    crate::net::push_delete_remote(&repo_path.to_path_buf(), remote, name)
+}
+
 // ---------------------------------------------------------------------------
 // Tag operations: create / delete
 // ---------------------------------------------------------------------------

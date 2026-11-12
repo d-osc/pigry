@@ -803,9 +803,13 @@ export async function getCommitFileDiff(
   return invoke('get_commit_file_diff', { oid, path });
 }
 
-export async function createBranch(name: string, checkout: boolean): Promise<AppStatePayload> {
+export async function createBranch(
+  name: string,
+  checkout: boolean,
+  fromRef?: string,
+): Promise<AppStatePayload> {
   if (!isTauri()) return demoAppState; // browser preview — pretend it worked
-  return invoke('create_branch', { name, checkout });
+  return invoke('create_branch', { name, checkout, fromRef: fromRef ?? null });
 }
 
 export async function checkoutBranch(name: string): Promise<AppStatePayload> {
@@ -815,6 +819,21 @@ export async function checkoutBranch(name: string): Promise<AppStatePayload> {
 
 export async function deleteBranch(name: string): Promise<AppStatePayload> {
   return invoke('delete_branch', { name });
+}
+
+export async function renameBranch(oldName: string, newName: string): Promise<AppStatePayload> {
+  if (!isTauri()) return demoAppState;
+  return invoke('rename_branch', { oldName, newName });
+}
+
+export async function checkoutRemoteBranch(remote: string, name: string): Promise<AppStatePayload> {
+  if (!isTauri()) return demoAppState;
+  return invoke('checkout_remote_branch', { remote, name });
+}
+
+export async function deleteRemoteBranch(remote: string, name: string): Promise<AppStatePayload> {
+  if (!isTauri()) return demoAppState;
+  return invoke('delete_remote_branch', { remote, name });
 }
 
 export async function createTag(name: string): Promise<AppStatePayload> {

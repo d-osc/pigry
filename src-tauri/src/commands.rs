@@ -1393,12 +1393,64 @@ pub async fn create_branch(
     state: State<'_, Mutex<AppState>>,
     name: String,
     checkout: bool,
+    from_ref: Option<String>,
 ) -> Result<AppStatePayload, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::create_branch(&repo_path, &name, checkout)?;
+    match from_ref.as_deref() {
+        Some(from) => git_state::create_branch_from(&repo_path, &name, from, checkout)?,
+        None => git_state::create_branch(&repo_path, &name, checkout)?,
+    }
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn rename_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    old_name: String,
+    new_name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::rename_branch(&repo_path, &old_name, &new_name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn checkout_remote_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    remote: String,
+    name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::checkout_remote_branch(&repo_path, &remote, &name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn delete_remote_branch(
+    app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    remote: String,
+    name: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::delete_remote_branch(&repo_path, &remote, &name)?;
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }

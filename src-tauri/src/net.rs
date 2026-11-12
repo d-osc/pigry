@@ -97,3 +97,9 @@ pub fn push(repo_path: &PathBuf, branch: &str, has_upstream: bool) -> Result<Net
     let output = run_git_timed(repo_path, &args)?;
     Ok(NetResult { summary: output })
 }
+
+/// Deletes a branch on the remote (`git push <remote> --delete <name>`).
+pub fn push_delete_remote(repo_path: &PathBuf, remote: &str, name: &str) -> Result<NetResult> {
+    let output = run_git_timed(repo_path, &["push", remote, "--delete", name])?;
+    Ok(NetResult { summary: output })
+}

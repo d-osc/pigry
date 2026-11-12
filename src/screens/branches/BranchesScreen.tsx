@@ -1,15 +1,33 @@
 /** Branches screen — every local and remote branch on the left (with
  * local/cloud symbols + search), the selected branch's commits on the right
- * (with commit search, expandable detail and per-file compares). */
+ * (with commit search, expandable detail and per-file compares).
+ * The panes are split-resizable, only the lists scroll (search stays put),
+ * and rows carry branch actions: rename, delete (local/cloud), download a
+ * cloud branch to local, and "create branch from" any commit or branch. */
 import { useEffect, useMemo, useState } from 'react';
+import type React from 'react';
 import { DiffEditor } from '@monaco-editor/react';
-import { Check, Cloud, GitBranch } from 'lucide-react';
+import {
+  Check,
+  Cloud,
+  Download,
+  GitBranch,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
   checkoutBranch,
+  checkoutRemoteBranch,
+  createBranch,
+  deleteBranch,
+  deleteRemoteBranch,
   getBranchCommits,
   getCommitDetail,
   readFileAtCommit,
+  renameBranch,
 } from '../../lib/tauriClient';
 import type {
   CommitDetail,
@@ -32,6 +50,33 @@ interface BranchEntry {
   isHead: boolean;
 }
 
+/** Modal dialog the row actions open: rename / delete / create-from. */
+interface BranchDialog {
+  kind: 'rename' | 'delete' | 'create';
+  entry: BranchEntry | null;
+  /** Create-from source ref (commit oid or branch ref). */
+  fromRef?: string;
+  /** Human label of the create-from source for the dialog title. */
+  fromLabel?: string;
+}
+
+const SPLIT_KEY = 'pigry:branches-split';
+const SPLIT_MIN = 220;
+const SPLIT_MAX = 620;
+
+function loadSplitWidth(): number {
+  try {
+    const raw = localStorage.getItem(SPLIT_KEY);
+    if (raw) {
+      const width = Number(JSON.parse(raw));
+      if (Number.isFinite(width) && width >= SPLIT_MIN && width <= SPLIT_MAX) return width;
+    }
+  } catch {
+    // corrupt cache — default
+  }
+  return 300;
+}
+
 export function BranchesScreen() {
   const { repository, refresh, notify } = useRepository();
   const [branchQuery, setBranchQuery] = useState('');
@@ -51,6 +96,47 @@ export function BranchesScreen() {
   } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [splitView, setSplitView] = useState(true);
+
+  /** Pane splitter width (px) — persisted per install. */
+  const [splitWidth, setSplitWidth] = useState(loadSplitWidth);
+  const [resizing, setResizing] = useState(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPLIT_KEY, JSON.stringify(splitWidth));
+    } catch {
+      // storage full — skip persist
+    }
+  }, [splitWidth]);
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = splitWidth;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    setResizing(true);
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.round(
+        Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, startW + ev.clientX - startX)),
+      );
+      setSplitWidth(w);
+    };
+    const onUp = () => {
+      target.removeEventListener('pointermove', onMove);
+      target.removeEventListener('pointerup', onUp);
+      target.removeEventListener('pointercancel', onUp);
+      setResizing(false);
+    };
+    target.addEventListener('pointermove', onMove);
+    target.addEventListener('pointerup', onUp);
+    target.addEventListener('pointercancel', onUp);
+  };
+
+  /** Row-action dialog (rename / delete / create-from). */
+  const [dialog, setDialog] = useState<BranchDialog | null>(null);
+  const [dialogName, setDialogName] = useState('');
+  const [dialogCheckout, setDialogCheckout] = useState(true);
+  const [dialogBusy, setDialogBusy] = useState(false);
 
   const entries: BranchEntry[] = useMemo(() => {
     const localBranches = repository?.branches ?? [];
@@ -98,25 +184,28 @@ export function BranchesScreen() {
     );
   }, [rows, commitQuery, visibleCount]);
 
-  // New branch selected — collapse back to the first page.
-  useEffect(() => {
-    setVisibleCount(100);
-  }, [selectedRef]);
+  /** Effective selection: HEAD's branch until the user picks one — derived,
+   * so no auto-select effect is needed. */
+  const effectiveRef = useMemo(
+    () =>
+      selectedRef ??
+      entries.find((entry) => entry.isHead)?.ref ??
+      entries[0]?.ref ??
+      null,
+    [selectedRef, entries],
+  );
 
-  // Select HEAD's branch by default once the list loads.
-  useEffect(() => {
-    if (selectedRef === null && entries.length > 0) {
-      const headEntry = entries.find((entry) => entry.isHead) ?? entries[0];
-      setSelectedRef(headEntry.ref);
-    }
-  }, [entries, selectedRef]);
+  const selectBranch = (ref: string) => {
+    setSelectedRef(ref);
+    setVisibleCount(100);
+  };
 
   // Load the selected branch's commits (and reload on repo changes).
   const headOid = repository?.headOid ?? '';
   useEffect(() => {
-    if (!selectedRef) return;
+    if (!effectiveRef) return;
     let cancelled = false;
-    getBranchCommits(selectedRef)
+    getBranchCommits(effectiveRef)
       .then((history) => {
         if (cancelled) return;
         setRows(history.commits);
@@ -135,7 +224,7 @@ export function BranchesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedRef, headOid]);
+  }, [effectiveRef, headOid]);
 
   const selectCommit = async (row: CommitRow) => {
     if (selectedCommit?.oid === row.oid) {
@@ -199,8 +288,94 @@ export function BranchesScreen() {
       });
   };
 
+  /** Downloads a cloud branch: local tracking branch from origin + checkout. */
+  const doDownload = (entry: BranchEntry) => {
+    if (entry.kind !== 'remote' || !entry.remote) return;
+    checkoutRemoteBranch(entry.remote, entry.name)
+      .then(() => {
+        notify(`Downloaded ${entry.remote}/${entry.name} to local`, 'success');
+        refresh();
+      })
+      .catch((error) => {
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      });
+  };
+
+  const openDialog = (next: BranchDialog) => {
+    setDialogName(
+      next.kind === 'rename' && next.entry ? next.entry.name : '',
+    );
+    setDialogCheckout(true);
+    setDialogBusy(false);
+    setDialog(next);
+  };
+
+  const runDialog = () => {
+    if (!dialog || dialogBusy) return;
+    const name = dialogName.trim();
+    if (dialog.kind === 'rename') {
+      if (!dialog.entry || !name || name === dialog.entry.name) return;
+      setDialogBusy(true);
+      renameBranch(dialog.entry.name, name)
+        .then(() => {
+          notify(`Renamed ${dialog.entry!.name} → ${name}`, 'success');
+          setDialog(null);
+          refresh();
+        })
+        .catch((error) => {
+          setDialogBusy(false);
+          notify(error instanceof Error ? error.message : String(error), 'error');
+        });
+      return;
+    }
+    if (dialog.kind === 'delete') {
+      if (!dialog.entry) return;
+      setDialogBusy(true);
+      const done = () => {
+        notify(`Deleted ${dialog.entry!.ref}`, 'success');
+        setDialog(null);
+        refresh();
+      };
+      const fail = (error: unknown) => {
+        setDialogBusy(false);
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      };
+      if (dialog.entry.kind === 'local') {
+        deleteBranch(dialog.entry.name).then(done).catch(fail);
+      } else if (dialog.entry.remote) {
+        deleteRemoteBranch(dialog.entry.remote, dialog.entry.name).then(done).catch(fail);
+      }
+      return;
+    }
+    // create-from
+    if (!name || !dialog.fromRef) return;
+    setDialogBusy(true);
+    createBranch(name, dialogCheckout, dialog.fromRef)
+      .then(() => {
+        notify(`Created ${name}${dialogCheckout ? ' (checked out)' : ''}`, 'success');
+        setDialog(null);
+        refresh();
+      })
+      .catch((error) => {
+        setDialogBusy(false);
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      });
+  };
+
+  const onDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runDialog();
+    } else if (e.key === 'Escape') {
+      setDialog(null);
+    }
+  };
+
   return (
-    <div className="branches-screen">
+    <div
+      className={`branches-screen${resizing ? ' is-resizing' : ''}`}
+      style={{ gridTemplateColumns: `${splitWidth}px 6px minmax(0, 1fr)` }}
+    >
       <aside className="branches__left">
         <h3 className="branches__pane-title">Branches</h3>
         <input
@@ -215,8 +390,8 @@ export function BranchesScreen() {
             <li key={entry.ref} className="branches__item">
               <button
                 type="button"
-                className={`branches__branch${selectedRef === entry.ref ? ' is-selected' : ''}`}
-                onClick={() => setSelectedRef(entry.ref)}
+                className={`branches__branch${effectiveRef === entry.ref ? ' is-selected' : ''}`}
+                onClick={() => selectBranch(entry.ref)}
                 title={entry.ref}
               >
                 {entry.kind === 'local' ? (
@@ -235,16 +410,52 @@ export function BranchesScreen() {
                   </span>
                 )}
               </button>
-              {entry.kind === 'local' && !entry.isHead && (
-                <button
-                  type="button"
-                  className="branches__checkout-btn"
-                  title={`Checkout ${entry.name}`}
-                  onClick={() => doCheckout(entry)}
-                >
-                  Checkout
-                </button>
-              )}
+              <span className="branches__actions">
+                {entry.kind === 'local' && !entry.isHead && (
+                  <button
+                    type="button"
+                    className="branches__checkout-btn"
+                    title={`Checkout ${entry.name}`}
+                    onClick={() => doCheckout(entry)}
+                  >
+                    Checkout
+                  </button>
+                )}
+                {entry.kind === 'remote' && (
+                  <button
+                    type="button"
+                    className="branches__act"
+                    title={`Download ${entry.remote}/${entry.name} to local and checkout`}
+                    onClick={() => doDownload(entry)}
+                  >
+                    <Download size={13} strokeWidth={1.6} />
+                  </button>
+                )}
+                {entry.kind === 'local' && !entry.isHead && (
+                  <button
+                    type="button"
+                    className="branches__act"
+                    title={`Rename ${entry.name}`}
+                    onClick={() => openDialog({ kind: 'rename', entry })}
+                  >
+                    <Pencil size={13} strokeWidth={1.6} />
+                  </button>
+                )}
+                {!entry.isHead && (
+                  <button
+                    type="button"
+                    className="branches__act branches__act--danger"
+                    title={
+                      entry.kind === 'local'
+                        ? `Delete ${entry.name}`
+                        : `Delete ${entry.remote}/${entry.name} on the remote`
+                    }
+                    onClick={() => openDialog({ kind: 'delete', entry })}
+                  >
+                    <Trash2 size={13} strokeWidth={1.6} />
+                  </button>
+                )}
+              </span>
             </li>
           ))}
           {filteredBranches.length === 0 && (
@@ -253,10 +464,36 @@ export function BranchesScreen() {
         </ul>
       </aside>
 
+      <div
+        className="branches__split"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize branches pane"
+        onPointerDown={startResize}
+        onDoubleClick={() => setSplitWidth(300)}
+      />
+
       <section className="branches__right">
         <h3 className="branches__pane-title">
-          Commits — <span className="branches__selected-ref">{selectedRef ?? '…'}</span>
+          Commits — <span className="branches__selected-ref">{effectiveRef ?? '…'}</span>
           {total > 0 && <span className="branches__count">({total})</span>}
+          <button
+            type="button"
+            className="branches__new-branch"
+            title="Create a branch from the selected branch"
+            disabled={!effectiveRef}
+            onClick={() =>
+              openDialog({
+                kind: 'create',
+                entry: null,
+                fromRef: effectiveRef ?? undefined,
+                fromLabel: effectiveRef ?? '',
+              })
+            }
+          >
+            <Plus size={13} strokeWidth={1.8} />
+            New branch
+          </button>
         </h3>
         <input
           type="text"
@@ -274,17 +511,36 @@ export function BranchesScreen() {
             const isSelected = selectedCommit?.oid === row.oid;
             return (
               <li key={row.oid} className="branches__row-item">
-                <button
-                  type="button"
-                  className={`branches__row${isSelected ? ' is-selected' : ''}`}
-                  onClick={() => void selectCommit(row)}
-                >
-                  <span className="branches__row-sha">{row.shortOid}</span>
-                  <span className="branches__row-summary">{row.summary}</span>
-                  <span className="branches__row-meta">
-                    {row.authorName} · {relativeTime(row.timeSeconds)}
+                <div className="branches__row-wrap">
+                  <button
+                    type="button"
+                    className={`branches__row${isSelected ? ' is-selected' : ''}`}
+                    onClick={() => void selectCommit(row)}
+                  >
+                    <span className="branches__row-sha">{row.shortOid}</span>
+                    <span className="branches__row-summary">{row.summary}</span>
+                    <span className="branches__row-meta">
+                      {row.authorName} · {relativeTime(row.timeSeconds)}
+                    </span>
+                  </button>
+                  <span className="branches__actions">
+                    <button
+                      type="button"
+                      className="branches__act"
+                      title={`Create branch from ${row.shortOid}`}
+                      onClick={() =>
+                        openDialog({
+                          kind: 'create',
+                          entry: null,
+                          fromRef: row.oid,
+                          fromLabel: `${row.shortOid} ${row.summary}`.slice(0, 60),
+                        })
+                      }
+                    >
+                      <GitBranch size={13} strokeWidth={1.6} />
+                    </button>
                   </span>
-                </button>
+                </div>
                 {isSelected && (
                   <div className="branches__detail">
                     {loadingDetail && <p className="branches__empty">Loading commit…</p>}
@@ -410,6 +666,121 @@ export function BranchesScreen() {
           )}
         </ul>
       </section>
+
+      {dialog && (
+        <div
+          className="bdlg__backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDialog(null);
+          }}
+        >
+          <div className="bdlg" role="dialog" aria-modal="true" onKeyDown={onDialogKeyDown}>
+            <button
+              type="button"
+              className="bdlg__close"
+              aria-label="Close"
+              onClick={() => setDialog(null)}
+            >
+              <X size={14} strokeWidth={1.6} />
+            </button>
+            {dialog.kind === 'rename' && dialog.entry && (
+              <>
+                <h4 className="bdlg__title">Rename branch</h4>
+                <p className="bdlg__hint">Renaming local branch “{dialog.entry.name}”.</p>
+                <input
+                  autoFocus
+                  type="text"
+                  className="bdlg__input"
+                  value={dialogName}
+                  placeholder="new branch name"
+                  onChange={(e) => setDialogName(e.target.value)}
+                />
+                <div className="bdlg__foot">
+                  <button type="button" className="bdlg__btn" onClick={() => setDialog(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="bdlg__btn bdlg__btn--accent"
+                    disabled={dialogBusy || !dialogName.trim() || dialogName.trim() === dialog.entry.name}
+                    onClick={runDialog}
+                  >
+                    Rename
+                  </button>
+                </div>
+              </>
+            )}
+            {dialog.kind === 'delete' && dialog.entry && (
+              <>
+                <h4 className="bdlg__title">
+                  Delete {dialog.entry.kind === 'local' ? 'branch' : 'cloud branch'}?
+                </h4>
+                {dialog.entry.kind === 'local' ? (
+                  <p className="bdlg__hint">
+                    “{dialog.entry.name}” will be deleted locally. Only merged branches can be
+                    deleted.
+                  </p>
+                ) : (
+                  <p className="bdlg__hint bdlg__hint--danger">
+                    “{dialog.entry.remote}/{dialog.entry.name}” will be deleted on the remote
+                    (cloud) — this cannot be undone locally afterwards.
+                  </p>
+                )}
+                <div className="bdlg__foot">
+                  <button type="button" className="bdlg__btn" onClick={() => setDialog(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="bdlg__btn bdlg__btn--danger"
+                    disabled={dialogBusy}
+                    onClick={runDialog}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </>
+            )}
+            {dialog.kind === 'create' && (
+              <>
+                <h4 className="bdlg__title">Create branch</h4>
+                <p className="bdlg__hint">
+                  From <span className="bdlg__ref">{dialog.fromLabel ?? dialog.fromRef}</span>
+                </p>
+                <input
+                  autoFocus
+                  type="text"
+                  className="bdlg__input"
+                  value={dialogName}
+                  placeholder="branch name"
+                  onChange={(e) => setDialogName(e.target.value)}
+                />
+                <label className="bdlg__check">
+                  <input
+                    type="checkbox"
+                    checked={dialogCheckout}
+                    onChange={(e) => setDialogCheckout(e.target.checked)}
+                  />
+                  Checkout the new branch
+                </label>
+                <div className="bdlg__foot">
+                  <button type="button" className="bdlg__btn" onClick={() => setDialog(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="bdlg__btn bdlg__btn--accent"
+                    disabled={dialogBusy || !dialogName.trim()}
+                    onClick={runDialog}
+                  >
+                    Create
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
