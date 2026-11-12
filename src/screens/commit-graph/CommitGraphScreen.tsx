@@ -41,15 +41,19 @@ export function avatarTone(initials: string) {
 }
 
 /** Columns resizable by dragging their header edge (px width; 0 = default).
- *  The graph column stays fixed; the message column flexes by default and
- *  absorbs whatever space the other columns don't use. */
-type ResizableCol = 'message' | 'author' | 'commit' | 'time';
-const COL_MIN: Record<ResizableCol, number> = { message: 160, author: 96, commit: 60, time: 70 };
+ *  The message column flexes by default and absorbs whatever space the
+ *  other columns don't use. */
+type ResizableCol = 'graph' | 'message' | 'author' | 'commit' | 'time';
+const COL_MIN: Record<ResizableCol, number> = {
+  graph: 96, message: 160, author: 96, commit: 60, time: 70,
+};
 const COL_MAX = 600;
 const GRAPH_COLS_KEY = 'pigry:graph-cols';
 
 function loadColWidths(): Record<ResizableCol, number> {
-  const defaults: Record<ResizableCol, number> = { message: 0, author: 0, commit: 0, time: 0 };
+  const defaults: Record<ResizableCol, number> = {
+    graph: 0, message: 0, author: 0, commit: 0, time: 0,
+  };
   try {
     const raw = localStorage.getItem(GRAPH_COLS_KEY);
     if (raw) return { ...defaults, ...(JSON.parse(raw) as Record<ResizableCol, number>) };
@@ -264,7 +268,7 @@ export function CommitGraphScreen({
   /** Shared grid template for the header and every body row. When the
    *  message column is user-fixed, a filler track absorbs leftover space. */
   const rowTemplate = useMemo(() => {
-    const cols: string[] = ['176px'];
+    const cols: string[] = [colWidths.graph > 0 ? `${colWidths.graph}px` : '176px'];
     cols.push(colWidths.message > 0 ? `${colWidths.message}px` : 'minmax(0, 1fr)');
     if (columns.author) cols.push(colWidths.author > 0 ? `${colWidths.author}px` : '152px');
     if (columns.commit) cols.push(colWidths.commit > 0 ? `${colWidths.commit}px` : '98px');
@@ -572,7 +576,10 @@ export function CommitGraphScreen({
             className="commit-history__head commit-row commit-row--head"
             style={{ gridTemplateColumns: rowTemplate }}
           >
-            <span>Graph</span>
+            <span className="commit-head__cell">
+              Graph
+              {resizeHandle('graph')}
+            </span>
             <span className="commit-head__cell">
               Commit message
               {resizeHandle('message')}

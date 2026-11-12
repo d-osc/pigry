@@ -270,12 +270,14 @@
   bottom: 5px;
   left: 6px;
   width: 1px;
-  background: transparent;
+  /* Faint divider so the drag affordance is discoverable; accent on hover. */
+  background: var(--border);
 }
 
 .commit-col-resize:hover::after,
 .commit-col-resize--active::after {
   background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .commit-history__table--resizing {
