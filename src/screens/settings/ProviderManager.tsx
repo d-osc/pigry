@@ -316,7 +316,14 @@ export function ProviderManager() {
             if (!same) {
               next = next.map((p) =>
                 p.id === existing.id
-                  ? { ...p, model, models: buildModels(), usable, ...(needsLaunch ? { launchKind, launchTarget } : {}) }
+                  ? {
+                      ...p,
+                      model,
+                      models: buildModels(),
+                      usable,
+                      claudeProvider: claudeProvider || p.claudeProvider,
+                      ...(needsLaunch ? { launchKind, launchTarget } : {}),
+                    }
                   : p,
               );
               mutated = true;
@@ -352,7 +359,25 @@ export function ProviderManager() {
         ];
         added.push(name);
       };
-      const detected = await cliDetect();
+      const detected = await cliDetect().catch((error) => {
+        localStorage.setItem(
+          'pigry:scan-debug',
+          JSON.stringify({ at: Date.now(), phase: 'cliDetect-error', error: String(error) }),
+        );
+        throw error;
+      });
+      localStorage.setItem(
+        'pigry:scan-debug',
+        JSON.stringify({
+          at: Date.now(),
+          phase: 'cliDetect-ok',
+          apps: detected.apps?.length ?? -1,
+          zcode: detected.zcodeProviders?.length ?? -1,
+          claude: detected.claudeProviders?.length ?? -1,
+          desktop: detected.desktop?.length ?? -1,
+        }),
+      );
+
       // ZCode's model set comes from its OWN plan subscription report — the
       // modelCode entries the plan actually records (real usage).
       let zcodeModel = '';
