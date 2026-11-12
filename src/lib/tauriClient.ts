@@ -462,6 +462,12 @@ export async function zcodePlanSubscription(apiKey: string): Promise<string> {
   return invoke<string>('zcode_plan_subscription', { apiKey });
 }
 
+/** Aggregates Claude Code's own session-log usage (raw JSON body). */
+export async function claudeUsage(): Promise<string> {
+  if (!isTauri()) throw new Error('Usage scan requires the desktop app');
+  return invoke<string>('claude_usage');
+}
+
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
 export interface CliDetectResult {
   claude: boolean;

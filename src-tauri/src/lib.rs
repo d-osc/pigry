@@ -140,6 +140,7 @@ pub fn run() {
             commands::cli_agent_run,
             commands::cli_detect,
             commands::launch_app,
+            commands::claude_usage,
             commands::zcode_plan_subscription,
             commands::ai_chat,
             commands::search_code,

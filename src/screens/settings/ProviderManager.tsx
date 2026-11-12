@@ -20,7 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { aiChat, cliDetect, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
+import { aiChat, claudeUsage, cliDetect, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
 import { detectZcodeGlm, ZCODE_DEFAULT_MODEL } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
@@ -88,10 +88,10 @@ export function ProviderManager() {
   const planFetchRef = useRef('');
   useEffect(() => {
     if (
-      isZaiFamily &&
+      (isZaiFamily || selected?.type === 'claude-code') &&
       !selected?.planInfo &&
       planFetchRef.current !== selected?.id &&
-      (selected?.apiKey || selected?.type === 'zcode-cli')
+      (selected?.apiKey || selected?.type === 'zcode-cli' || selected?.type === 'claude-code')
     ) {
       planFetchRef.current = selected.id;
       void fetchPlan();
@@ -110,9 +110,13 @@ export function ProviderManager() {
         const zc = await detectZcodeGlm();
         key = zc?.apiKey ?? '';
       }
-      const body = await zcodePlanSubscription(key);
+      const body =
+        selected.type === 'claude-code' ? await claudeUsage() : await zcodePlanSubscription(key);
       patch(selected.id, { planInfo: { fetchedAt: Date.now(), body } });
-      notify('Plan subscription updated', 'success');
+      notify(
+        selected.type === 'claude-code' ? 'Usage scanned from Claude Code logs' : 'Plan subscription updated',
+        'success',
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setPlanError(message);
@@ -642,10 +646,12 @@ export function ProviderManager() {
             </div>
           </label>
 
-          {isZaiFamily && (
+          {(isZaiFamily || selected.type === 'claude-code') && (
             <div className="prov-mgr__plan">
               <div className="prov-mgr__plan-head">
-                <span className="prov-mgr__label">Plan subscription</span>
+                <span className="prov-mgr__label">
+                  {selected.type === 'claude-code' ? 'Usage (from Claude Code logs)' : 'Plan subscription'}
+                </span>
                 <button
                   type="button"
                   className="prov-mgr__ghost-btn"
@@ -654,14 +660,22 @@ export function ProviderManager() {
                   onClick={() => void fetchPlan()}
                 >
                   {planLoading ? <Loader2 size={12} className="prov-mgr__spin" /> : <RefreshCw size={12} strokeWidth={1.5} />}
-                  Refresh
+                  {selected.type === 'claude-code' ? 'Scan usage' : 'Refresh'}
                 </button>
               </div>
               {planError && <p className="prov-mgr__plan-error">{planError}</p>}
               {selected.planInfo ? (
-                <PlanLimitsView body={selected.planInfo.body} fetchedAt={selected.planInfo.fetchedAt} />
+                selected.type === 'claude-code' ? (
+                  <ClaudeUsageView body={selected.planInfo.body} fetchedAt={selected.planInfo.fetchedAt} />
+                ) : (
+                  <PlanLimitsView body={selected.planInfo.body} fetchedAt={selected.planInfo.fetchedAt} />
+                )
               ) : (
-                <p className="prov-mgr__footnote">No plan data fetched yet — hit Refresh.</p>
+                <p className="prov-mgr__footnote">
+                  {selected.type === 'claude-code'
+                    ? 'No usage scanned yet — hit Scan usage.'
+                    : 'No plan data fetched yet — hit Refresh.'}
+                </p>
               )}
             </div>
           )}
@@ -855,6 +869,49 @@ function PlanLimitsView({ body, fetchedAt }: { body: string; fetchedAt: number }
         </div>
       ))}
       <p className="prov-mgr__footnote">Fetched {new Date(fetchedAt).toLocaleString()}</p>
+    </div>
+  );
+}
+
+/** Parsed view of Claude Code's own session-log usage aggregate. */
+interface ClaudeModelUsage {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  requests: number;
+}
+
+function ClaudeUsageView({ body, fetchedAt }: { body: string; fetchedAt: number }) {
+  let report: { sessions?: number; models?: ClaudeModelUsage[] } | null = null;
+  try {
+    report = JSON.parse(body);
+  } catch {
+    // unparsable aggregate
+  }
+  const models = report?.models ?? [];
+  if (models.length === 0) {
+    return <p className="prov-mgr__footnote">No usage records found in Claude Code logs.</p>;
+  }
+  const tokens = (m: ClaudeModelUsage) => m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheCreationTokens;
+  return (
+    <div className="prov-mgr__plan-rows">
+      {models.map((m) => (
+        <div key={m.model} className="prov-mgr__plan-row">
+          <span className="prov-mgr__plan-label">{m.model}</span>
+          <span className="prov-mgr__plan-value">
+            {tokens(m).toLocaleString()} tokens · {m.requests} requests
+          </span>
+          <span className="prov-mgr__plan-models">
+            in {m.inputTokens.toLocaleString()} · out {m.outputTokens.toLocaleString()} · cache read{' '}
+            {m.cacheReadTokens.toLocaleString()} · cache write {m.cacheCreationTokens.toLocaleString()}
+          </span>
+        </div>
+      ))}
+      <p className="prov-mgr__footnote">
+        {report?.sessions ?? 0} sessions · scanned {new Date(fetchedAt).toLocaleString()}
+      </p>
     </div>
   );
 }

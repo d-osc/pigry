@@ -280,6 +280,114 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
 /// provider's own API key (GET on the usage monitor endpoint). The TLS
 /// connection to api.z.ai renegotiates flakily on Windows — retry up to 3
 /// times and pin HTTP/1.1.
+/// Claude Code has no usage API — its own JSONL session logs carry
+/// per-message token usage, which this command aggregates instead.
+pub fn claude_usage() -> Result<String, String> {
+    let home = std::env::var("USERPROFILE").map_err(|_| "USERPROFILE missing".to_string())?;
+    let projects = Path::new(&home).join(".claude").join("projects");
+    if !projects.is_dir() {
+        return Err("no Claude Code usage data (~/.claude/projects not found)".to_string());
+    }
+
+    #[derive(Default)]
+    struct ModelAgg {
+        input: u64,
+        output: u64,
+        cache_read: u64,
+        cache_creation: u64,
+        requests: u64,
+    }
+    let mut per_model: std::collections::BTreeMap<String, ModelAgg> = std::collections::BTreeMap::new();
+    let mut sessions = 0usize;
+    let mut last_day = String::new();
+
+    fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+        if let Ok(rd) = std::fs::read_dir(dir) {
+            for entry in rd.filter_map(|e| e.ok()) {
+                let p = entry.path();
+                if p.is_dir() {
+                    walk(&p, files);
+                } else if p.extension().map(|x| x == "jsonl").unwrap_or(false) {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    let mut jsonl_files: Vec<PathBuf> = Vec::new();
+    walk(&projects, &mut jsonl_files);
+    jsonl_files.sort();
+    sessions = jsonl_files.len();
+
+    use std::io::BufRead;
+    for file in &jsonl_files {
+        if let Ok(reader) = std::fs::File::open(file) {
+            let reader = std::io::BufReader::new(reader);
+            for line in reader.lines().filter_map(|l| l.ok()) {
+                // cheap pre-filter before JSON parsing
+                if !line.contains("\"usage\"") || !line.contains("\"model\"") {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue;
+                };
+                let message = match v.get("message") {
+                    Some(m) => m,
+                    None => continue,
+                };
+                let usage = match message.get("usage") {
+                    Some(u) => u,
+                    None => continue,
+                };
+                let model = message
+                    .get("model")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if model.is_empty() || model == "<synthetic>" {
+                    continue;
+                }
+                let num = |key: &str| usage.get(key).and_then(|n| n.as_u64()).unwrap_or(0);
+                let agg = per_model.entry(model).or_default();
+                agg.input += num("input_tokens");
+                agg.output += num("output_tokens");
+                agg.cache_read += num("cache_read_input_tokens");
+                agg.cache_creation += num("cache_creation_input_tokens");
+                agg.requests += 1;
+                if let Some(ts) = v.get("timestamp").and_then(|t| t.as_str()) {
+                    if ts.len() >= 10 {
+                        last_day = ts[..10].to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    let models: Vec<serde_json::Value> = per_model
+        .into_iter()
+        .map(|(model, a)| {
+            serde_json::json!({
+                "model": model,
+                "inputTokens": a.input,
+                "outputTokens": a.output,
+                "cacheReadTokens": a.cache_read,
+                "cacheCreationTokens": a.cache_creation,
+                "requests": a.requests,
+            })
+        })
+        .collect();
+    let report = serde_json::json!({
+        "kind": "claude-usage",
+        "sessions": sessions,
+        "lastDay": last_day,
+        "models": models,
+    });
+    Ok(serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string()))
+}
+
+/// Fetches the z.ai coding-plan subscription/quota report with the
+/// provider's own API key (GET on the usage monitor endpoint). The TLS
+/// connection to api.z.ai renegotiates flakily on Windows — retry up to 3
+/// times and pin HTTP/1.1.
 pub fn zcode_plan_subscription(api_key: &str) -> Result<String, String> {
     if api_key.trim().is_empty() {
         return Err("no API key available for this provider".to_string());

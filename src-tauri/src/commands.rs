@@ -1274,6 +1274,12 @@ pub async fn zcode_plan_subscription(
 }
 
 #[tauri::command]
+pub async fn claude_usage(
+) -> Result<String, String> {
+    ai::claude_usage()
+}
+
+#[tauri::command]
 pub async fn zcode_credentials(
 ) -> Result<ai::ZcodeCreds, String> {
     ai::zcode_creds()
