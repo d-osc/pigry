@@ -180,6 +180,42 @@ pub struct ChatgptProviderInfo {
     pub models: Vec<String>,
 }
 
+/// Reads the GLM catalog from ~/.codex/models.json (model_catalog_json).
+fn read_codex_models_json() -> Vec<String> {
+    let Some(path) = home_file(".codex/models.json") else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    v.get("models")
+        .and_then(|m| m.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m.get("slug").and_then(|s| s.as_str()).map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Codex's builtin recommended set — the "Default" list its own picker
+/// shows (slugs per Codex's naming convention).
+fn codex_recommended_models() -> Vec<String> {
+    vec![
+        "gpt-6.1-sol".into(),
+        "gpt-6-astra".into(),
+        "gpt-6.1-terra".into(),
+        "gpt-6-sol".into(),
+        "gpt-6-luna".into(),
+        "gpt-5.6-sol".into(),
+        "gpt-5.6-terra".into(),
+        "gpt-5.6-luna".into(),
+    ]
+}
+
 /// Reads every `model = "..."` entry from Codex's config.toml.
 fn read_codex_config_models() -> Vec<String> {
     let Some(path) = home_file(".codex/config.toml") else {
@@ -191,10 +227,13 @@ fn read_codex_config_models() -> Vec<String> {
     let mut models: Vec<String> = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
-        if !trimmed.starts_with("model") || !trimmed.contains('=') {
+        let Some(eq) = trimmed.find('=') else {
+            continue;
+        };
+        if trimmed[..eq].trim() != "model" {
             continue;
         }
-        let value = trimmed[trimmed.find('=').unwrap() + 1..]
+        let value = trimmed[eq + 1..]
             .trim()
             .trim_matches('"')
             .trim_matches('\'')
@@ -209,11 +248,24 @@ fn read_codex_config_models() -> Vec<String> {
 
 /// Providers derived from the ChatGPT/Codex ecosystem's own config.
 fn detect_chatgpt_providers() -> Vec<ChatgptProviderInfo> {
+    // Union: GLM catalog (models.json) + Codex's recommended GPT set,
+    // config default first.
+    let mut models = read_codex_config_models();
+    for m in read_codex_models_json() {
+        if !models.iter().any(|x| x == &m) {
+            models.push(m);
+        }
+    }
+    for m in codex_recommended_models() {
+        if !models.iter().any(|x| x == &m) {
+            models.push(m);
+        }
+    }
     vec![ChatgptProviderInfo {
         id: "chatgpt-openai-api".to_string(),
         name: "OpenAI API".to_string(),
         base_url: "https://api.openai.com/v1".to_string(),
-        models: read_codex_config_models(),
+        models,
     }]
 }
 
