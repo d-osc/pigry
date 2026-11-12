@@ -44,11 +44,16 @@ export function CommitGraphColumn({
   const continuing = row.activeBefore.filter((lane) =>
     row.activeAfter.includes(lane),
   );
+  // ending/starting intentionally include row.lane: a commit whose lane is
+  // brand-new (ref tip above its merge base) has its lane only in
+  // activeAfter, so without it the dot would draw no line downward. The
+  // lane-exclusion is unnecessary for normal commits — their own lane is in
+  // both lists and therefore already covered by `continuing`.
   const ending = row.activeBefore.filter(
-    (lane) => !row.activeAfter.includes(lane) && lane !== row.lane,
+    (lane) => !row.activeAfter.includes(lane),
   );
   const starting = row.activeAfter.filter(
-    (lane) => !row.activeBefore.includes(lane) && lane !== row.lane,
+    (lane) => !row.activeBefore.includes(lane),
   );
 
   const laneTitle = (lane: number) => {
