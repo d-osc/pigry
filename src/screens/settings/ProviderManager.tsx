@@ -537,15 +537,35 @@ export function ProviderManager() {
     p.type === 'claude-code' ||
     p.type === 'claude-desktop' ||
     p.type === 'claude-anthropic-api';
-  const claudeProviders = providers.filter((p) => p.kind !== 'builtin' && isClaudeFamily(p));
+  const isChatgptFamily = (p: AiProviderEntry) =>
+    p.chatgptProvider === true ||
+    p.type === 'codex' ||
+    p.type === 'chatgpt-desktop' ||
+    p.type.startsWith('chatgpt-');
+  const claudeProviders = providers.filter(
+    (p) => p.kind !== 'builtin' && isClaudeFamily(p) && !isChatgptFamily(p),
+  );
   const zcodeProviders = providers.filter(
-    (p) => p.zcodeProvider && !p.claudeProvider && !isClaudeFamily(p),
+    (p) => p.zcodeProvider && !p.claudeProvider && !isChatgptFamily(p) && !isClaudeFamily(p),
+  );
+  const chatgptProviders = providers.filter(
+    (p) => p.kind !== 'builtin' && isChatgptFamily(p) && !isClaudeFamily(p),
   );
   const apps = providers.filter(
-    (p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider && !isClaudeFamily(p),
+    (p) =>
+      p.kind !== 'builtin' &&
+      p.detected &&
+      !p.zcodeProvider &&
+      !isChatgptFamily(p) &&
+      !isClaudeFamily(p),
   );
   const customs = providers.filter(
-    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider && !isClaudeFamily(p),
+    (p) =>
+      p.kind !== 'builtin' &&
+      !p.detected &&
+      !p.zcodeProvider &&
+      !isChatgptFamily(p) &&
+      !isClaudeFamily(p),
   );
 
   const toggleGroup = (key: string) => {
@@ -649,6 +669,7 @@ export function ProviderManager() {
           {renderGroup('providers', 'Providers', builtins)}
           {renderGroup('claude', 'Claude Providers', claudeProviders)}
           {renderGroup('zcode', 'ZCode Providers', zcodeProviders)}
+          {renderGroup('chatgpt', 'ChatGPT Providers', chatgptProviders)}
           {renderGroup('installed', 'Installed AI apps', apps)}
           {renderGroup('custom', 'Custom providers', customs)}
         </aside>

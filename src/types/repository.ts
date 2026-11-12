@@ -149,6 +149,8 @@ export interface AiProviderEntry {
   zcodeProvider?: boolean;
   /** Pulled from Claude's own data (Claude Providers group). */
   claudeProvider?: boolean;
+  /** Pulled from the ChatGPT/Codex ecosystem's config (ChatGPT Providers group). */
+  chatgptProvider?: boolean;
   /** Last-fetched plan subscription report (z.ai coding plan). */
   planInfo?: { fetchedAt: number; body: string };
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */

@@ -171,6 +171,54 @@ pub struct ZcodeProviderTemplate {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatgptProviderInfo {
+    /// Provider id on the frontend.
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    /// Models read from Codex's own config.toml.
+    pub models: Vec<String>,
+}
+
+/// Reads every `model = "..."` entry from Codex's config.toml.
+fn read_codex_config_models() -> Vec<String> {
+    let Some(path) = home_file(".codex/config.toml") else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let mut models: Vec<String> = Vec::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("model") || !trimmed.contains('=') {
+            continue;
+        }
+        let value = trimmed[trimmed.find('=').unwrap() + 1..]
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_string();
+        if !value.is_empty() && !models.iter().any(|x| x == &value) {
+            models.push(value);
+        }
+    }
+    models
+}
+
+/// Providers derived from the ChatGPT/Codex ecosystem's own config.
+fn detect_chatgpt_providers() -> Vec<ChatgptProviderInfo> {
+    vec![ChatgptProviderInfo {
+        id: "chatgpt-openai-api".to_string(),
+        name: "OpenAI API".to_string(),
+        base_url: "https://api.openai.com/v1".to_string(),
+        models: read_codex_config_models(),
+    }]
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CliDetectResult {
     pub claude: bool,
     pub codex: bool,
@@ -189,6 +237,8 @@ pub struct CliDetectResult {
     pub zcode_providers: Vec<ZcodeProviderTemplate>,
     /// Providers derived from Claude's own data (account model catalog).
     pub claude_providers: Vec<ClaudeProviderInfo>,
+    /// Providers derived from the ChatGPT/Codex ecosystem's own config.
+    pub chatgpt_providers: Vec<ChatgptProviderInfo>,
 }
 
 #[derive(Serialize)]
@@ -1022,6 +1072,7 @@ pub fn cli_detect() -> CliDetectResult {
         desktop: detect_desktop_apps(),
         zcode_providers: read_zcode_providers(),
         claude_providers: detect_claude_providers(),
+        chatgpt_providers: detect_chatgpt_providers(),
     }
 }
 

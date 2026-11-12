@@ -323,13 +323,40 @@ function markAppProviders(list: AiProviderEntry[]): AiProviderEntry[] {
   return list;
 }
 
+/** Flags ChatGPT/Codex-family providers so they group under
+ * "ChatGPT Providers" — self-healing like the other marks. */
+function markChatgptProviders(list: AiProviderEntry[]): AiProviderEntry[] {
+  for (const entry of list) {
+    if (entry.kind === 'builtin') continue;
+    if (
+      entry.type === 'codex' ||
+      entry.type === 'chatgpt-desktop' ||
+      entry.type.startsWith('chatgpt-')
+    ) {
+      entry.chatgptProvider = true;
+    }
+  }
+  return list;
+}
+
 /** Flags Claude-family providers (Claude Code / Claude Desktop) so they
  * group under "Claude Providers" — self-healing like the zcode marks. */
 function markClaudeProviders(list: AiProviderEntry[]): AiProviderEntry[] {
   for (const entry of list) {
     if (entry.kind === 'builtin') continue;
-    if (entry.type === 'claude-code' || entry.type === 'claude-desktop') {
+    if (
+      entry.type === 'claude-code' ||
+      entry.type === 'claude-desktop' ||
+      entry.type === 'claude-anthropic-api'
+    ) {
       entry.claudeProvider = true;
+    }
+    if (
+      entry.type === 'codex' ||
+      entry.type === 'chatgpt-desktop' ||
+      entry.type.startsWith('chatgpt-')
+    ) {
+      entry.chatgptProvider = true;
     }
   }
   return list;
@@ -340,9 +367,11 @@ export function loadProviders(): AiProviderEntry[] {
     const raw = localStorage.getItem(LIST_KEY);
     if (raw) {
       const list = JSON.parse(raw) as Array<Partial<AiProviderEntry> & Record<string, unknown>>;
-      return markAppProviders(
-        applyRegistryDefaults(
-          ensureZaiTestProvider(ensureZaiDefaults(dedupeAppProviders(list.map(migrate)))),
+      return markChatgptProviders(
+        markAppProviders(
+          applyRegistryDefaults(
+            ensureZaiTestProvider(ensureZaiDefaults(dedupeAppProviders(list.map(migrate)))),
+          ),
         ),
       );
     }
@@ -357,7 +386,8 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = markClaudeProviders(
+      const list = markChatgptProviders(
+        markClaudeProviders(
         markAppProviders(
           applyRegistryDefaults(
             ensureZaiTestProvider(
@@ -371,6 +401,7 @@ export function loadProviders(): AiProviderEntry[] {
             ),
           ),
         ),
+      ),
       );
       saveProviders(list, activeProviderId());
       return list;
@@ -378,8 +409,12 @@ export function loadProviders(): AiProviderEntry[] {
   } catch {
     // fall through to seed
   }
-  const seeded = markClaudeProviders(
-    markAppProviders(applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults())))),
+  const seeded = markChatgptProviders(
+    markClaudeProviders(
+      markAppProviders(
+        applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults()))),
+      ),
+    ),
   );
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
