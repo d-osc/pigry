@@ -187,6 +187,57 @@ pub struct CliDetectResult {
     pub desktop: Vec<DesktopAppInfo>,
     /// All provider templates shipped in ZCode desktop's own config.
     pub zcode_providers: Vec<ZcodeProviderTemplate>,
+    /// Providers derived from Claude's own data (account model catalog).
+    pub claude_providers: Vec<ClaudeProviderInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeProviderInfo {
+    /// Provider id on the frontend.
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    /// Model ids from Claude's own account cache/config.
+    pub models: Vec<String>,
+}
+
+/// Reads Claude Code's cached account model catalog (~/.claude.json
+/// clientDataCacheSlots) — real model ids the account had access to.
+fn read_claude_catalog() -> Vec<String> {
+    let home = std::env::var("USERPROFILE").unwrap_or_default();
+    if home.is_empty() {
+        return Vec::new();
+    }
+    let path = Path::new(&home).join(".claude.json");
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let mut models: Vec<String> = Vec::new();
+    if let Some(slots) = v.get("clientDataCacheSlots").and_then(|s| s.as_object()) {
+        for slot in slots.values() {
+            if let Some(m) = slot.get("model").and_then(|m| m.as_str()) {
+                let m = m.trim();
+                if !m.is_empty() && !models.iter().any(|x| x == m) {
+                    models.push(m.to_string());
+                }
+            }
+        }
+    }
+    models
+}
+
+/// Providers derived from Claude's own data.
+fn detect_claude_providers() -> Vec<ClaudeProviderInfo> {
+    vec![ClaudeProviderInfo {
+        id: "claude-anthropic-api".to_string(),
+        name: "Anthropic API".to_string(),
+        base_url: "https://api.anthropic.com".to_string(),
+        models: read_claude_catalog(),
+    }]
 }
 
 #[derive(Serialize)]
@@ -942,6 +993,7 @@ pub fn cli_detect() -> CliDetectResult {
         apps,
         desktop: detect_desktop_apps(),
         zcode_providers: read_zcode_providers(),
+        claude_providers: detect_claude_providers(),
     }
 }
 

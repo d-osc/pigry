@@ -274,6 +274,7 @@ export function ProviderManager() {
         launchTarget?: string,
         zcodeProvider = false,
         apiFormatOverride?: 'anthropic' | 'openai',
+        claudeProvider = false,
       ) => {
         // The app's config is the source of truth: a detected provider's
         // model list mirrors exactly what the app's config declares.
@@ -328,6 +329,7 @@ export function ProviderManager() {
             kind: 'custom',
             detected: true,
             zcodeProvider: zcodeProvider || undefined,
+            claudeProvider: claudeProvider || undefined,
             type,
             apiFormat: apiFormatOverride ?? 'openai',
             baseUrl,
@@ -440,6 +442,25 @@ export function ProviderManager() {
           desktopApp.launchTarget,
         );
       }
+      // Claude catalog — Anthropic API provider with the account's own
+      // model catalog (models read from Claude Code's cached data).
+      for (const cp of detected.claudeProviders ?? []) {
+        addDetected(
+          cp.id,
+          cp.name,
+          cp.models,
+          '',
+          cp.baseUrl,
+          '',
+          false,
+          false,
+          undefined,
+          undefined,
+          false,
+          'anthropic',
+          true,
+        );
+      }
       if (added.length > 0 || mutated) {
         // Persist new providers AND re-grouping marks for earlier scans.
         commit(next);
@@ -474,10 +495,13 @@ export function ProviderManager() {
   }
 
   const builtins = providers.filter((p) => p.kind === 'builtin');
-  const zcodeProviders = providers.filter((p) => p.zcodeProvider);
-  const apps = providers.filter((p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider);
+  const claudeProviders = providers.filter((p) => p.claudeProvider);
+  const zcodeProviders = providers.filter((p) => p.zcodeProvider && !p.claudeProvider);
+  const apps = providers.filter(
+    (p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider && !p.claudeProvider,
+  );
   const customs = providers.filter(
-    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider,
+    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider && !p.claudeProvider,
   );
 
   const renderRow = (entry: AiProviderEntry) => {
@@ -546,6 +570,12 @@ export function ProviderManager() {
         <aside className="prov-mgr__rail" aria-label="Provider list">
           <span className="prov-mgr__group">Providers</span>
           {builtins.map(renderRow)}
+          {claudeProviders.length > 0 && (
+            <>
+              <span className="prov-mgr__group">Claude Providers</span>
+              {claudeProviders.map(renderRow)}
+            </>
+          )}
           {zcodeProviders.length > 0 && (
             <>
               <span className="prov-mgr__group">ZCode Providers</span>

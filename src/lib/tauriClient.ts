@@ -452,6 +452,14 @@ export interface DesktopAppInfo {
   launchTarget: string;
 }
 
+/** One provider derived from Claude's own data (account model catalog). */
+export interface ClaudeProviderInfo {
+  id: string;
+  name: string;
+  baseUrl: string;
+  models: string[];
+}
+
 /** One provider template from ZCode desktop's own config. */
 export interface ZcodeProviderTemplate {
   templateId: string;
@@ -495,6 +503,8 @@ export interface CliDetectResult {
   apps: CliAppInfo[];
   /** Detected desktop AI apps. */
   desktop: DesktopAppInfo[];
+  /** Providers derived from Claude's own data. */
+  claudeProviders: ClaudeProviderInfo[];
   /** Provider templates shipped in ZCode desktop's own config. */
   zcodeProviders: ZcodeProviderTemplate[];
 }
@@ -511,11 +521,13 @@ const NO_CLI_DETECT: CliDetectResult = {
   apps: [],
   desktop: [],
   zcodeProviders: [],
+  claudeProviders: [],
 };
 
 /** Detect installed CLI coding agents + desktop AI apps. */
 export async function cliDetect(): Promise<CliDetectResult> {
-  if (!isTauri()) return { ...NO_CLI_DETECT, apps: [], desktop: [], zcodeProviders: [] };
+  if (!isTauri())
+    return { ...NO_CLI_DETECT, apps: [], desktop: [], zcodeProviders: [], claudeProviders: [] };
   const result = (await invoke('cli_detect')) as CliDetectResult;
   return {
     ...NO_CLI_DETECT,
@@ -528,6 +540,10 @@ export async function cliDetect(): Promise<CliDetectResult> {
     })),
     desktop: result.desktop ?? [],
     zcodeProviders: result.zcodeProviders ?? [],
+    claudeProviders: (result.claudeProviders ?? []).map((p) => ({
+      ...p,
+      models: p.models ?? [],
+    })),
   };
 }
 

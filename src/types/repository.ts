@@ -147,6 +147,8 @@ export interface AiProviderEntry {
   launchTarget?: string;
   /** Pulled from ZCode desktop's own provider catalog (ZCode Providers group). */
   zcodeProvider?: boolean;
+  /** Pulled from Claude's own data (Claude Providers group). */
+  claudeProvider?: boolean;
   /** Last-fetched plan subscription report (z.ai coding plan). */
   planInfo?: { fetchedAt: number; body: string };
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */

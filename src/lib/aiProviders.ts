@@ -323,6 +323,18 @@ function markAppProviders(list: AiProviderEntry[]): AiProviderEntry[] {
   return list;
 }
 
+/** Flags Claude-family providers (Claude Code / Claude Desktop) so they
+ * group under "Claude Providers" — self-healing like the zcode marks. */
+function markClaudeProviders(list: AiProviderEntry[]): AiProviderEntry[] {
+  for (const entry of list) {
+    if (entry.kind === 'builtin') continue;
+    if (entry.type === 'claude-code' || entry.type === 'claude-desktop') {
+      entry.claudeProvider = true;
+    }
+  }
+  return list;
+}
+
 export function loadProviders(): AiProviderEntry[] {
   try {
     const raw = localStorage.getItem(LIST_KEY);
@@ -345,15 +357,17 @@ export function loadProviders(): AiProviderEntry[] {
         baseUrl: cfg.baseUrl,
         apiKey: cfg.apiKey,
       });
-      const list = markAppProviders(
-        applyRegistryDefaults(
-          ensureZaiTestProvider(
-            ensureZaiDefaults(
-              dedupeAppProviders([
-                makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-                makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
-                entry,
-              ]),
+      const list = markClaudeProviders(
+        markAppProviders(
+          applyRegistryDefaults(
+            ensureZaiTestProvider(
+              ensureZaiDefaults(
+                dedupeAppProviders([
+                  makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
+                  makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
+                  entry,
+                ]),
+              ),
             ),
           ),
         ),
@@ -364,8 +378,8 @@ export function loadProviders(): AiProviderEntry[] {
   } catch {
     // fall through to seed
   }
-  const seeded = markAppProviders(
-    applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults()))),
+  const seeded = markClaudeProviders(
+    markAppProviders(applyRegistryDefaults(ensureZaiTestProvider(ensureZaiDefaults(seedDefaults())))),
   );
   saveProviders(seeded, 'qwen-cloud');
   return seeded;
