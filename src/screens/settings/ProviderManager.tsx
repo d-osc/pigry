@@ -530,13 +530,22 @@ export function ProviderManager() {
   }
 
   const builtins = providers.filter((p) => p.kind === 'builtin');
-  const claudeProviders = providers.filter((p) => p.claudeProvider);
-  const zcodeProviders = providers.filter((p) => p.zcodeProvider && !p.claudeProvider);
+  // Claude family = flagged OR known claude provider types (flag-independent,
+  // so entries created before the flag existed still group correctly).
+  const isClaudeFamily = (p: AiProviderEntry) =>
+    p.claudeProvider === true ||
+    p.type === 'claude-code' ||
+    p.type === 'claude-desktop' ||
+    p.type === 'claude-anthropic-api';
+  const claudeProviders = providers.filter((p) => p.kind !== 'builtin' && isClaudeFamily(p));
+  const zcodeProviders = providers.filter(
+    (p) => p.zcodeProvider && !p.claudeProvider && !isClaudeFamily(p),
+  );
   const apps = providers.filter(
-    (p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider && !p.claudeProvider,
+    (p) => p.kind !== 'builtin' && p.detected && !p.zcodeProvider && !isClaudeFamily(p),
   );
   const customs = providers.filter(
-    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider && !p.claudeProvider,
+    (p) => p.kind !== 'builtin' && !p.detected && !p.zcodeProvider && !isClaudeFamily(p),
   );
 
   const toggleGroup = (key: string) => {
