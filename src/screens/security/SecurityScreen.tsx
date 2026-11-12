@@ -651,29 +651,53 @@ export function SecurityScreen() {
 
   if (allError) {
     const firstError = code.error || deps.error || secrets.error;
+    // Private repos without GitHub Advanced Security can never serve this
+    // data (HTTP 403) — no token scope or retry fixes it.
+    const needsAdvancedSecurity = /Advanced Security must be enabled/i.test(firstError);
     return (
       <div className="screen security-screen">
         <header className="screen-header">
           <h1 className="screen-header__title">Security and quality</h1>
         </header>
         <StatePanel
-          tone="error"
-          icon={<TriangleAlert size={26} strokeWidth={1.25} />}
-          title="Couldn't load security data"
+          tone={needsAdvancedSecurity ? 'empty' : 'error'}
+          icon={
+            needsAdvancedSecurity ? (
+              <ShieldCheck size={26} strokeWidth={1.25} />
+            ) : (
+              <TriangleAlert size={26} strokeWidth={1.25} />
+            )
+          }
+          title={
+            needsAdvancedSecurity
+              ? 'Code scanning unavailable for this repository'
+              : "Couldn't load security data"
+          }
           description={
-            <p>
-              The gh CLI failed for every security source. Check that gh is signed in and the
-              repository is hosted on GitHub. Code scanning, Dependabot and secret scanning must
-              also be enabled on the repository.
-            </p>
+            needsAdvancedSecurity ? (
+              <p>
+                This repository is private and doesn't have GitHub Advanced Security, so code
+                scanning, Dependabot and secret scanning alerts aren't available. Code scanning is
+                free for public repositories — enable it under the repo's Settings → Code
+                security, or keep this screen as reference.
+              </p>
+            ) : (
+              <p>
+                The gh CLI failed for every security source. Check that gh is signed in and the
+                repository is hosted on GitHub. Code scanning, Dependabot and secret scanning must
+                also be enabled on the repository.
+              </p>
+            )
           }
-          errorText={firstError}
+          errorText={needsAdvancedSecurity ? undefined : firstError}
           hints={
-            /scope|security_events|403|404/i.test(firstError)
-              ? ['gh auth refresh -s security_events']
-              : undefined
+            needsAdvancedSecurity
+              ? ['Code scanning is free for public repos — repo Settings → Code security']
+              : /scope|security_events|403|404/i.test(firstError)
+                ? ['gh auth refresh -s security_events']
+                : undefined
           }
-          onRetry={retryLoad}
+          onRetry={needsAdvancedSecurity ? () => {} : retryLoad}
         />
       </div>
     );
