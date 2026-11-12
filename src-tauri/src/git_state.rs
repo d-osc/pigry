@@ -843,6 +843,8 @@ pub struct CommitRow {
     pub short_oid: String,
     pub summary: String,
     pub author_name: String,
+    /// Author email — matches GitHub avatar lookups on the graph screen.
+    pub author_email: String,
     pub author_initials: String,
     pub time_seconds: i64,
     /// Lane index this commit sits on.
@@ -1025,6 +1027,7 @@ pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHi
                 .unwrap_or_default(),
             summary: commit.summary().unwrap_or_default().to_string(),
             author_name: commit.author().name().unwrap_or_default().to_string(),
+            author_email: commit.author().email().unwrap_or_default().to_string(),
             author_initials: initials_for(&commit.author().name().unwrap_or("")),
             time_seconds: commit.time().seconds(),
             lane: 0,
@@ -1159,6 +1162,7 @@ pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<C
             short_oid: oid.to_string()[..7].to_string(),
             summary,
             author_name,
+            author_email: author.email().unwrap_or_default().to_string(),
             author_initials: initials_for(&commit.author().name().unwrap_or("")),
             time_seconds: commit.time().seconds() as i64,
             lane: lane as u32,
