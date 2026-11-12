@@ -246,11 +246,34 @@ fn read_codex_config_models() -> Vec<String> {
     models
 }
 
+/// Reads the model catalog Codex caches from the server
+/// (~/.codex/models_cache.json) — picker-visible models only.
+fn read_codex_cache_models() -> Vec<String> {
+    let Some(path) = home_file(".codex/models_cache.json") else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    v.get("models")
+        .and_then(|m| m.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|m| m.get("visibility").and_then(|x| x.as_str()) == Some("list"))
+                .filter_map(|m| m.get("slug").and_then(|s| s.as_str()).map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Providers derived from the ChatGPT/Codex ecosystem's own config.
 fn detect_chatgpt_providers() -> Vec<ChatgptProviderInfo> {
-    // Union: GLM catalog (models.json) + Codex's recommended GPT set,
-    // config default first.
-    let mut models = read_codex_config_models();
+    // Union: the server-cached picker catalog + GLM catalog (models.json)
+    // + Codex's recommended GPT set, config default first.
+    let mut models = read_codex_cache_models();
     for m in read_codex_models_json() {
         if !models.iter().any(|x| x == &m) {
             models.push(m);
@@ -259,6 +282,12 @@ fn detect_chatgpt_providers() -> Vec<ChatgptProviderInfo> {
     for m in codex_recommended_models() {
         if !models.iter().any(|x| x == &m) {
             models.push(m);
+        }
+    }
+    let default = read_codex_config_models();
+    if let Some(first) = default.first() {
+        if !models.iter().any(|x| x == first) {
+            models.insert(0, first.clone());
         }
     }
     vec![ChatgptProviderInfo {
