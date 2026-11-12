@@ -456,6 +456,12 @@ export async function launchApp(kind: string, target: string): Promise<string> {
   return invoke<string>('launch_app', { kind, target });
 }
 
+/** Fetches the z.ai coding-plan subscription/quota report (raw JSON body). */
+export async function zcodePlanSubscription(apiKey: string): Promise<string> {
+  if (!isTauri()) throw new Error('Plan subscription requires the desktop app');
+  return invoke<string>('zcode_plan_subscription', { apiKey });
+}
+
 /** Proxies an OpenAI-compatible chat completion through the Rust/curl bridge. */
 export interface CliDetectResult {
   claude: boolean;

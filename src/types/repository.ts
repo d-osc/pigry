@@ -145,6 +145,8 @@ export interface AiProviderEntry {
    * in a fresh console; "exe" starts it directly; "msix" via Start). */
   launchKind?: string;
   launchTarget?: string;
+  /** Last-fetched plan subscription report (z.ai coding plan). */
+  planInfo?: { fetchedAt: number; body: string };
   /** Legacy discriminator ('zcode' | 'openai' | 'claude-code' | …). */
   type: string;
   apiFormat: AiApiFormat;

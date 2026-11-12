@@ -20,7 +20,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { aiChat, cliDetect, launchApp } from '../../lib/tauriClient';
+import { aiChat, cliDetect, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
 import { detectZcodeGlm, ZCODE_DEFAULT_MODEL } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
@@ -62,6 +62,9 @@ export function ProviderManager() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [keyVisible, setKeyVisible] = useState(false);
   const [nameEditing, setNameEditing] = useState(false);
+  /** Plan-subscription fetch state for the selected z.ai-family provider. */
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState('');
   /** 'new' = add dialog; an AiModelEntry = edit dialog prefilled with it. */
   const [modelDialog, setModelDialog] = useState<AiModelEntry | 'new' | null>(null);
   const [tests, setTests] = useState<Record<string, ModelTestState>>({});
@@ -77,6 +80,47 @@ export function ProviderManager() {
     () => providers.find((p) => p.id === selectedId) ?? null,
     [providers, selectedId],
   );
+
+  /** z.ai coding-plan family — these expose the plan subscription API. */
+  const isZaiFamily = selected?.type === 'zcode' || selected?.type === 'zcode-cli';
+
+  // Auto-fetch once when a z.ai-family provider without plan data is selected.
+  const planFetchRef = useRef('');
+  useEffect(() => {
+    if (
+      isZaiFamily &&
+      !selected?.planInfo &&
+      planFetchRef.current !== selected?.id &&
+      (selected?.apiKey || selected?.type === 'zcode-cli')
+    ) {
+      planFetchRef.current = selected.id;
+      void fetchPlan();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
+  const fetchPlan = async () => {
+    if (!selected || planLoading) return;
+    setPlanLoading(true);
+    setPlanError('');
+    try {
+      let key = selected.apiKey;
+      if (!key && selected.type === 'zcode-cli') {
+        // The zcode CLI shares the desktop credential store's key.
+        const zc = await detectZcodeGlm();
+        key = zc?.apiKey ?? '';
+      }
+      const body = await zcodePlanSubscription(key);
+      patch(selected.id, { planInfo: { fetchedAt: Date.now(), body } });
+      notify('Plan subscription updated', 'success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setPlanError(message);
+      notify('Plan fetch failed', 'error');
+    } finally {
+      setPlanLoading(false);
+    }
+  };
 
   const commit = (next: AiProviderEntry[]) => {
     setStore({ list: next, selectedId });
@@ -598,6 +642,30 @@ export function ProviderManager() {
             </div>
           </label>
 
+          {isZaiFamily && (
+            <div className="prov-mgr__plan">
+              <div className="prov-mgr__plan-head">
+                <span className="prov-mgr__label">Plan subscription</span>
+                <button
+                  type="button"
+                  className="prov-mgr__ghost-btn"
+                  disabled={planLoading}
+                  title="Fetch the coding-plan subscription/quota report"
+                  onClick={() => void fetchPlan()}
+                >
+                  {planLoading ? <Loader2 size={12} className="prov-mgr__spin" /> : <RefreshCw size={12} strokeWidth={1.5} />}
+                  Refresh
+                </button>
+              </div>
+              {planError && <p className="prov-mgr__plan-error">{planError}</p>}
+              {selected.planInfo ? (
+                <PlanLimitsView body={selected.planInfo.body} fetchedAt={selected.planInfo.fetchedAt} />
+              ) : (
+                <p className="prov-mgr__footnote">No plan data fetched yet — hit Refresh.</p>
+              )}
+            </div>
+          )}
+
           {selected.type === 'zcode' && (
             <div className="prov-mgr__hint-row">
               <button type="button" className="prov-mgr__ghost-btn" onClick={() => void detectZcode()}>
@@ -730,6 +798,63 @@ export function ProviderManager() {
           onSave={saveModelDialog}
         />
       )}
+    </div>
+  );
+}
+
+/** Parsed view of the z.ai coding-plan quota report. */
+interface PlanLimit {
+  type?: string;
+  unit?: number;
+  number?: number;
+  currentValue?: number;
+  remaining?: number;
+  percentage?: number;
+  nextResetTime?: number;
+  usageDetails?: Array<{ modelCode?: string; usage?: number }>;
+}
+
+function parsePlanLimits(body: string): PlanLimit[] {
+  try {
+    return (JSON.parse(body)?.data?.limits ?? []) as PlanLimit[];
+  } catch {
+    return [];
+  }
+}
+
+function planLimitLabel(limit: PlanLimit): string {
+  if (limit.type === 'TIME_LIMIT') return '5-hour session quota';
+  if (limit.type === 'TOKENS_LIMIT') return 'Monthly token quota';
+  return limit.type ?? 'Quota';
+}
+
+function PlanLimitsView({ body, fetchedAt }: { body: string; fetchedAt: number }) {
+  const limits = parsePlanLimits(body);
+  if (limits.length === 0) {
+    return <p className="prov-mgr__footnote">No quota limits in the report.</p>;
+  }
+  return (
+    <div className="prov-mgr__plan-rows">
+      {limits.map((limit, index) => (
+        <div key={index} className="prov-mgr__plan-row">
+          <span className="prov-mgr__plan-label">{planLimitLabel(limit)}</span>
+          <span className="prov-mgr__plan-value">
+            {typeof limit.percentage === 'number' ? `${limit.percentage}% used` : ''}
+            {typeof limit.remaining === 'number' ? ` · ${limit.remaining} left` : ''}
+          </span>
+          {limit.nextResetTime ? (
+            <span className="prov-mgr__plan-reset">
+              resets {new Date(limit.nextResetTime).toLocaleString()}
+            </span>
+          ) : null}
+          {limit.usageDetails && limit.usageDetails.length > 0 && (
+            <span className="prov-mgr__plan-models">
+              {limit.usageDetails.map((u) => `${u.modelCode}: ${u.usage}`).join(' · ')}
+            </span>
+          )}
+        </div>
+      ))}
+      <p className="prov-mgr__footnote">Fetched {new Date(fetchedAt).toLocaleString()}</p>
     </div>
   );
 }

@@ -119,6 +119,13 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
     if (typeof raw.launchTarget === 'string' && raw.launchTarget) {
       entry.launchTarget = raw.launchTarget;
     }
+    if (
+      raw.planInfo &&
+      typeof (raw.planInfo as Record<string, unknown>).fetchedAt === 'number' &&
+      typeof (raw.planInfo as Record<string, unknown>).body === 'string'
+    ) {
+      entry.planInfo = raw.planInfo as AiProviderEntry['planInfo'];
+    }
   const rawModels = Array.isArray(raw.models) ? raw.models : [];
   entry.models = rawModels
     .map((m) => {

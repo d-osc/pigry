@@ -816,3 +816,60 @@ select.prov-mgr__control {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Plan subscription section (z.ai coding plan) */
+.prov-mgr__plan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+
+.prov-mgr__plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.prov-mgr__plan-error {
+  margin: 0;
+  font-size: var(--fs-2xs);
+  color: var(--red);
+}
+
+.prov-mgr__plan-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.prov-mgr__plan-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+}
+
+.prov-mgr__plan-label {
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+}
+
+.prov-mgr__plan-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--accent);
+}
+
+.prov-mgr__plan-reset,
+.prov-mgr__plan-models {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}

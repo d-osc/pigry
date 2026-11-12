@@ -1267,6 +1267,13 @@ pub async fn launch_app(
 }
 
 #[tauri::command]
+pub async fn zcode_plan_subscription(
+    api_key: String,
+) -> Result<String, String> {
+    ai::zcode_plan_subscription(&api_key)
+}
+
+#[tauri::command]
 pub async fn zcode_credentials(
 ) -> Result<ai::ZcodeCreds, String> {
     ai::zcode_creds()

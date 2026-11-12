@@ -107,14 +107,15 @@ pub fn zcode_creds() -> Result<ZcodeCreds, String> {
     let home = std::env::var("USERPROFILE").map_err(|_| "USERPROFILE missing".to_string())?;
     let sep = std::path::MAIN_SEPARATOR;
     let path = format!(
-        "{}{}zcode{}v2{}credentials.json",
+        "{}{}.zcode{}v2{}credentials.json",
         home.trim_end_matches(sep),
         sep,
         sep,
         sep
     );
-    let text = std::fs::read_to_string(&path)
-        .map_err(|_| "credentials.json not found (ZCode not installed?)".to_string())?;
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        format!("credentials.json not found at {path} ({e})")
+    })?;
     let map: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let map = map.as_object().ok_or("credentials.json: not an object")?;
 
@@ -273,6 +274,51 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
         }
         other => Err(format!("unknown launch kind: {other}")),
     }
+}
+
+/// Fetches the z.ai coding-plan subscription/quota report with the
+/// provider's own API key (GET on the usage monitor endpoint). The TLS
+/// connection to api.z.ai renegotiates flakily on Windows — retry up to 3
+/// times and pin HTTP/1.1.
+pub fn zcode_plan_subscription(api_key: &str) -> Result<String, String> {
+    if api_key.trim().is_empty() {
+        return Err("no API key available for this provider".to_string());
+    }
+    let mut last_err = String::new();
+    for attempt in 0..3 {
+        let mut cmd = Command::new("curl");
+        cmd.args([
+            "-s",
+            "--http1.1",
+            "--max-time",
+            "30",
+            "-H",
+            &format!("Authorization: Bearer {api_key}"),
+            "-H",
+            "Accept: application/json",
+            "https://api.z.ai/api/monitor/usage/quota/limit",
+        ]);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let body = match cmd
+            .spawn()
+            .map_err(|e| format!("curl not available: {e}"))?
+            .wait_with_output()
+            .map_err(|e| format!("plan request failed: {e}"))
+        {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).to_string(),
+            Err(e) => {
+                last_err = e;
+                continue;
+            }
+        };
+        if !body.trim().is_empty() {
+            return Ok(body);
+        }
+        last_err = format!("empty response (attempt {} of 3)", attempt + 1);
+        std::thread::sleep(std::time::Duration::from_millis(700));
+    }
+    Err(format!("empty response from the z.ai plan API — {last_err}"))
 }
 
 /// Detects installed desktop AI apps by their well-known data directories.
