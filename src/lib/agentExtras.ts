@@ -88,7 +88,6 @@ export const AGENT_TEAMS = [
   'Security and quality',
   'Insights',
   'Browser',
-  'Container',
 ] as const;
 
 /** Workspace screen id -> the team agents created there belong to. */
@@ -97,6 +96,7 @@ const SCREEN_TEAM: Record<string, string> = {
   'commit-graph': 'Commit graph',
   'working-changes': 'Working changes',
   'merge-branch': 'Merge branch',
+  'rebase-branch': 'Rebase Branch',
   'push-commits': 'Push Commits',
   stashes: 'Stashes Code',
   'cherry-pick': 'Cherry Pick',
@@ -341,7 +341,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     description: 'Helps browse files, edit code and understand the workspace.',
     tier: 'default',
     emoji: '🔍',
-    tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'browser', 'agent_lookup', 'agent_contacts'],
+    tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
     skills: ['file-navigation'],
   },
   {
@@ -352,7 +352,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     description: 'Reads the commit graph and explains history and relationships.',
     tier: 'default',
     emoji: '📈',
-    tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'web_search', 'playwright', 'browser', 'agent_lookup', 'agent_contacts'],
+    tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
     skills: ['history-analysis', 'bug-triage'],
   },
   {
@@ -439,7 +439,7 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     description: 'Drafts and reviews pull requests.',
     tier: 'default',
     emoji: '🔀',
-    tools: ['github_pull_requests', 'github_issues', 'read_diff', 'read_file', 'list_files', 'web_search', 'browser', 'read_image', 'agent_lookup', 'agent_contacts'],
+    tools: ['github_pull_requests', 'github_issues', 'read_diff', 'read_file', 'list_files', 'web_search', 'read_image', 'agent_lookup', 'agent_contacts'],
     skills: ['pr-writing', 'code-review'],
   },
   {
@@ -518,6 +518,17 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     emoji: '📊',
     tools: ['read_history', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
     skills: ['repo-insights'],
+  },
+  {
+    username: 'browser',
+    name: 'Browser',
+    team: 'Browser',
+    role: 'Web assistant',
+    description: 'Assists around the page open in the floating browser — lookups, page summaries and quick web research.',
+    tier: 'default',
+    emoji: '🌐',
+    tools: ['browser_panel', 'browser_e2e', 'browser_screenshot', 'browser_pdf', 'browser_network_requests', 'web_search', 'agent_lookup', 'agent_contacts'],
+    skills: ['web-research', 'docs-writing'],
   },
   {
     username: 'code-reviewer',
@@ -642,6 +653,7 @@ function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
 /** Tier 1 + 2 agents, computed fresh — never stored in agents.json. User
  * edits live in a separate override store, keyed by username. */
 export function builtinAgents(): AgentEntry[] {
+  purgeStaleOverridesIfNeeded();
   const overrides = loadAgentOverrides();
   return DEFAULT_AGENT_SPECS.map((spec) => {
     const base = builtinFromSpec(spec);
@@ -654,6 +666,22 @@ export function builtinAgents(): AgentEntry[] {
 /* ---- Built-in agent overrides — user edits, resettable to factory ---- */
 
 const OVERRIDES_KEY = 'pigry:agent-overrides';
+
+/** Bump when DEFAULT_AGENT_SPECS change in a way a stale override would
+ * break (e.g. a tool id was removed from the registry) — overrides saved
+ * under an older factory are dropped once, on first load. */
+const FACTORY_VERSION = 3;
+const FACTORY_KEY = 'pigry:agent-factory-version';
+
+function purgeStaleOverridesIfNeeded(): void {
+  try {
+    if (localStorage.getItem(FACTORY_KEY) === String(FACTORY_VERSION)) return;
+    localStorage.removeItem(OVERRIDES_KEY);
+    localStorage.setItem(FACTORY_KEY, String(FACTORY_VERSION));
+  } catch {
+    // storage unavailable — nothing to purge
+  }
+}
 
 /** Fields a user may customize on a built-in agent (identity/tier locked). */
 const OVERRIDE_FIELDS = [

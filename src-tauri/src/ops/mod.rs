@@ -568,7 +568,7 @@ pub fn interactive_rebase(repo_path: &Path, base: &str, steps: &[RebaseStep]) ->
     // shared todo path would race (one test feeding another its plan).
     static TODO_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let todo_path = std::env::temp_dir().join(format!(
-        "orbit-rebase-todo-{}-{}.txt",
+        "pigry-rebase-todo-{}-{}.txt",
         std::process::id(),
         TODO_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
     ));

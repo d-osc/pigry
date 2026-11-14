@@ -1,7 +1,7 @@
 /** Merge Branch screen — merge a branch INTO the checked-out branch with
  * strategy choice, conflict handling (file list + abort) and a result log. */
 import { useEffect, useRef, useState } from 'react';
-import { DiffEditor, Editor } from '@monaco-editor/react';
+import { Editor } from '@monaco-editor/react';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
@@ -17,6 +17,8 @@ import {
 import { ConflictController } from '../../editor/conflictMarkers';
 import { relativeTime } from '../../lib/relativeTime';
 import { languageForPath } from '../../lib/ghData';
+import { shareCommitWithChat } from '../../lib/chatBridge';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import '../../editor/monacoSetup';
 import './MergeBranchScreen.css';
 
@@ -301,7 +303,10 @@ export function MergeBranchScreen() {
                       type="button"
                       className={`merge-branch__commit-row${open ? ' is-open' : ''}`}
                       title="Show commit detail"
-                      onClick={() => setExpandedCommit(open ? null : commit.oid)}
+                      onClick={() => {
+                        setExpandedCommit(open ? null : commit.oid);
+                        if (!open) shareCommitWithChat({ oid: commit.oid, summary: commit.summary });
+                      }}
                     >
                       <span className="merge-branch__commit-sha">{commit.shortOid}</span>
                       <span className="merge-branch__commit-summary">{commit.summary}</span>
@@ -373,12 +378,13 @@ export function MergeBranchScreen() {
                                             </button>
                                           </div>
                                         </div>
-                                        <DiffEditor
+                                        <ChatAwareDiffEditor
+                                          chatMeta={{ path: entry.path, source: 'Merge branch' }}
                                           key={compareKey}
                                           original={commitCompare?.before ?? ''}
                                           modified={commitCompare?.after ?? ''}
                                           language={commitCompare?.language ?? 'plaintext'}
-                                          theme="orbit-dark"
+                                          theme="pigry-dark"
                                           options={{
                                             readOnly: true,
                                             renderSideBySide: splitView,
@@ -475,12 +481,13 @@ export function MergeBranchScreen() {
                               </button>
                             </div>
                           </div>
-                          <DiffEditor
+                          <ChatAwareDiffEditor
+                            chatMeta={{ path: file.path, source: 'Merge branch' }}
                             key={`${file.path}:${effectiveSource}`}
                             original={versions?.ours ?? ''}
                             modified={versions?.incoming ?? ''}
                             language={languageForPath(file.path)}
-                            theme="orbit-dark"
+                            theme="pigry-dark"
                             options={{
                               readOnly: true,
                               renderSideBySide: splitView,
@@ -740,7 +747,7 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
           key={path}
           value={value}
           language="plaintext"
-          theme="orbit-dark"
+          theme="pigry-dark"
           onChange={(next) => {
             const nextText = next ?? '';
             setValue(nextText);

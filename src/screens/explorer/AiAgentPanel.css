@@ -254,6 +254,123 @@
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
+/* Live context % of the default agent's session — sits beside the model
+   pill (ring + % via .ai-ctx tone classes; amber ≥70%, red ≥90%). Clicking
+   it opens the context-usage dropdown below. */
+.ai-composer__ctxwrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.ai-composer__ctx {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.ai-ctxdrop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  width: 280px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+  z-index: 40;
+}
+
+.ai-ctxdrop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ai-ctxdrop__rows {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-ctxdrop__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--fs-2xs);
+}
+
+.ai-ctxdrop__row > span {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ai-ctxdrop__row > code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-all;
+}
+
+.ai-ctxdrop__section {
+  margin: 4px 0 0;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.ai-ctxdrop__turns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.ai-ctxdrop__turn {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+}
+
+.ai-ctxdrop__turn-model {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-ctxdrop__turn-tokens {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.ai-ctxdrop__note {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .explorer-ai__model-pill:hover {
   border-color: var(--accent);
   background: var(--bg-panel);
@@ -1528,4 +1645,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Context-window % badge on assistant replies — ring + % via .ai-ctx
+   tone classes (green normally, amber past 70%, red past 90%). */
+.ai-msg__ctx {
+  flex-shrink: 0;
+}
+
+/* Chat text is selectable in every chat (rail, Explorer, Commit graph) —
+   the app body opts out of selection globally, the conversation opts back
+   in. Selecting chat text never becomes chat context (the bridge ignores
+   selections inside the panel). */
+.explorer-ai__body {
+  user-select: text;
 }

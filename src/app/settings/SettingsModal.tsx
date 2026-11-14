@@ -186,7 +186,7 @@ export function SettingsModal({ onClose, notify }: SettingsModalProps) {
         {section === 'user' && (
           <div className="settings__section">
             <p className="settings__hint">
-              Stored in this repository's local config. Commits made from orbit use this identity.
+              Stored in this repository's local config. Commits made from pigry use this identity.
             </p>
             <label className="settings__field">
               <span>Name</span>

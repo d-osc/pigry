@@ -238,7 +238,7 @@ fn build_payload(state: &AppState) -> AppStatePayload {
         match git_state::build_state(path) {
             Ok(value) => Some(value),
             Err(e) => {
-                eprintln!("[orbit] build_state failed for {}: {e}", path.display());
+                eprintln!("[pigry] build_state failed for {}: {e}", path.display());
                 None
             }
         }
@@ -1745,15 +1745,23 @@ pub async fn browser_devtools(
     js: Option<String>,
     waitMs: Option<u64>,
 ) -> Result<String, String> {
+    // The DevTools session is repo-agnostic — the browser can inspect any
+    // site with no repository open. Only `screenshot` writes into the repo's
+    // .pigry/devtools directory, so that one action requires a repo.
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
-        repo_path_str(&state)?.to_path_buf()
+        state.repo_path.as_deref().map(std::path::PathBuf::from)
     };
     match action.as_str() {
         "open" => {
             let url = url.ok_or("action \"open\" requires url")?;
             let wait = waitMs.unwrap_or(1200);
-            crate::devtools::devtools_open(&repo_path, &url, wait).await?;
+            crate::devtools::devtools_open(
+                repo_path.as_deref().unwrap_or(std::path::Path::new(".")),
+                &url,
+                wait,
+            )
+            .await?;
             Ok("opened".to_string())
         }
         "eval" => {
@@ -1770,16 +1778,76 @@ pub async fn browser_devtools(
 ")
             })
         }
-        "screenshot" => crate::devtools::devtools_screenshot(&repo_path).await,
+        "screenshot" => {
+            let repo_path = repo_path.ok_or_else(|| {
+                "open a repository first — screenshots save under .pigry/devtools".to_string()
+            })?;
+            crate::devtools::devtools_screenshot(&repo_path).await
+        }
         "dom" => {
             let limit = waitMs.unwrap_or(16_000) as usize;
             crate::devtools::devtools_dom(limit).await
         }
-        "close" => {
-            let _ = repo_path;
-            crate::devtools::devtools_close().await
+        "network" => {
+            let limit = waitMs.unwrap_or(500) as usize;
+            crate::devtools::devtools_network(limit).await
         }
+        "close" => crate::devtools::devtools_close().await,
         other => Err(format!("unknown devtools action: {other}")),
+    }
+}
+
+/// CDP against the app's own WebView2 pages — dev builds only (lib.rs enables
+/// the remote debugging port under debug_assertions). Actions: "targets",
+/// "network", "screenshot", "pdf", "upload".
+#[tauri::command]
+pub async fn browser_cdp(
+    action: String,
+    url_prefix: Option<String>,
+    contains: Option<String>,
+    selector: Option<String>,
+    paths: Option<Vec<String>>,
+    max: Option<u32>,
+    value: Option<String>,
+    wait_ms: Option<u64>,
+    op: Option<String>,
+    name: Option<String>,
+) -> Result<String, String> {
+    match action.as_str() {
+        "targets" => {
+            let lines = crate::devtools::cdp_targets().await?;
+            Ok(if lines.is_empty() {
+                "(no CDP pages)".to_string()
+            } else {
+                lines.join("\n")
+            })
+        }
+        "network_idle" => {
+            crate::devtools::cdp_network_idle(
+                url_prefix.as_deref().unwrap_or(""),
+                max.unwrap_or(500) as u64,
+                wait_ms.unwrap_or(10_000),
+            )
+            .await
+        }
+        "cookies" => {
+            crate::devtools::cdp_cookies(
+                url_prefix.as_deref().unwrap_or(""),
+                op.as_deref().unwrap_or("list"),
+                name.as_deref().unwrap_or(""),
+                value.as_deref().unwrap_or(""),
+                max.unwrap_or(3000) as usize,
+            )
+            .await
+        }
+        "screenshot" => crate::devtools::cdp_screenshot(url_prefix.as_deref().unwrap_or("")).await,
+        "pdf" => crate::devtools::cdp_pdf(url_prefix.as_deref().unwrap_or("")).await,
+        "upload" => {
+            let selector = selector.ok_or("upload requires selector")?;
+            let paths = paths.ok_or("upload requires paths")?;
+            crate::devtools::cdp_upload(url_prefix.as_deref().unwrap_or(""), &selector, paths).await
+        }
+        other => Err(format!("unknown cdp action: {other}")),
     }
 }
 

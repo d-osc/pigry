@@ -1,0 +1,474 @@
+/* Rebase Branch screen — pick a base branch, edit the replay plan, rebase. */
+
+.rb-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.rb__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rb__title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.rb__branch {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.rb__section-title {
+  margin: 0 0 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* In-progress / conflict card */
+.rb__conflict {
+  padding: 10px 14px;
+  border: 1px solid var(--danger, #e79098);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rb__conflict-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--danger, #e79098);
+}
+
+.rb__conflict-files {
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+}
+
+.rb__conflict-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rb__abort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rb__abort-btn:hover {
+  border-color: var(--danger, #e79098);
+  color: var(--danger, #e79098);
+}
+
+.rb__conflict-hint {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+/* Base branch selector */
+.rb__branch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rb__branch-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rb__branch-select {
+  min-width: 180px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.rb__branch-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Replay plan list */
+.rb__list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.rb__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rb__row--open {
+  background: var(--accent-tint-1, rgb(139 157 255 / 8%));
+}
+
+/* Clickable main area (sha + summary + avatar + meta + sync) — toggles detail */
+.rb__row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rb__row-main:hover .rb__summary {
+  color: var(--accent);
+}
+
+/* Expanded commit detail — file changes of the clicked commit */
+.rb__detail {
+  flex-basis: 100%;
+  margin: 6px 0 2px 14px;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rb__detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rb__detail-sha {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.rb__detail-summary {
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.rb__detail-meta {
+  margin-top: 2px;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.rb__detail-body {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rb__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.rb__file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+}
+
+.rb__file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rb__file-row:hover {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.rb__file-status {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.rb__file-status--A {
+  color: var(--success, #6dd6ad);
+}
+
+.rb__file-status--M {
+  color: var(--warning, #edb675);
+}
+
+.rb__file-status--D {
+  color: var(--danger, #e79098);
+}
+
+.rb__file-status--R {
+  color: var(--accent);
+}
+
+.rb__file-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb__file-stats {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.rb__file-view {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 340px;
+  margin: 4px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+
+.rb__file-view-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.rb__file-view-labels span + span {
+  margin-left: auto;
+}
+
+.rb__view-mode {
+  margin-left: 8px;
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rb__view-mode button {
+  padding: 2px 9px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rb__view-mode button.is-active {
+  background: var(--accent-tint-1, rgb(139 157 255 / 15%));
+  color: var(--accent);
+}
+
+.rb__row:last-child {
+  border-bottom: none;
+}
+
+.rb__row--drop .rb__oid,
+.rb__row--drop .rb__summary {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.rb__action {
+  min-width: 52px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.rb__action[data-action='pick'] {
+  color: var(--success, #6dd6ad);
+  border-color: rgb(109 214 173 / 40%);
+}
+
+.rb__action[data-action='squash'] {
+  color: var(--warning, #edb675);
+  border-color: rgb(237 182 117 / 40%);
+}
+
+.rb__action[data-action='drop'] {
+  color: var(--danger, #e79098);
+  border-color: rgb(231 144 152 / 40%);
+}
+
+.rb__oid {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.rb__summary {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb__meta {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.rb__move {
+  display: inline-flex;
+  gap: 2px;
+}
+
+/* Actions */
+.rb__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rb__rebase-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--success, #6dd6ad);
+  border-radius: var(--radius-sm);
+  background: rgb(109 214 173 / 12%);
+  color: var(--success, #6dd6ad);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.rb__rebase-btn:hover:not(:disabled) {
+  background: rgb(109 214 173 / 20%);
+}
+
+.rb__rebase-btn:disabled,
+.rb__plan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rb__plan-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.rb__plan-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.rb__hint {
+  margin: 8px 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.rb__empty {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.rb__plan-error {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: var(--fs-xs);
+  color: var(--warning, #edb675);
+  background: rgb(237 182 117 / 10%);
+  border: 1px solid rgb(237 182 117 / 35%);
+  border-radius: var(--radius-sm);
+}

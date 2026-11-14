@@ -130,13 +130,13 @@ export function EditorPane({
   const [editorInstance, setEditorInstance] =
     useState<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
   // Editor colors follow the app theme (Settings → Appearance → Theme).
-  const [uiTheme, setUiTheme] = useState<'orbit-dark' | 'orbit-light'>(() =>
-    currentResolvedTheme() === 'light' ? 'orbit-light' : 'orbit-dark',
+  const [uiTheme, setUiTheme] = useState<'pigry-dark' | 'pigry-light'>(() =>
+    currentResolvedTheme() === 'light' ? 'pigry-light' : 'pigry-dark',
   );
 
   useEffect(() => {
     const onThemeChange = () =>
-      setUiTheme(currentResolvedTheme() === 'light' ? 'orbit-light' : 'orbit-dark');
+      setUiTheme(currentResolvedTheme() === 'light' ? 'pigry-light' : 'pigry-dark');
     window.addEventListener(THEME_CHANGED_EVENT, onThemeChange);
     return () => window.removeEventListener(THEME_CHANGED_EVENT, onThemeChange);
   }, []);
@@ -435,14 +435,14 @@ export function EditorPane({
     editorInstance.addCommand(
       0,
       (_ctx, oid: string) => jumpRef.current(oid),
-      'orbit.jumpToCommit',
+      'pigry.jumpToCommit',
     );
     editorInstance.addCommand(
       0,
       (_ctx, sha: string) => {
         void navigator.clipboard?.writeText(sha);
       },
-      'orbit.copySha',
+      'pigry.copySha',
     );
   }, [editorInstance]);
 
@@ -512,8 +512,8 @@ export function EditorPane({
             { value: `📄 \`${path}\` · line ${info.line}` },
             {
               value: [
-                `[View commit in graph](command:orbit.jumpToCommit "${info.oid}")`,
-                `[Copy full sha](command:orbit.copySha "${info.oid}")`,
+                `[View commit in graph](command:pigry.jumpToCommit "${info.oid}")`,
+                `[Copy full sha](command:pigry.copySha "${info.oid}")`,
               ].join(' · '),
               isTrusted: true,
             },
@@ -681,7 +681,7 @@ export function EditorPane({
             theme={uiTheme}
             onChange={handleDraftChange}
             beforeMount={(monaco) => {
-              monaco.editor.defineTheme('orbit-dark', {
+              monaco.editor.defineTheme('pigry-dark', {
                 base: 'vs-dark',
                 inherit: true,
                 rules: [],
@@ -690,7 +690,7 @@ export function EditorPane({
                   'editorGutter.background': '#1a1d24',
                 },
               });
-              monaco.editor.defineTheme('orbit-light', {
+              monaco.editor.defineTheme('pigry-light', {
                 base: 'vs',
                 inherit: true,
                 rules: [],

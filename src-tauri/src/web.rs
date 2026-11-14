@@ -371,6 +371,77 @@ pub fn browser_page(url: &str, wait_ms: u64) -> Result<BrowserPage> {
     })
 }
 
+/// Headless screenshot of `url` saved to `path` — a fresh render of the URL
+/// (the panel's live state isn't captured; WebView2 doesn't expose its child
+/// webviews over the debugging port).
+pub fn browser_screenshot_file(url: &str, path: &Path, wait_ms: u64) -> Result<()> {
+    let url = url.trim();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("url must start with http:// or https://".to_string());
+    }
+    let browser = browser_candidates()
+        .into_iter()
+        .find(|candidate| Path::new(candidate).is_file())
+        .ok_or_else(|| "no Edge/Chrome found — install Microsoft Edge or Google Chrome".to_string())?;
+    let wait = wait_ms.clamp(0, 20_000);
+    let mut cmd = Command::new(browser);
+    cmd.args([
+        "--headless=new",
+        "--disable-gpu",
+        "--no-first-run",
+        "--disable-extensions",
+        "--mute-audio",
+        &format!("--virtual-time-budget={wait}"),
+        &format!("--screenshot={}", path.display()),
+        "--window-size=1280,900",
+        url,
+    ]);
+    cmd.creation_flags(CREATE_FLAGS);
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let out = cmd.output().map_err(err)?;
+    if !path.exists() {
+        return Err(format!(
+            "browser produced no screenshot ({}): {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim().chars().take(200).collect::<String>()
+        ));
+    }
+    Ok(())
+}
+
+/// Headless print-to-PDF of `url` saved to `path` — a fresh render of the URL.
+pub fn browser_pdf_file(url: &str, path: &Path) -> Result<()> {
+    let url = url.trim();
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("url must start with http:// or https://".to_string());
+    }
+    let browser = browser_candidates()
+        .into_iter()
+        .find(|candidate| Path::new(candidate).is_file())
+        .ok_or_else(|| "no Edge/Chrome found — install Microsoft Edge or Google Chrome".to_string())?;
+    let mut cmd = Command::new(browser);
+    cmd.args([
+        "--headless=new",
+        "--disable-gpu",
+        "--no-first-run",
+        "--disable-extensions",
+        &format!("--print-to-pdf={}", path.display()),
+        "--no-pdf-header-footer",
+        url,
+    ]);
+    cmd.creation_flags(CREATE_FLAGS);
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let out = cmd.output().map_err(err)?;
+    if !path.exists() {
+        return Err(format!(
+            "browser produced no PDF ({}): {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim().chars().take(200).collect::<String>()
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

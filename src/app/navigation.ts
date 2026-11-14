@@ -13,6 +13,7 @@ import {
   Zap,
   type LucideIcon,
   GitMerge,
+  History,
   ArrowUpCircle,
   Archive,
   GitBranch,
@@ -24,6 +25,7 @@ export type NavId =
   | 'commit-graph'
   | 'working-changes'
   | 'merge-branch'
+  | 'rebase-branch'
   | 'push-commits'
   | 'stashes'
   | 'cherry-pick'
@@ -49,20 +51,21 @@ export interface NavItem {
 
 export const workspaceNav: NavItem[] = [
   { id: 'explorer', label: 'Explorer', icon: FolderTree },
-  { id: 'commit-graph', label: 'Commit graph', icon: Network },
-  { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
+  { id: 'ai-agent', label: 'Copilot', icon: Bot },
+  { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
+  { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },
-  { id: 'branches', label: 'Branches', icon: GitBranch },
-  { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
-  { id: 'ai-agent', label: 'Copilot', icon: Bot },
+  { id: 'rebase-branch', label: 'Rebase Branch', icon: History },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },
+  { id: 'commit-graph', label: 'Commit graph', icon: Network },
+  { id: 'branches', label: 'Branches', icon: GitBranch },
   { id: 'releases', label: 'Releases', icon: Tag },
-  { id: 'issues', label: 'Issues', icon: CircleDot },
   { id: 'actions', label: 'Actions', icon: Zap },
+  { id: 'security', label: 'Security and quality', icon: ShieldCheck },
+  { id: 'issues', label: 'Issues', icon: CircleDot },
   { id: 'projects', label: 'Projects', icon: LayoutGrid },
   { id: 'wiki', label: 'Wiki', icon: BookOpen },
-  { id: 'security', label: 'Security and quality', icon: ShieldCheck },
   { id: 'insights', label: 'Insights', icon: Activity },
 ];

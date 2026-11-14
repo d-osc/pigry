@@ -33,7 +33,7 @@ const readBool = (key: string, fallback: boolean) => {
 
 const SUGGESTED_SCOPES = ['repo', 'workflow', 'read:org', 'gist'];
 
-/** GitHub classic PAT scopes relevant to orbit, rendered as checkboxes. */
+/** GitHub classic PAT scopes relevant to pigry, rendered as checkboxes. */
 /** Scopes valid for classic OAuth tokens (gh token, device flow). */
 const KNOWN_SCOPES = [
   'repo',
@@ -227,7 +227,7 @@ export function AppSettingsScreen({
   };
 
   const generateOnGitHub = () => {
-    const url = 'https://github.com/settings/tokens/new?description=orbit&scopes=' + scopes.map(encodeURIComponent).join(',');
+    const url = 'https://github.com/settings/tokens/new?description=pigry&scopes=' + scopes.map(encodeURIComponent).join(',');
     void ghOpenUrl(url);
     notify('Opened github.com — the scopes are pre-filled, review and generate', 'success');
   };
@@ -809,7 +809,7 @@ export function AppSettingsScreen({
               <div className="app-settings__row">
                 <strong>GitHub: Token scopes</strong>
                 <span>
-                  Scopes the token should have (comma separated). Suggested for orbit:{' '}
+                  Scopes the token should have (comma separated). Suggested for pigry:{' '}
                   <code>repo</code>, <code>workflow</code>, <code>read:org</code>, <code>gist</code>.
                 </span>
                 <div className="app-settings__scope-grid">
@@ -1031,7 +1031,7 @@ export function AppSettingsScreen({
 
               <div className="app-settings__row">
                 <strong>Current version</strong>
-                <span>orbit {appVersion} · local build</span>
+                <span>pigry {appVersion} · local build</span>
               </div>
 
               <div className="app-settings__row">
@@ -1091,7 +1091,7 @@ export function AppSettingsScreen({
                   <button
                     type="button"
                     className="app-settings__button app-settings__button--ghost"
-                    onClick={() => void ghOpenUrl('https://github.com/d-osc/orbit/releases')}
+                    onClick={() => void ghOpenUrl('https://github.com/d-osc/pigry/releases')}
                   >
                     Open releases on GitHub
                   </button>
@@ -1113,25 +1113,25 @@ export function AppSettingsScreen({
                 </span>
                 <div>
                   <strong>
-                    orbit <span className="app-settings__about-beta">GIT</span>
+                    pigry <span className="app-settings__about-beta">GIT</span>
                   </strong>
                   <span>Version {appVersion}</span>
                 </div>
               </div>
 
               <div className="app-settings__row">
-                <strong>About orbit</strong>
+                <strong>About pigry</strong>
                 <span>A desktop Git client with a commit graph, inline editor and GitHub integration — built with Tauri, React and Monaco.</span>
               </div>
 
               <div className="app-settings__row">
                 <strong>Repository</strong>
-                <span>github.com/d-osc/orbit</span>
+                <span>github.com/d-osc/pigry</span>
                 <div className="app-settings__inline">
                   <button
                     type="button"
                     className="app-settings__button app-settings__button--ghost"
-                    onClick={() => void ghOpenUrl('https://github.com/d-osc/orbit')}
+                    onClick={() => void ghOpenUrl('https://github.com/d-osc/pigry')}
                   >
                     Open on GitHub
                   </button>

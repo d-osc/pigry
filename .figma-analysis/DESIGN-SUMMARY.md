@@ -1,6 +1,6 @@
-# Orbit — Figma Design Summary
+# Pigry — Figma Design Summary
 
-Source: figma.com/design/`417miudvyh3Kdz8eN4eILm`/orbit (last modified 2026-11-07)
+Source: figma.com/design/`417miudvyh3Kdz8eN4eILm`/pigry (last modified 2026-11-07)
 26 frames · all 1600px-wide desktop screens · dark theme · VS Code × GitHub Desktop hybrid
 
 ## App concept
@@ -36,7 +36,7 @@ Sample product version shown in designs: v0.18.0, "BETA".
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│ Title bar ~40px: [orbit·GIT] org/repo +Private pill · ⌘K search · ⤢ · avatar │
+│ Title bar ~40px: [pigry·GIT] org/repo +Private pill · ⌘K search · ⤢ · avatar │
 ├──────────┬─────────────────────────────────────────────────────┤
 │ Nav      │ Main workspace (varies per screen)                  │
 │ 224px    │                                                     │

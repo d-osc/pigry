@@ -19,13 +19,13 @@ fn git_cli(dir: &PathBuf, args: &[&str]) {
 
 #[test]
 fn revert_commit_creates_undo_commit() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-revert-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-revert-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     drop(config);
 
     // Create a commit with changes using git2.
@@ -36,7 +36,7 @@ fn revert_commit_creates_undo_commit() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "add file", &tree, &[]).unwrap();
 
     // Get the HEAD oid.
@@ -61,13 +61,13 @@ fn revert_commit_creates_undo_commit() {
 
 #[test]
 fn cherry_pick_applies_commit_changes() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-cherry-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-cherry-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     drop(config);
 
     // Base commit on main.
@@ -78,7 +78,7 @@ fn cherry_pick_applies_commit_changes() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
 
     // Create feature branch with a commit.
@@ -90,7 +90,7 @@ fn cherry_pick_applies_commit_changes() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let parent = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "add feature file", &tree, &[&parent]).unwrap();
     let feature_oid = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
@@ -124,13 +124,13 @@ fn cherry_pick_applies_commit_changes() {
 
 #[test]
 fn merge_branch_fast_forward() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-merge-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-merge-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     drop(config);
 
     fs::write(dir.join("a.txt"), "1\n").unwrap();
@@ -140,7 +140,7 @@ fn merge_branch_fast_forward() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
     let base_branch = repo.head().unwrap().shorthand().unwrap().to_string();
 
@@ -152,7 +152,7 @@ fn merge_branch_fast_forward() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "feature work", &tree, &[&head]).unwrap();
     let feature_tip = repo.head().unwrap().peel_to_commit().unwrap().id();
@@ -174,7 +174,7 @@ fn merge_branch_fast_forward() {
 
 #[test]
 fn clone_repo_copies_repository() {
-    let base = std::env::temp_dir().join(format!("orbit-clone-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("pigry-clone-{}", std::process::id()));
     let _ = fs::remove_dir_all(&base);
     fs::create_dir_all(&base).unwrap();
     let origin = base.join("origin.git");
@@ -191,7 +191,7 @@ fn clone_repo_copies_repository() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[]).unwrap();
     crate::ops::merge_branch(&work, "master", "ff").unwrap(); // no-op, just exercises
     git_cli(&work, &["push", "--set-upstream", "origin", "master"]);
@@ -213,13 +213,13 @@ use crate::ops::{abort_rebase, interactive_rebase, rebase_in_progress, RebaseSte
 
 /// Scratch repo with 3 commits on a feature branch; returns (dir, [oid1..oid3]).
 fn rebase_scratch(name: &str) -> (PathBuf, Vec<String>) {
-    let dir = std::env::temp_dir().join(format!("orbit-rebase-{}-{}", name, std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-rebase-{}-{}", name, std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let repo = Repository::init(&dir).unwrap();
     let mut config = repo.config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     drop(config);
 
     let oids: Vec<String> = ["one", "two", "three"]
@@ -232,7 +232,7 @@ fn rebase_scratch(name: &str) -> (PathBuf, Vec<String>) {
             index.write().unwrap();
             let tree_oid = index.write_tree().unwrap();
             let tree = repo.find_tree(tree_oid).unwrap();
-            let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+            let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
             let parent = repo.head().ok().map(|h| h.peel_to_commit().unwrap());
             let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
             let oid = repo
@@ -354,13 +354,13 @@ fn interactive_rebase_validates_plan() {
 
 #[test]
 fn rebase_conflict_then_abort_restores_original_tip() {
-    let dir = std::env::temp_dir().join(format!("orbit-rebase-abort-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-rebase-abort-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let repo = Repository::init(&dir).unwrap();
     let mut config = repo.config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     drop(config);
 
     // Two commits touching the SAME line of the same file: reordering them
@@ -371,7 +371,7 @@ fn rebase_conflict_then_abort_restores_original_tip() {
     index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
     index.write().unwrap();
     let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let base_oid = repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
 
     let make_commit = |msg: &str, content: &str| {
@@ -412,13 +412,13 @@ fn rebase_conflict_then_abort_restores_original_tip() {
 
 #[test]
 fn merge_branch_strategies_conflicts_and_abort() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-merge2-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-merge2-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     // Mixed git-CLI checkouts and git2 commits need stable line endings.
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
@@ -430,7 +430,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
     let main_branch = repo.head().unwrap().shorthand().unwrap().to_string();
 
@@ -442,7 +442,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "feature edit", &tree, &[&head]).unwrap();
     git_cli(&dir, &["checkout", &main_branch]);
@@ -453,7 +453,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "main edit", &tree, &[&head]).unwrap();
 
@@ -476,7 +476,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "feature rewrite", &tree, &[&head]).unwrap();
     git_cli(&dir, &["checkout", &main_branch]);
@@ -487,7 +487,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "conflict main", &tree, &[&head]).unwrap();
 
@@ -513,7 +513,7 @@ fn merge_branch_strategies_conflicts_and_abort() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "feature tail", &tree, &[&head]).unwrap();
     git_cli(&dir, &["checkout", &main_branch]);
@@ -529,13 +529,13 @@ fn merge_branch_strategies_conflicts_and_abort() {
 
 #[test]
 fn merge_preview_details_commits_and_files() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-preview-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-preview-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
 
@@ -549,7 +549,7 @@ fn merge_preview_details_commits_and_files() {
         index.write().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
         let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
         let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
         repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
@@ -603,8 +603,8 @@ fn merge_preview_details_commits_and_files() {
 
 #[test]
 fn push_preview_lists_unpushed_commits_with_files() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-pushprev-{}", std::process::id()));
-    let remote_dir = std::env::temp_dir().join(format!("orbit-ops-pushprev-remote-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-pushprev-{}", std::process::id()));
+    let remote_dir = std::env::temp_dir().join(format!("pigry-ops-pushprev-remote-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let _ = fs::remove_dir_all(&remote_dir);
     fs::create_dir_all(&dir).unwrap();
@@ -613,7 +613,7 @@ fn push_preview_lists_unpushed_commits_with_files() {
     Repository::init_bare(&remote_dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
     let repo = Repository::open(&dir).unwrap();
@@ -630,7 +630,7 @@ fn push_preview_lists_unpushed_commits_with_files() {
         index.write().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
         let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
         let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
         repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
@@ -679,13 +679,13 @@ fn push_preview_lists_unpushed_commits_with_files() {
 
 #[test]
 fn stash_preview_lists_entry_files() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-stashprev-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-stashprev-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
 
@@ -696,7 +696,7 @@ fn stash_preview_lists_entry_files() {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
     repo.commit(Some("HEAD"), &sig, &sig, "base", &tree, &[]).unwrap();
 
     // Stash one change on top.
@@ -723,13 +723,13 @@ fn stash_preview_lists_entry_files() {
 
 #[test]
 fn cherry_pick_conflict_then_abort_restores_branch() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-cherryabort-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-cherryabort-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
 
@@ -741,7 +741,7 @@ fn cherry_pick_conflict_then_abort_restores_branch() {
         index.write().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
         let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
         let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
         repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
@@ -789,13 +789,13 @@ fn cherry_pick_conflict_then_abort_restores_branch() {
 
 #[test]
 fn branch_commits_list_one_ref_only() {
-    let dir = std::env::temp_dir().join(format!("orbit-ops-branchcommits-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-ops-branchcommits-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
     let mut config = Repository::open(&dir).unwrap().config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     config.set_bool("core.autocrlf", false).unwrap();
     drop(config);
 
@@ -807,7 +807,7 @@ fn branch_commits_list_one_ref_only() {
         index.write().unwrap();
         let tree_oid = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_oid).unwrap();
-        let sig = git2::Signature::now("Test User", "test@orbit.dev").unwrap();
+        let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
         let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
         let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
         repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();

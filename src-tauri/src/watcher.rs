@@ -32,7 +32,7 @@ pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
         let mut watcher = match notify::recommended_watcher(event_tx) {
             Ok(watcher) => watcher,
             Err(e) => {
-                eprintln!("[orbit] file watcher unavailable: {e}");
+                eprintln!("[pigry] file watcher unavailable: {e}");
                 return;
             }
         };
@@ -50,10 +50,10 @@ pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
                         current = Some(path.clone());
                         match watcher.watch(&path, RecursiveMode::Recursive) {
                             Ok(()) => {
-                                println!("[orbit] watching {}", path.display());
+                                println!("[pigry] watching {}", path.display());
                             }
                             Err(e) => {
-                                eprintln!("[orbit] watch failed: {e}");
+                                eprintln!("[pigry] watch failed: {e}");
                             }
                         }
                     }

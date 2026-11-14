@@ -42,7 +42,7 @@ pub fn get_user_info(repo_path: &Path) -> Result<GitUserInfo, String> {
     })
 }
 
-/// Persists identity in the local config so commits made from orbit are
+/// Persists identity in the local config so commits made from pigry are
 /// attributed to this account without changing the machine-wide setting.
 pub fn set_user_info(repo_path: &Path, name: &str, email: &str) -> Result<(), String> {
     let name = name.trim();

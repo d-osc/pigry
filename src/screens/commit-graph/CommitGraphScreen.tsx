@@ -5,6 +5,8 @@ import {
   CalendarRange,
   ChevronLeft,
   Cloud,
+  CloudCheck,
+  CloudOff,
   FolderOpen,
   GitBranch,
   Plus,
@@ -24,6 +26,7 @@ import { CommitDetailPanel } from './CommitDetailPanel';
 import { AiAgentPanel } from '../explorer/AiAgentPanel';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { teamForScreen } from '../../lib/agentExtras';
+import { shareCommitWithChat } from '../../lib/chatBridge';
 import './CommitGraphScreen.css';
 
 /** Muted author avatar tints from the design (cycled by initials). */
@@ -621,11 +624,17 @@ export function CommitGraphScreen({
                   key={row.oid}
                   className={`commit-row commit-row--clickable${selected ? ' commit-row--selected' : ''}`}
                   style={{ gridTemplateColumns: rowTemplate }}
-                  onClick={() => setSelectedCommit(row.oid)}
+                  onClick={() => {
+                    setSelectedCommit(row.oid);
+                    shareCommitWithChat({ oid: row.oid, summary: row.summary });
+                  }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter') setSelectedCommit(row.oid);
+                    if (event.key === 'Enter') {
+                      setSelectedCommit(row.oid);
+                      shareCommitWithChat({ oid: row.oid, summary: row.summary });
+                    }
                   }}
                 >
                   <span className="commit-row__graph">
@@ -673,6 +682,12 @@ export function CommitGraphScreen({
                       style={selected ? { color: 'var(--accent)' } : undefined}
                     >
                       {row.shortOid}
+                      <span
+                        className={`commit-row__pushed${row.pushed ? ' commit-row__pushed--on' : ''}`}
+                        title={row.pushed ? 'Pushed to a remote (cloud)' : 'Local only — not pushed yet'}
+                      >
+                        {row.pushed ? <CloudCheck size={11} /> : <CloudOff size={11} />}
+                      </span>
                     </span>
                   )}
                   {columns.time && (
@@ -714,7 +729,7 @@ export function CommitGraphScreen({
         {aiOpen ? (
           <AiAgentPanel
             width={aiWidth}
-            fileName={repository?.name ?? 'orbit'}
+            fileName={repository?.name ?? 'pigry'}
             defaultTeam={teamForScreen('commit-graph')}
             onCollapse={() => setAiOpen(false)}
           />

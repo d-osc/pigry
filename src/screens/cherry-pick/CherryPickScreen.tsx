@@ -2,7 +2,7 @@
  * the current branch (staged, commit to finish). Conflicted picks surface
  * the conflicted files with an abort action. */
 import { useEffect, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import { Cherry, CircleAlert, Undo2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
@@ -16,6 +16,9 @@ import {
 } from '../../lib/tauriClient';
 import type { CommitDetail, CommitRow } from '../../types/repository';
 import { relativeTime } from '../../lib/relativeTime';
+import { CommitSyncIcon } from '../../lib/CommitSyncIcon';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
+import { shareCommitWithChat } from '../../lib/chatBridge';
 import { languageForPath } from '../../lib/ghData';
 import '../../editor/monacoSetup';
 import './CherryPickScreen.css';
@@ -24,6 +27,7 @@ const MAX_ROWS = 40;
 
 export function CherryPickScreen() {
   const { repository, refresh, notify } = useRepository();
+  const avatarMap = useCommitAvatars();
   const headOid = repository?.headOid ?? '';
   const [rows, setRows] = useState<CommitRow[]>([]);
   const [query, setQuery] = useState('');
@@ -62,11 +66,6 @@ export function CherryPickScreen() {
       cancelled = true;
     };
   }, [headOid, branchFilter]);
-  // New list source — collapse back to the first page.
-  useEffect(() => {
-    setVisibleCount(MAX_ROWS);
-  }, [branchFilter]);
-
   const selectCommit = async (row: CommitRow) => {
     // Clicking the selected row again collapses its detail.
     if (selected?.oid === row.oid) {
@@ -80,6 +79,7 @@ export function CherryPickScreen() {
     setDetail(null);
     setOpenFile(null);
     setFileContent(null);
+    shareCommitWithChat({ oid: row.oid, summary: row.summary });
     setLoadingDetail(true);
     try {
       setDetail(await getCommitDetail(row.oid));
@@ -206,6 +206,8 @@ export function CherryPickScreen() {
               value={branchFilter}
               onChange={(event) => {
                 setBranchFilter(event.target.value);
+                // New list source — collapse back to the first page.
+                setVisibleCount(MAX_ROWS);
                 setSelected(null);
                 setDetail(null);
               }}
@@ -262,9 +264,11 @@ export function CherryPickScreen() {
                 >
                   <span className="cherry__row-sha">{row.shortOid}</span>
                   <span className="cherry__row-summary">{row.summary}</span>
+                  <AuthorAvatar row={row} avatarMap={avatarMap} />
                   <span className="cherry__row-meta">
                     {row.authorName} · {relativeTime(row.timeSeconds)}
                   </span>
+                  <CommitSyncIcon pushed={row.pushed} />
                 </button>
                 {isSelected && (
                   <div className="cherry__detail">
@@ -362,12 +366,13 @@ export function CherryPickScreen() {
                                           </button>
                                         </div>
                                       </div>
-                                      <DiffEditor
+                                      <ChatAwareDiffEditor
+                                        chatMeta={{ path: file.path, source: 'Cherry Pick' }}
                                         key={fileKey}
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="orbit-dark"
+                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

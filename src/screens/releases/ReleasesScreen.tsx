@@ -71,7 +71,7 @@ function fmtSize(bytes: number): string {
   return `${bytes} B`;
 }
 
-const REPO_SLUG = 'd-osc/orbit';
+const REPO_SLUG = 'd-osc/pigry';
 
 function isTauriRuntime() {
   try {

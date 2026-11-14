@@ -118,7 +118,7 @@
   background: var(--bg-card);
 }
 
-/* Search widget — VS Code behavior, orbit theme colors */
+/* Search widget — VS Code behavior, pigry theme colors */
 .explorer-tree-filter {
   display: flex;
   align-items: center;
@@ -159,7 +159,7 @@
   color: var(--text-muted);
 }
 
-/* Clear button (VS Code behavior, orbit colors) */
+/* Clear button (VS Code behavior, pigry colors) */
 .explorer-tree-filter__clear {
   display: grid;
   place-items: center;

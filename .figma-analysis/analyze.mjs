@@ -1,7 +1,7 @@
-// Analyze orbit Figma JSON: design tokens + per-screen structure
+// Analyze pigry Figma JSON: design tokens + per-screen structure
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const file = JSON.parse(readFileSync(new URL('./orbit-figma.json', import.meta.url), 'utf8'));
+const file = JSON.parse(readFileSync(new URL('./pigry-figma.json', import.meta.url), 'utf8'));
 const page = file.document.children[0];
 
 // ---------- helpers ----------

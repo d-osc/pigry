@@ -371,7 +371,7 @@ export function WikiScreen() {
             placeholder(
               <BookOpen size={26} strokeWidth={1.25} />,
               'This repository has no wiki yet',
-              'Press "New page" to create the first page — orbit initializes the wiki and pushes it to GitHub.',
+              'Press "New page" to create the first page — pigry initializes the wiki and pushes it to GitHub.',
               <button
                 type="button"
                 className="primary-button"

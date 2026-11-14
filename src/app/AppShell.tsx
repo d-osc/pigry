@@ -20,6 +20,7 @@ import {
   type RepositoryContextValue,
 } from '../hooks/useRepository';
 import { MergeBranchScreen } from '../screens/merge-branch/MergeBranchScreen';
+import { RebaseBranchScreen } from '../screens/rebase-branch/RebaseBranchScreen';
 import { PushCommitsScreen } from '../screens/push-commits/PushCommitsScreen';
 import { StashesScreen } from '../screens/stashes/StashesScreen';
 import { CherryPickScreen } from '../screens/cherry-pick/CherryPickScreen';
@@ -47,6 +48,7 @@ import './AppShell.css';
 const AI_RAIL_SCREENS: NavId[] = [
   'working-changes',
   'merge-branch',
+  'rebase-branch',
   'push-commits',
   'stashes',
   'cherry-pick',
@@ -129,6 +131,8 @@ function renderScreen(
       return <WorkingChangesScreen />;
     case 'merge-branch':
       return <MergeBranchScreen />;
+    case 'rebase-branch':
+      return <RebaseBranchScreen />;
     case 'push-commits':
       return <PushCommitsScreen />;
     case 'stashes':
@@ -506,7 +510,7 @@ function AppShellInner() {
                   (railOpen ? (
                     <AiAgentPanel
                       width={railWidth}
-                      fileName={repository.repository?.name ?? 'orbit'}
+                      fileName={repository.repository?.name ?? 'pigry'}
                       defaultTeam={teamForScreen(screen)}
                       onCollapse={() => setRailOpen(false)}
                       onOpenFile={(path, line) => {

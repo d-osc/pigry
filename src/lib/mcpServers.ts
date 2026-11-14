@@ -1,5 +1,5 @@
 /** MCP (Model Context Protocol) server store — shared by the MCP screen and
- * the Tools screen. Servers live in localStorage under `orbit:mcp-servers`;
+ * the Tools screen. Servers live in localStorage under `pigry:mcp-servers`;
  * the list exports to the standard `.mcp.json` shape used by Claude Desktop
  * and other MCP clients.
  */

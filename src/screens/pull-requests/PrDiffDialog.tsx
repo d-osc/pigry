@@ -352,7 +352,7 @@ export function PrDiffDialog({
                   original={active.original}
                   modified={active.modified}
                   language={active.language}
-                  theme="orbit-dark"
+                  theme="pigry-dark"
                   onMount={(diffEditor, monaco) => {
                     setModifiedEditor(diffEditor.getModifiedEditor());
                     setMonacoInst(monaco);

@@ -34,7 +34,7 @@ export function AiAgentScreen() {
       <div className="screen-body agent-screen__body">
         <AiAgentPanel
           width={aiWidth}
-          fileName={repository?.name ?? 'orbit'}
+          fileName={repository?.name ?? 'pigry'}
           defaultTeam={teamForScreen('ai-agent')}
           onCollapse={() => {}}
         />

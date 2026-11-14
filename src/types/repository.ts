@@ -202,6 +202,9 @@ export interface CommitRow {
   activeAfter: number[];
   isHead: boolean;
   isMerge: boolean;
+  /** True when the commit is reachable from a remote branch (on the cloud);
+   * false when it only exists locally. */
+  pushed: boolean;
   /** Branch labels pointing at this commit ("main", "origin/main"). */
   refs: string[];
 }

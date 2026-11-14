@@ -1,7 +1,7 @@
 /** Stashes screen — create stashes, view their contents, and apply/pop/drop
  * a selected entry (or the latest one) without leaving the screen. */
 import { useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import { Archive, CheckCircle2, Eye } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
@@ -288,12 +288,13 @@ export function StashesScreen() {
                                           </button>
                                         </div>
                                       </div>
-                                      <DiffEditor
+                                      <ChatAwareDiffEditor
+                                        chatMeta={{ path: file.path, source: 'Stashes Code' }}
                                         key={fileKey}
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="orbit-dark"
+                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

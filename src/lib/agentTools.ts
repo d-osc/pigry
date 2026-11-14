@@ -1,5 +1,5 @@
 /** Built-in agent tool registry — the app's real capabilities that the AI
- * agent may use, with per-tool toggles stored in `orbit:agent-tools`. The
+ * agent may use, with per-tool toggles stored in `pigry:agent-tools`. The
  * enabled set is announced to the model on every send (see AiAgentPanel),
  * and MCP servers add their own tools on top (see mcpServers.ts).
  */
@@ -39,7 +39,11 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'web-search', name: 'web_search', group: 'Web', description: 'Search the web (DuckDuckGo) and read top results' },
   { id: 'web-browser', name: 'playwright', group: 'Web', description: 'Open a URL in headless Edge/Chrome and read the rendered page text' },
   { id: 'web-devtools', name: 'browser_devtools', group: 'Web', description: 'Persistent browser session — open URLs, eval JavaScript, read console logs, screenshots and DOM' },
-  { id: 'browser', name: 'browser', group: 'Web', description: "Open a URL in the user's visible default browser window" },
+  { id: 'web-panel', name: 'browser_panel', group: 'Web', description: 'Open the in-app floating browser panel and navigate its active tab to a URL' },
+  { id: 'web-e2e', name: 'browser_e2e', group: 'Web', description: 'E2E-test the page shown in the in-app browser panel — goto / fill / click / assert URL & title / read live text with PASS-FAIL results' },
+  { id: 'browser-screenshot', name: 'browser_screenshot', group: 'Web', description: 'Screenshot the live page shown in the in-app browser panel (PNG, saved to disk)' },
+  { id: 'browser-pdf', name: 'browser_pdf', group: 'Web', description: 'Save the live page shown in the in-app browser panel as PDF' },
+  { id: 'browser-network', name: 'browser_network_requests', group: 'Web', description: 'List network requests captured from the in-app browser panel page' },
   // Documents (text extraction for the agent)
   { id: 'doc-pdf', name: 'read_pdf', group: 'Files', description: 'Extract the text of a PDF in the working tree' },
   { id: 'doc-word', name: 'read_word', group: 'Files', description: 'Extract the text of a .docx Word document' },
@@ -53,20 +57,42 @@ export const AGENT_TOOLS: AgentTool[] = [
 
 const TOOLS_KEY = 'pigry:agent-tools';
 
+/** Stored as the DISABLED list (not the enabled one) so the announced tool
+ * surface can never drift stale: tools added to the registry later default
+ * ON, removed tools vanish on their own, and the user's explicit toggles
+ * still persist. */
+interface StoredTools {
+  version: 2;
+  disabled: string[];
+}
+
 export function loadEnabledTools(): Set<string> {
+  const all = new Set(AGENT_TOOLS.map((tool) => tool.id));
   try {
     const raw = localStorage.getItem(TOOLS_KEY);
-    if (!raw) return new Set(AGENT_TOOLS.map((tool) => tool.id)); // default: all on
-    const ids = JSON.parse(raw) as string[];
-    return new Set(ids);
+    if (!raw) return all; // default: all on
+    const parsed: unknown = JSON.parse(raw);
+    // Legacy format (a plain array of enabled ids): ignore it and start
+    // from all-on — old sets can reference tools that no longer exist and
+    // miss ones added since, which confuses the model's tool summary.
+    if (Array.isArray(parsed)) return all;
+    const disabled = ((parsed as StoredTools)?.disabled ?? []).filter((id) =>
+      AGENT_TOOLS.some((tool) => tool.id === id),
+    );
+    for (const id of disabled) all.delete(id);
+    return all;
   } catch {
-    return new Set(AGENT_TOOLS.map((tool) => tool.id));
+    return all;
   }
 }
 
 export function saveEnabledTools(enabled: Set<string>) {
   try {
-    localStorage.setItem(TOOLS_KEY, JSON.stringify([...enabled]));
+    const disabled: StoredTools['disabled'] = AGENT_TOOLS.map((tool) => tool.id).filter(
+      (id) => !enabled.has(id),
+    );
+    const payload: StoredTools = { version: 2, disabled };
+    localStorage.setItem(TOOLS_KEY, JSON.stringify(payload));
   } catch {
     // session-only
   }

@@ -27,6 +27,9 @@ export interface AiChatMessage {
   used?: string;
   /** Tool calls the agent made this turn (display only). */
   toolEvents?: string[];
+  /** Prompt + completion tokens this reply consumed, when the provider
+   * reported usage — feeds the context-window % badge. */
+  tokens?: number;
 }
 
 export interface AiChatSession {
@@ -49,12 +52,13 @@ const CHAT_DIR = '.pigry/chat/';
 const ACTIVE_KEY = 'pigry:ai-session-active';
 const MAX_MESSAGES = 100;
 
-/** Which store a chat belongs to. `team` tags the session so each team's
- * menu only shows its own chats — files all live in one .pigry/chat/ dir. */
+/** Which store a chat belongs to. When `agent` is given, sessions filter by
+ * the acting agent — the same agent continues one conversation across every
+ * workspace menu. `team` alone keeps the legacy per-menu filtering. */
 export interface ChatScope {
-  /** Team name — sessions are tagged and filtered by this team. */
+  /** Team name — legacy per-menu scoping (used when no agent is given). */
   team?: string;
-  /** Agent username — tags the acting agent on the session. */
+  /** Acting agent username — primary session identity. */
   agent?: string;
 }
 
@@ -63,14 +67,17 @@ function chatDir(): string {
 }
 
 function activeKeyFor(scope?: ChatScope): string {
-  const suffix = scope?.team
-    ? `:${scope.team}${scope.agent ? `/${scope.agent}` : ''}`
-    : '';
+  // Agent identity wins: the same acting agent shares one active session
+  // across every workspace menu; without an agent the team scopes the key.
+  if (scope?.agent) return `${ACTIVE_KEY}:${scope.agent}`;
+  const suffix = scope?.team ? `:${scope.team}` : '';
   return `${ACTIVE_KEY}${suffix}`;
 }
 
-/** Lists sessions in .pigry/chat/, newest first. When a team scope is given
- * only that team's chats are returned — groups never leak into other menus. */
+/** Lists sessions in .pigry/chat/, newest first. When an agent scope is
+ * given only that agent's chats are returned (same agent = same session on
+ * every menu); untagged legacy sessions stay visible. With only a team
+ * scope the chats filter by team as before. */
 export async function listSessions(scope?: ChatScope): Promise<AiChatSession[]> {
   const tree = await getFileTree();
   const dir = chatDir();
@@ -81,7 +88,11 @@ export async function listSessions(scope?: ChatScope): Promise<AiChatSession[]> 
       const raw = await readWorktreeFile(path);
       const session = JSON.parse(raw.content) as AiChatSession;
       if (session && Array.isArray(session.messages)) {
-        if (scope?.team && (session.team ?? '') !== scope.team) continue;
+        if (scope?.agent) {
+          if ((session.agentUsername ?? '') !== scope.agent && session.agentUsername) continue;
+        } else if (scope?.team && (session.team ?? '') !== scope.team) {
+          continue;
+        }
         sessions.push(session);
       }
     } catch {

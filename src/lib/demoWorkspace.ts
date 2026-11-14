@@ -23,7 +23,7 @@ const now = Math.floor(Date.now() / 1000);
 
 export const demoAppState: AppStatePayload = {
   activePath: '~/Projects/acme/platform',
-  recent: ['~/Projects/acme/platform', '~/Projects/acme/orbit-site'],
+  recent: ['~/Projects/acme/platform', '~/Projects/acme/pigry-site'],
   repository: {
     organization: 'acme-inc',
     name: 'platform',
@@ -97,6 +97,7 @@ export const demoHistory: CommitHistory = {
     activeAfter: row.after,
     isHead: row.oid.startsWith('a8f2c91'),
     isMerge: row.merge ?? false,
+    pushed: !row.oid.startsWith('c7d9e12') && !row.oid.startsWith('f2a8b41'),
     refs: row.refs ?? [],
   })),
 };

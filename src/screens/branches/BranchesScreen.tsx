@@ -6,7 +6,7 @@
  * cloud branch to local, and "create branch from" any commit or branch. */
 import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import {
   Check,
   Cloud,
@@ -36,6 +36,9 @@ import type {
   WorktreeFileContent,
 } from '../../types/repository';
 import { relativeTime } from '../../lib/relativeTime';
+import { CommitSyncIcon } from '../../lib/CommitSyncIcon';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
+import { shareCommitWithChat } from '../../lib/chatBridge';
 import { languageForPath } from '../../lib/ghData';
 import '../../editor/monacoSetup';
 import './BranchesScreen.css';
@@ -79,6 +82,7 @@ function loadSplitWidth(): number {
 
 export function BranchesScreen() {
   const { repository, refresh, notify } = useRepository();
+  const avatarMap = useCommitAvatars();
   const [branchQuery, setBranchQuery] = useState('');
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [rows, setRows] = useState<CommitRow[]>([]);
@@ -238,6 +242,7 @@ export function BranchesScreen() {
     setDetail(null);
     setOpenFile(null);
     setFileContent(null);
+    shareCommitWithChat({ oid: row.oid, summary: row.summary });
     setLoadingDetail(true);
     try {
       setDetail(await getCommitDetail(row.oid));
@@ -519,9 +524,11 @@ export function BranchesScreen() {
                   >
                     <span className="branches__row-sha">{row.shortOid}</span>
                     <span className="branches__row-summary">{row.summary}</span>
+                    <AuthorAvatar row={row} avatarMap={avatarMap} />
                     <span className="branches__row-meta">
                       {row.authorName} · {relativeTime(row.timeSeconds)}
                     </span>
+                    <CommitSyncIcon pushed={row.pushed} />
                   </button>
                   <span className="branches__actions">
                     <button
@@ -620,12 +627,13 @@ export function BranchesScreen() {
                                           </button>
                                         </div>
                                       </div>
-                                      <DiffEditor
+                                      <ChatAwareDiffEditor
+                                        chatMeta={{ path: file.path, source: 'Branches' }}
                                         key={fileKey}
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="orbit-dark"
+                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

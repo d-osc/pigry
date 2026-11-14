@@ -1,4 +1,4 @@
-/* Orbit global styles — reset, base typography, chrome */
+/* Pigry global styles — reset, base typography, chrome */
 *,
 *::before,
 *::after {
@@ -497,4 +497,72 @@ textarea {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Commit push-state badge — cloud = on a remote, disk = local only
+   (CommitSyncIcon, used by Branches / Cherry Pick / Rebase Branch rows) */
+.commit-sync {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.commit-sync--pushed {
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.commit-sync--local {
+  color: var(--accent);
+}
+
+/* Author avatar for commit rows (Branches / Cherry Pick / Rebase Branch) */
+.commit-avatar {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  font-size: 7px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.commit-avatar--img {
+  object-fit: cover;
+}
+
+/* Context-window ring indicator (CtxRing) — tone classes color both the
+   ring arc and the % text; green normally, amber ≥70%, red ≥90%. */
+.ai-ctx {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success, #6dd6ad);
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  flex-shrink: 0;
+}
+
+.ai-ctx--warn {
+  color: var(--warning, #edb675);
+}
+
+.ai-ctx--danger {
+  color: var(--danger, #e79098);
+}
+
+.ai-ctx-ring {
+  flex-shrink: 0;
+}
+
+.ai-ctx-ring__track {
+  fill: none;
+  stroke: color-mix(in srgb, currentColor 30%, transparent);
+}
+
+.ai-ctx-ring__fill {
+  fill: none;
+  stroke: currentColor;
+  transition: stroke-dasharray var(--transition-fast, 120ms);
 }

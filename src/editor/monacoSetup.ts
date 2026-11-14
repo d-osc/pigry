@@ -1,6 +1,6 @@
 /**
  * Monaco bootstrap — bundles the editor locally (no CDN) and registers the
- * orbit-dark theme so every editor/diff instance matches the design tokens.
+ * pigry-dark theme so every editor/diff instance matches the design tokens.
  */
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/editor/editor.worker.js?worker';
@@ -21,7 +21,7 @@ self.MonacoEnvironment = {
 
 loader.config({ monaco });
 
-monaco.editor.defineTheme('orbit-dark', {
+monaco.editor.defineTheme('pigry-dark', {
   base: 'vs-dark',
   inherit: true,
   rules: [

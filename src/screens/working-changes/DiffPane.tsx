@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import { FileCode2, RotateCcw, Plus } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { getFileDiff } from '../../lib/tauriClient';
@@ -278,12 +278,13 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
             File is too large to display (over 1 MB)
           </div>
         ) : (
-          <DiffEditor
+          <ChatAwareDiffEditor
+            chatMeta={{ path, source: 'Working changes' }}
             key={`${selectedFileId}:${mutatedKey}`}
             original={diff.original ?? ''}
             modified={diff.modified ?? ''}
             language={diff.language}
-            theme="orbit-dark"
+            theme="pigry-dark"
             onMount={handleDiffMount}
             options={{
               readOnly: true,

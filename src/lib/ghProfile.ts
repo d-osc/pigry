@@ -1,6 +1,6 @@
 /** Shared GitHub profile cache — fetched once at app start and reused
  * everywhere (AI agent chat, title bar, anywhere else). The latest profile
- * is kept in memory + localStorage (`orbit:gh-profile`) so the first paint
+ * is kept in memory + localStorage (`pigry:gh-profile`) so the first paint
  * already has name/avatar without waiting for gh.
  */
 import { ghAccountList } from './tauriClient';

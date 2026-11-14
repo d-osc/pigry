@@ -125,7 +125,7 @@ export function ComparePanel({
             original={baseContent}
             modified={workingContent}
             language={language}
-            theme="orbit-dark"
+            theme="pigry-dark"
             options={{
               readOnly: true,
               renderSideBySide: split,

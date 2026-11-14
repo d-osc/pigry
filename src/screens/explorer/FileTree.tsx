@@ -239,12 +239,12 @@ function TreeRow({
         onClick={handleClick}
         draggable={onMove != null}
         onDragStart={(event) => {
-          event.dataTransfer.setData('application/orbit-move', node.path);
+          event.dataTransfer.setData('application/pigry-move', node.path);
           event.dataTransfer.effectAllowed = 'move';
         }}
         onDragOver={(event) => {
           if (!isFolder || !onMove) return;
-          const dragged = event.dataTransfer.getData('application/orbit-move');
+          const dragged = event.dataTransfer.getData('application/pigry-move');
           if (!dragged || dragged === node.path || node.path.startsWith(`${dragged}/`)) return;
           event.preventDefault();
           setDropTarget(true);
@@ -253,7 +253,7 @@ function TreeRow({
         onDrop={(event) => {
           setDropTarget(false);
           if (!onMove) return;
-          const dragged = event.dataTransfer.getData('application/orbit-move');
+          const dragged = event.dataTransfer.getData('application/pigry-move');
           if (!dragged || dragged === node.path || node.path.startsWith(`${dragged}/`)) return;
           event.preventDefault();
           event.stopPropagation();
@@ -358,13 +358,13 @@ export function FileTree({
       onDragOver={(event) => {
         // Root drop target: dropping on empty area moves to the repo root.
         if (!onMove) return;
-        const dragged = event.dataTransfer.getData('application/orbit-move');
+        const dragged = event.dataTransfer.getData('application/pigry-move');
         if (!dragged || !dragged.includes('/')) return;
         event.preventDefault();
       }}
       onDrop={(event) => {
         if (!onMove) return;
-        const dragged = event.dataTransfer.getData('application/orbit-move');
+        const dragged = event.dataTransfer.getData('application/pigry-move');
         if (!dragged || !dragged.includes('/')) return;
         event.preventDefault();
         onMove(dragged, '');

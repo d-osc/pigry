@@ -857,6 +857,9 @@ pub struct CommitRow {
     pub active_after: Vec<u32>,
     pub is_head: bool,
     pub is_merge: bool,
+    /// True when the commit is reachable from a remote branch (on the cloud);
+    /// false when it only exists locally.
+    pub pushed: bool,
     /// Branch labels pointing at this commit ("main", "origin/main").
     pub refs: Vec<String>,
 }
@@ -1004,6 +1007,7 @@ pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHi
         .map_err(|e| format!("unknown ref {ref_name}: {}", e.message()))?
         .peel_to_commit()
         .map_err(err)?;
+    let pushed_set = remote_pushed_oids(&repo);
     let mut revwalk = repo.revwalk().map_err(err)?;
     revwalk.push(tip.id()).map_err(err)?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
@@ -1036,6 +1040,7 @@ pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHi
             active_after: Vec::new(),
             is_head: false,
             is_merge: commit.parent_count() > 1,
+            pushed: pushed_set.contains(&oid),
             refs: Vec::new(),
         });
     }
@@ -1044,6 +1049,7 @@ pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHi
 
 pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<CommitHistory> {
     let repo = Repository::discover(repo_path).map_err(err)?;
+    let pushed_set = remote_pushed_oids(&repo);
 
     // Ref labels per commit (local + optional remote).
     let mut ref_labels: BTreeMap<git2::Oid, Vec<String>> = BTreeMap::new();
@@ -1171,11 +1177,48 @@ pub fn build_commit_history(repo_path: &Path, include_remotes: bool) -> Result<C
             active_after,
             is_head: head_oid == Some(oid),
             is_merge: parents.len() > 1,
+            pushed: pushed_set.contains(&oid),
             refs: labels,
         });
     }
 
     Ok(CommitHistory { total, truncated, commits })
+}
+
+/// Oids reachable from any remote branch (refs/remotes/**) — commits in
+/// this set already live on the cloud; everything else is local-only.
+fn remote_pushed_oids(repo: &Repository) -> std::collections::HashSet<git2::Oid> {
+    let mut set = std::collections::HashSet::new();
+    let Ok(mut revwalk) = repo.revwalk() else {
+        return set;
+    };
+    let Ok(refs) = repo.references_glob("refs/remotes/*") else {
+        return set;
+    };
+    let mut any = false;
+    for reference in refs.flatten() {
+        if reference.name().is_some_and(|n| n.ends_with("/HEAD")) {
+            continue;
+        }
+        if let Some(oid) = reference.target() {
+            if revwalk.push(oid).is_ok() {
+                any = true;
+            }
+        }
+    }
+    if !any {
+        return set;
+    }
+    let _ = revwalk.set_sorting(git2::Sort::TIME);
+    let mut steps = 0usize;
+    for oid in revwalk.flatten() {
+        set.insert(oid);
+        steps += 1;
+        if steps >= 100_000 {
+            break; // safety cap for huge histories
+        }
+    }
+    set
 }
 
 fn collect_ref_labels(
@@ -2050,7 +2093,7 @@ pub fn create_tag(repo_path: &Path, name: &str) -> Result<()> {
         &format!("refs/tags/{name}"),
         target.id(),
         false,
-        "orbit: create tag",
+        "pigry: create tag",
     )
     .map_err(err)?;
     Ok(())

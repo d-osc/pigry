@@ -28,6 +28,10 @@ import {
   TOOL_GROUPS,
 } from '../../lib/agentTools';
 import { renderMarkdown } from '../../lib/markdown';
+import { listSessions } from '../../lib/aiSessions';
+import { activeProvider, resolveContextWindow } from '../../lib/aiProviders';
+import { CtxRing } from '../../lib/CtxRing';
+import { relativeTime } from '../../lib/relativeTime';
 import {
   loadMcpServers,
   mcpJsonExport,
@@ -532,10 +536,113 @@ export function AgentDetailsDialog({
 }) {
   const provider = agent.providerId
     ? loadProviders().find((p) => p.id === agent.providerId)
-    : undefined;
-  const providerName = provider?.name ?? 'global active provider';
+    : activeProvider() ?? undefined;
+  const providerName = provider?.name ?? 'no provider';
   const model = agent.model || provider?.model || '(active model)';
-  const modelEntry = provider?.models.find((m) => m.name === (agent.model || provider?.model));
+  const modelEntry = provider?.models.find((m) => m.name === model);
+
+  // Per-agent context usage — sessions and context windows are owned by the
+  // agent that answered: sum the tokens of the assistant turns carrying this
+  // agent's username across the repo's chat sessions, with per-model and
+  // per-day breakdowns for the usage panel.
+  const [contextInfo, setContextInfo] = useState<{
+    window: number | null;
+    usedTokens: number;
+    turns: number;
+    sessions: number;
+    lastTitle: string | null;
+    lastTime: number | null;
+    avgTokens: number;
+    byModel: Array<{ label: string; turns: number; tokens: number }>;
+    days: Array<{ label: string; tokens: number; turns: number }>;
+    recent: Array<{ used: string; tokens: number; time?: number; title: string }>;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const win = resolveContextWindow(model, modelEntry);
+      // Turns this agent answered carry its username — scan EVERY session
+      // (its own agent-scoped threads plus group threads where it replied
+      // via @mention); legacy untagged sessions must not shadow them. `own`
+      // only feeds the owned-sessions count.
+      const [own, every] = await Promise.all([
+        agent.username ? listSessions({ agent: agent.username }) : Promise.resolve([]),
+        listSessions(),
+      ]);
+      let usedTokens = 0;
+      let turns = 0;
+      let lastTitle: string | null = null;
+      let lastTime: number | null = null;
+      const byModel = new Map<string, { turns: number; tokens: number }>();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const dayKeys: number[] = [];
+      const dayTokens: number[] = [];
+      const dayTurns: number[] = [];
+      for (let i = 6; i >= 0; i -= 1) {
+        dayKeys.push(todayStart.getTime() - i * 86_400_000);
+        dayTokens.push(0);
+        dayTurns.push(0);
+      }
+      const dayLabels = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+      const recent: Array<{ used: string; tokens: number; time?: number; title: string }> = [];
+      for (const session of every) {
+        for (const msg of session.messages) {
+          if (msg.role !== 'assistant' || msg.agent !== agent.username) continue;
+          const tokens =
+            msg.tokens ?? Math.ceil(((msg.text?.length ?? 0) + (msg.context?.length ?? 0)) / 4);
+          turns += 1;
+          usedTokens += tokens;
+          lastTitle = session.title;
+          if (msg.time) lastTime = Math.max(lastTime ?? 0, msg.time);
+          const label = msg.used ?? 'estimate';
+          const bucket = byModel.get(label) ?? { turns: 0, tokens: 0 };
+          bucket.turns += 1;
+          bucket.tokens += tokens;
+          byModel.set(label, bucket);
+          if (msg.time) {
+            const dayStart = new Date(msg.time);
+            dayStart.setHours(0, 0, 0, 0);
+            const idx = dayKeys.indexOf(dayStart.getTime());
+            if (idx !== -1) {
+              dayTokens[idx] += tokens;
+              dayTurns[idx] += 1;
+            }
+          }
+          recent.push({ used: label, tokens, time: msg.time, title: session.title });
+        }
+      }
+      if (!cancelled) {
+        setContextInfo({
+          window: win,
+          usedTokens,
+          turns,
+          sessions: own.length,
+          lastTitle,
+          lastTime,
+          avgTokens: turns > 0 ? Math.round(usedTokens / turns) : 0,
+          byModel: [...byModel.entries()]
+            .map(([label, v]) => ({ label, ...v }))
+            .sort((a, b) => b.tokens - a.tokens),
+          days: dayKeys.map((t, i) => ({
+            label: dayLabels[new Date(t).getDay()],
+            tokens: dayTokens[i],
+            turns: dayTurns[i],
+          })),
+          recent: recent.sort((a, b) => (b.time ?? 0) - (a.time ?? 0)).slice(0, 5),
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.username, model, modelEntry]);
+  const ctxWindow = contextInfo?.window ?? null;
+  const ctxUsed = contextInfo?.usedTokens ?? 0;
+  const ctxPct =
+    ctxWindow && ctxUsed > 0
+      ? Math.min(100, Math.max(1, Math.round((ctxUsed / ctxWindow) * 100)))
+      : null;
   return (
     <div
       className="know-overlay"
@@ -590,6 +697,122 @@ export function AgentDetailsDialog({
               </div>
             )}
           </div>
+          <h4 className="apanel-dlg__section">Context usage</h4>
+          {contextInfo && contextInfo.turns > 0 ? (
+            <div className="apanel-dlg__ctxcard">
+              <div className="apanel-dlg__ctxhero">
+                <span
+                  className={`apanel-dlg__ctxring ai-ctx${ctxPct !== null && ctxPct >= 90 ? ' ai-ctx--danger' : ctxPct !== null && ctxPct >= 70 ? ' ai-ctx--warn' : ''}`}
+                >
+                  <CtxRing pct={ctxPct ?? 0} size={64} stroke={5} />
+                  <b>{ctxPct !== null ? `${ctxPct}%` : '—'}</b>
+                </span>
+                <div className="apanel-dlg__ctxhero-main">
+                  <div className="apanel-dlg__ctxhero-line">
+                    <b>~{ctxUsed.toLocaleString()}</b> of{' '}
+                    {ctxWindow ? `${(ctxWindow / 1000).toLocaleString()}k` : '?'} tokens
+                  </div>
+                  <div className="apanel-dlg__ctxbar">
+                    <span
+                      className={`apanel-dlg__ctxbar-fill${ctxPct !== null && ctxPct >= 90 ? ' apanel-dlg__ctxbar-fill--danger' : ctxPct !== null && ctxPct >= 70 ? ' apanel-dlg__ctxbar-fill--warn' : ''}`}
+                      style={{ width: `${ctxPct ?? 0}%` }}
+                    />
+                  </div>
+                  <div className="apanel-dlg__ctxhero-sub">
+                    {contextInfo.lastTime
+                      ? `Last answered ${relativeTime(Math.floor(contextInfo.lastTime / 1000))}`
+                      : '—'}
+                    {contextInfo.lastTitle ? ` · ${contextInfo.lastTitle}` : ''}
+                  </div>
+                </div>
+              </div>
+              <div className="apanel-dlg__tiles">
+                <div className="apanel-dlg__tile">
+                  <b>{contextInfo.turns}</b>
+                  <span>turns answered</span>
+                </div>
+                <div className="apanel-dlg__tile">
+                  <b>
+                    ~{ctxUsed >= 1000 ? `${(ctxUsed / 1000).toFixed(1)}k` : ctxUsed.toLocaleString()}
+                  </b>
+                  <span>tokens used</span>
+                </div>
+                <div className="apanel-dlg__tile">
+                  <b>~{contextInfo.avgTokens.toLocaleString()}</b>
+                  <span>avg / turn</span>
+                </div>
+                <div className="apanel-dlg__tile">
+                  <b>{contextInfo.sessions}</b>
+                  <span>sessions owned</span>
+                </div>
+              </div>
+              <div className="apanel-dlg__days">
+                {contextInfo.days.map((day, i) => {
+                  const max = Math.max(...contextInfo.days.map((x) => x.tokens), 1);
+                  const height = day.tokens > 0 ? Math.max(12, Math.round((day.tokens / max) * 100)) : 0;
+                  const isToday = i === contextInfo.days.length - 1;
+                  return (
+                    <div
+                      key={i}
+                      className={`apanel-dlg__day${isToday ? ' apanel-dlg__day--today' : ''}`}
+                      title={`${day.label} — ${day.turns} turn${day.turns === 1 ? '' : 's'} · ~${day.tokens.toLocaleString()} tokens`}
+                    >
+                      <span
+                        className="apanel-dlg__daybar"
+                        style={{ height: `${height}%`, opacity: day.tokens > 0 ? 1 : 0.2 }}
+                      />
+                      <span className="apanel-dlg__daylabel">{day.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {contextInfo.byModel.length > 0 && (
+                <div className="apanel-dlg__models">
+                  <h5 className="apanel-dlg__ctxsub">By model</h5>
+                  {contextInfo.byModel.map((entry) => (
+                    <div key={entry.label} className="apanel-dlg__modelrow">
+                      <code>{entry.label}</code>
+                      <span className="apanel-dlg__modelbar">
+                        <span
+                          style={{ width: `${ctxUsed > 0 ? Math.round((entry.tokens / ctxUsed) * 100) : 0}%` }}
+                        />
+                      </span>
+                      <span className="apanel-dlg__modelmeta">
+                        {entry.turns} turn{entry.turns === 1 ? '' : 's'} · ~
+                        {entry.tokens >= 1000 ? `${(entry.tokens / 1000).toFixed(1)}k` : entry.tokens}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {contextInfo.recent.length > 0 && (
+                <div className="apanel-dlg__recent">
+                  <h5 className="apanel-dlg__ctxsub">Recent turns</h5>
+                  {contextInfo.recent.map((turn, i) => (
+                    <div key={i} className="apanel-dlg__recentrow">
+                      <span className="apanel-dlg__recenttokens">
+                        ~{turn.tokens.toLocaleString()}
+                      </span>
+                      <span className="apanel-dlg__recentmodel">{turn.used}</span>
+                      <span className="apanel-dlg__recentmeta">
+                        {turn.time
+                          ? new Date(turn.time).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })
+                          : ''}
+                        {turn.title ? ` · ${turn.title}` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="apanel-dlg__ctxcard apanel-dlg__ctxcard--empty">
+              No turns answered yet — usage stats appear after this agent replies.
+            </div>
+          )}
           <h4 className="apanel-dlg__section">Capabilities</h4>
           <div className="apanel-dlg__caps">
             <div className="apanel-dlg__cap">

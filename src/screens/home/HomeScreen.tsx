@@ -7,7 +7,7 @@ import {
   GitBranch,
   History,
 } from 'lucide-react';
-import { OrbitMark } from '../../app/OrbitMark';
+import { PigryMark } from '../../app/PigryMark';
 import { useRepository } from '../../hooks/useRepository';
 import './HomeScreen.css';
 
@@ -42,7 +42,7 @@ export function HomeScreen({
         <header className="home__brand">
           <h1 className="home__brand-name">
             <span className="home__brand-mark" aria-hidden="true">
-              <OrbitMark size={40} />
+              <PigryMark size={40} />
             </span>
             PIGRY <span className="home__brand-chip">GIT</span>
           </h1>

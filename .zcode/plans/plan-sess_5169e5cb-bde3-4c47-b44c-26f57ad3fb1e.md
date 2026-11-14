@@ -1,7 +1,7 @@
-# Orbit M4 — Explorer (File Tree + Monaco Editor)
+# Pigry M4 — Explorer (File Tree + Monaco Editor)
 
 ## Context
-M1–M3: shell + tokens, git ops จริง, commit graph "ต่อ" ครั้งนี้ = **หน้า Explorer** ตามเฟรม Figma ("Orbit — Explorer"): tree ไฟล์ + Monaco editor เต็มพื้นที่ พร้อมแก้ไขและบันทึกได้ (Ctrl+S) — แอปมี Monaco อยู่แล้ว (DiffPane) จะ reuse theme `orbit-dark` + monacoSetup ที่มี  History/Compare panels ของ editor เก็บไว้ M5
+M1–M3: shell + tokens, git ops จริง, commit graph "ต่อ" ครั้งนี้ = **หน้า Explorer** ตามเฟรม Figma ("Pigry — Explorer"): tree ไฟล์ + Monaco editor เต็มพื้นที่ พร้อมแก้ไขและบันทึกได้ (Ctrl+S) — แอปมี Monaco อยู่แล้ว (DiffPane) จะ reuse theme `pigry-dark` + monacoSetup ที่มี  History/Compare panels ของ editor เก็บไว้ M5
 
 ## 1. Rust (`git_state.rs` + `commands.rs`)
 - `list_tree() -> FileTree`:
@@ -19,7 +19,7 @@ M1–M3: shell + tokens, git ops จริง, commit graph "ต่อ" คร�
 - `src/screens/explorer/`:
   - `ExplorerScreen.tsx` — controls bar (breadcrumb path ของไฟล์ที่เปิด + จุด dirty + ปุ่ม Save/Ctrl+S hint) + layout 2 คอลัมน์: tree 260px + editor flex
   - `FileTree.tsx` — collapsible folders (จำสถานะ expand ใน state), ไอคอนไฟล์ตาม extension (lucide: FileCode/FileJson/FileText/Gitignore…), แถว active + **dot สถานะ git** (M ส้ม/A เขียว) จาก changedPaths, empty state "Empty repository"
-  - `EditorPane.tsx` — Monaco `<Editor>` (editable) theme orbit-dark, โหลด `read_worktree_file` ตามไฟล์ที่เลือก, dirty tracking (เทียบกับ content ตอนโหลด), **Ctrl+S → write_worktree_file** แล้ว refresh repository state (ไฟล์เปลี่ยนจะโผล่ใน Working changes ทันที), binary/tooLarge → notice เหมือน DiffPane
+  - `EditorPane.tsx` — Monaco `<Editor>` (editable) theme pigry-dark, โหลด `read_worktree_file` ตามไฟล์ที่เลือก, dirty tracking (เทียบกับ content ตอนโหลด), **Ctrl+S → write_worktree_file** แล้ว refresh repository state (ไฟล์เปลี่ยนจะโผล่ใน Working changes ทันที), binary/tooLarge → notice เหมือน DiffPane
 - `AppShell.tsx` wire `explorer` → screen จริง
 
 ## 3. Rust tests (+3 → รวม 17)
@@ -29,7 +29,7 @@ M1–M3: shell + tokens, git ops จริง, commit graph "ต่อ" คร�
 
 ## 4. Verification
 1. `cargo test` 17/17 + `cargo check` + `npm run build` + `npx eslint .`
-2. `tauri dev` + computer-use กับ **orbit repo เอง** (มีทั้ง folder ลึก `src/screens/...`): expand/collapse โฟลเดอร์, เปิด `src/App.tsx`, แก้ข้อความ, Ctrl+S → ตรวจไฟล์บนดิสก์ด้วย `grep`, สลับไป Working changes เห็นไฟล์ M + dot บน tree, revert การแก้ไข (`git checkout`… unborn repo → `git clean` ไม่ได้เพราะ tracked? ใช้ scratch repo แทน: ทำ E2E การแก้+save บน orbit repo ไฟล์ที่ commit ไม่มี → แก้ไฟล์ untracked = save ทับ ไม่กระทบ — ปลอดภัย และทดสอบ dirty/revert บน scratch)
+2. `tauri dev` + computer-use กับ **pigry repo เอง** (มีทั้ง folder ลึก `src/screens/...`): expand/collapse โฟลเดอร์, เปิด `src/App.tsx`, แก้ข้อความ, Ctrl+S → ตรวจไฟล์บนดิสก์ด้วย `grep`, สลับไป Working changes เห็นไฟล์ M + dot บน tree, revert การแก้ไข (`git checkout`… unborn repo → `git clean` ไม่ได้เพราะ tracked? ใช้ scratch repo แทน: ทำ E2E การแก้+save บน pigry repo ไฟล์ที่ commit ไม่มี → แก้ไฟล์ untracked = save ทับ ไม่กระทบ — ปลอดภัย และทดสอบ dirty/revert บน scratch)
 3. ภาพ final ให้ผู้ใช้ดูที่หน้าต่างแอป
 
 ## นอกขอบเขต (M5+)

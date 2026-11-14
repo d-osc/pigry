@@ -1,7 +1,6 @@
 mod ai;
 mod browser;
 mod busybox;
-mod containers;
 mod gh;
 mod busybox3;
 mod busybox_extra;
@@ -30,6 +29,14 @@ use watcher::FileWatcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Dev builds only: expose WebView2's Chrome DevTools Protocol on a local
+    // port so the agent's E2E tooling can attach to the panel pages
+    // (network capture, live screenshots, PDF, file upload). Release builds
+    // never set this — no debugging surface ships to users.
+    #[cfg(debug_assertions)]
+    unsafe {
+        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--remote-debugging-port=9222");
+    }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -47,6 +54,23 @@ pub fn run() {
             let file_watcher = watcher::spawn(handle);
             app.manage(FileWatcherHolder {
                 watcher: Mutex::new(file_watcher),
+            });
+
+            // Interactive window drag: WebView2 child webviews track a moving
+            // window late, so they visibly trail behind. Re-apply their stored
+            // bounds on every Moved event (throttled to ~30 fps).
+            let handle = app.handle().clone();
+            let main_window = app.get_window("main").ok_or("main window not found")?;
+            let last_move = std::sync::Mutex::new(std::time::Instant::now()
+                - std::time::Duration::from_secs(1));
+            main_window.on_window_event(move |event| {
+                if let tauri::WindowEvent::Moved(_) = event {
+                    let mut last = last_move.lock().expect("drag throttle poisoned");
+                    if last.elapsed() >= std::time::Duration::from_millis(33) {
+                        *last = std::time::Instant::now();
+                        browser::reposition_all(&handle);
+                    }
+                }
             });
             Ok(())
         })
@@ -110,15 +134,10 @@ pub fn run() {
             browser::browser_set_visible,
             browser::browser_navigate,
             browser::browser_close,
-            containers::container_list,
-            containers::container_create,
-            containers::container_start,
-            containers::container_stop,
-            containers::container_remove,
-            containers::container_logs,
-            containers::compose_services,
-            containers::compose_service_run,
-            containers::compose_service_start,
+            browser::browser_eval,
+            browser::browser_url,
+            commands::browser_cdp,
+            browser::browser_prune,
             commands::gh_code_scanning_alerts,
             commands::gh_code_alert_dismiss,
             commands::gh_dependabot_alerts,

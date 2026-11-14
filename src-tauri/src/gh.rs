@@ -1883,7 +1883,7 @@ pub fn run_download_artifact(repo_path: &Path, run_id: u64, name: &str) -> Resul
         .chars()
         .map(|c| if c == '/' || c == '\\' { '_' } else { c })
         .collect();
-    let dest = std::env::temp_dir().join(format!("orbit-artifacts/run-{run_id}/{safe_name}"));
+    let dest = std::env::temp_dir().join(format!("pigry-artifacts/run-{run_id}/{safe_name}"));
     std::fs::create_dir_all(&dest).map_err(|e| format!("failed to create download folder: {e}"))?;
     let dest_s = dest.to_string_lossy().to_string();
     let output = gh_command()

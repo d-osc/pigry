@@ -599,3 +599,16 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Push status: cloud = synced to a remote, cloud-off = local only */
+.commit-row__pushed {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.commit-row__pushed--on {
+  color: var(--accent);
+}

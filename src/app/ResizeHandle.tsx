@@ -7,10 +7,12 @@ interface ResizeHandleProps {
   /** Called with the pointer delta since the previous move event. */
   onDelta: (deltaX: number, deltaY: number) => void;
   label: string;
+  /** Double-click handler — conventionally resets the pane size. */
+  onReset?: () => void;
 }
 
 /** Draggable splitter between layout panes. */
-export function ResizeHandle({ orientation, onDelta, label }: ResizeHandleProps) {
+export function ResizeHandle({ orientation, onDelta, label, onReset }: ResizeHandleProps) {
   const last = useRef<{ x: number; y: number } | null>(null);
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -43,6 +45,7 @@ export function ResizeHandle({ orientation, onDelta, label }: ResizeHandleProps)
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onDoubleClick={onReset}
       role="separator"
       aria-orientation={orientation === 'v' ? 'vertical' : 'horizontal'}
       aria-label={label}

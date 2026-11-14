@@ -13,7 +13,7 @@ import { migrateLegacyStorage } from './lib/storageMigration';
 import { purgeSeededDefaults } from './lib/agentExtras';
 import App from './App';
 
-// Move persisted orbit:* settings to their pigry:* names before anything
+// Move persisted pigry:* settings to their pigry:* names before anything
 // reads them, then make sure every workspace menu has its default agent.
 migrateLegacyStorage();
 // Tiers 1-2 are hard-coded; strip the old seeded copies from storage.

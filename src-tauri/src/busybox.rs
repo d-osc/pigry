@@ -181,7 +181,7 @@ pub fn run(cwd: &Path, root: &Path, name: &str, args: &[String]) -> BusyResult {
             {}
         }
         "uname" => {
-            ctx.writeln("Orbit terminal (BusyBox-compatible) windows x86_64");
+            ctx.writeln("Pigry terminal (BusyBox-compatible) windows x86_64");
             {}
         }
         "seq" => {

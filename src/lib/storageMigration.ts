@@ -1,8 +1,8 @@
-/** One-time localStorage migration — the app was renamed from orbit to
- * pigry, so every persisted `orbit:*` key (settings, agents, chats,
+/** One-time localStorage migration — the app was renamed from pigry to
+ * pigry, so every persisted `pigry:*` key (settings, agents, chats,
  * providers, tools, theme, …) moves to its `pigry:*` counterpart.
  * Old entries are kept untouched as a backup; new writes go to pigry keys. */
-const LEGACY_PREFIX = 'orbit:';
+const LEGACY_PREFIX = 'pigry:';
 const NEW_PREFIX = 'pigry:';
 
 export function migrateLegacyStorage(): void {

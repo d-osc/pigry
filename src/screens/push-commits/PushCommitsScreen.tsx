@@ -3,7 +3,7 @@
  * plus the push action itself. The list sorts by date (toggle) and reveals
  * older commits in batches. */
 import { useEffect, useMemo, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import { ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, CloudUpload } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
@@ -15,6 +15,7 @@ import {
   type PushPreviewCommitFile,
 } from '../../lib/tauriClient';
 import { relativeTime } from '../../lib/relativeTime';
+import { shareCommitWithChat } from '../../lib/chatBridge';
 import '../../editor/monacoSetup';
 import './PushCommitsScreen.css';
 
@@ -251,7 +252,10 @@ export function PushCommitsScreen() {
                     type="button"
                     className={`push__commit-row${open ? ' is-open' : ''}`}
                     title="Show commit detail"
-                    onClick={() => setExpandedCommit(open ? null : commit.oid)}
+                    onClick={() => {
+                      setExpandedCommit(open ? null : commit.oid);
+                      if (!open) shareCommitWithChat({ oid: commit.oid, summary: commit.summary });
+                    }}
                   >
                     <span className="push__commit-sha">{commit.shortOid}</span>
                     <span className="push__commit-summary">{commit.summary}</span>
@@ -315,12 +319,13 @@ export function PushCommitsScreen() {
                                           </button>
                                         </div>
                                       </div>
-                                      <DiffEditor
+                                      <ChatAwareDiffEditor
+                                        chatMeta={{ path: file.path, source: 'Push Commits' }}
                                         key={`${commit.oid}:${file.path}`}
                                         original={versions?.before ?? ''}
                                         modified={versions?.after ?? ''}
                                         language={versions?.language ?? 'plaintext'}
-                                        theme="orbit-dark"
+                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

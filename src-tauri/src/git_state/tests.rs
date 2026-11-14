@@ -8,13 +8,13 @@ use git2::{Repository, Signature};
 use super::*;
 
 fn scratch_repo(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("orbit-test-{}-{}", name, std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-test-{}-{}", name, std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let repo = Repository::init(&dir).unwrap();
     let mut config = repo.config().unwrap();
     config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@orbit.dev").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
     // The Windows system gitconfig sets core.autocrlf=true, which makes
     // checkout rewrite LF fixtures to CRLF — stash/merge then compare raw
     // bytes and report phantom conflicts. Pin LF for determinism.
@@ -37,7 +37,7 @@ fn commit_all(repo_path: &PathBuf, message: &str) {
     index.write().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = Signature::now("Test User", "test@pigry.dev").unwrap();
     let parent = repo.head().ok().map(|head| head.peel_to_commit().unwrap());
     let parents: Vec<&git2::Commit> = parent.as_ref().map(|c| vec![c]).unwrap_or_default();
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parents).unwrap();
@@ -209,12 +209,12 @@ fn stash_clears_changes_and_is_listed() {
     commit_all(&dir, "c1");
     write(&dir, "x.txt", "1\n2\n");
 
-    stash(&dir, Some("WIP: orbit test")).unwrap();
+    stash(&dir, Some("WIP: pigry test")).unwrap();
 
     let state = build_state(&dir).unwrap();
     assert!(state.files.is_empty(), "stash should clean the worktree");
     assert_eq!(state.stashes.len(), 1);
-    assert!(state.stashes[0].message.contains("WIP: orbit test"));
+    assert!(state.stashes[0].message.contains("WIP: pigry test"));
 
     let _ = fs::remove_dir_all(&dir);
 }
@@ -228,7 +228,7 @@ fn identity_falls_back_to_folder_names() {
     let state = build_state(&dir).unwrap();
     // No remote configured: derive the name from the folder and mark Local.
     assert!(!state.name.is_empty());
-    assert!(state.name.starts_with("orbit-test-identity"));
+    assert!(state.name.starts_with("pigry-test-identity"));
     assert_eq!(state.visibility.as_deref(), Some("Local"));
 
     let _ = fs::remove_dir_all(&dir);
@@ -237,7 +237,7 @@ fn identity_falls_back_to_folder_names() {
 #[test]
 fn unborn_branch_without_identity_still_builds_state() {
     // Fresh init: no commits, no user.name/user.email.
-    let dir = std::env::temp_dir().join(format!("orbit-test-fresh-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-test-fresh-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
@@ -307,7 +307,7 @@ fn commit_history_merge_creates_second_lane() {
     let repo = Repository::open(&dir).unwrap();
     let base = repo.head().unwrap().peel_to_commit().unwrap();
     repo.branch("feature", &base, false).unwrap();
-    let sig = Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = Signature::now("Test User", "test@pigry.dev").unwrap();
     let mut index = repo.index().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
@@ -363,7 +363,7 @@ fn commit_history_remote_toggle() {
     // A commit only reachable via a remote-tracking ref.
     let repo = Repository::open(&dir).unwrap();
     let head = repo.head().unwrap().peel_to_commit().unwrap();
-    let sig = Signature::now("Test User", "test@orbit.dev").unwrap();
+    let sig = Signature::now("Test User", "test@pigry.dev").unwrap();
     let mut index = repo.index().unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
@@ -515,7 +515,7 @@ fn read_file_at_commit_returns_historical_blob() {
 
 #[test]
 fn network_push_pull_flow_with_local_bare_remote() {
-    let base = std::env::temp_dir().join(format!("orbit-net-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("pigry-net-{}", std::process::id()));
     let _ = fs::remove_dir_all(&base);
     fs::create_dir_all(&base).unwrap();
     let origin = base.join("origin.git");
@@ -579,7 +579,7 @@ fn run_cli(dir: &PathBuf, args: &[&str]) -> std::process::Output {
 
 #[test]
 fn network_push_sets_upstream_on_first_push() {
-    let base = std::env::temp_dir().join(format!("orbit-net-up-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("pigry-net-up-{}", std::process::id()));
     let _ = fs::remove_dir_all(&base);
     fs::create_dir_all(&base).unwrap();
     let origin = base.join("origin.git");
@@ -1275,7 +1275,7 @@ fn worktrees_list_branches_and_current_flag() {
     write(&dir, "a.txt", "base\n");
     commit_all(&dir, "base");
     let base = dir.clone();
-    let wt_path = dir.parent().unwrap().join(format!("orbit-wt-{}", std::process::id()));
+    let wt_path = dir.parent().unwrap().join(format!("pigry-wt-{}", std::process::id()));
     let _ = fs::remove_dir_all(&wt_path);
 
     let out = std::process::Command::new("git")
@@ -1291,7 +1291,7 @@ fn worktrees_list_branches_and_current_flag() {
     assert_eq!(main.name, dir.file_name().unwrap().to_string_lossy());
     let linked = trees.iter().find(|t| !t.is_current).unwrap();
     assert_eq!(linked.branch, "feature-wt");
-    assert!(linked.path.ends_with(&format!("orbit-wt-{}", std::process::id())));
+    assert!(linked.path.ends_with(&format!("pigry-wt-{}", std::process::id())));
 
     // Opened from INSIDE the linked worktree: it becomes the current one.
     let from_linked = list_worktrees(&wt_path, wt_path.to_str().unwrap()).unwrap();
@@ -1313,7 +1313,7 @@ fn submodules_list_empty_when_none() {
     assert!(list_submodules(&dir).unwrap().is_empty());
 
     // Add a real submodule from a local sibling repo via the CLI.
-    let inner = dir.parent().unwrap().join(format!("orbit-sub-inner-{}", std::process::id()));
+    let inner = dir.parent().unwrap().join(format!("pigry-sub-inner-{}", std::process::id()));
     let _ = fs::remove_dir_all(&inner);
     fs::create_dir_all(&inner).unwrap();
     let _ = Repository::init(&inner);
@@ -1323,9 +1323,9 @@ fn submodules_list_empty_when_none() {
             .arg("-C").arg(&inner)
             .args(args)
             .env("GIT_AUTHOR_NAME", "Test User")
-            .env("GIT_AUTHOR_EMAIL", "test@orbit.dev")
+            .env("GIT_AUTHOR_EMAIL", "test@pigry.dev")
             .env("GIT_COMMITTER_NAME", "Test User")
-            .env("GIT_COMMITTER_EMAIL", "test@orbit.dev")
+            .env("GIT_COMMITTER_EMAIL", "test@pigry.dev")
             .output()
             .expect("git CLI")
     };
@@ -1336,9 +1336,9 @@ fn submodules_list_empty_when_none() {
             .arg("-C").arg(&dir)
             .args(args)
             .env("GIT_AUTHOR_NAME", "Test User")
-            .env("GIT_AUTHOR_EMAIL", "test@orbit.dev")
+            .env("GIT_AUTHOR_EMAIL", "test@pigry.dev")
             .env("GIT_COMMITTER_NAME", "Test User")
-            .env("GIT_COMMITTER_EMAIL", "test@orbit.dev")
+            .env("GIT_COMMITTER_EMAIL", "test@pigry.dev")
             .output()
             .expect("git CLI")
     };

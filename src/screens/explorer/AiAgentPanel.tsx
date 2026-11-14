@@ -10,6 +10,7 @@ import {
   Code,
   FileText,
   Globe,
+  GitCommitHorizontal,
   Heading2,
   History,
   ImageIcon,
@@ -32,14 +33,17 @@ import {
   Wrench,
   X,
 } from 'lucide-react';
-import { aiChat, cliAgentRun, cliDetect, getFileTree, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { aiChat,
+  openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
-import { effortPayloadFragment, providerStatus } from '../../lib/aiProviders';
+import { effortPayloadFragment, providerStatus, resolveContextWindow } from '../../lib/aiProviders';
+import { CtxRing } from '../../lib/CtxRing';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
 import { listSkills, getSkillContent } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
-import { browserDevtools, openInBrowser, type DevtoolsAction } from '../../lib/tauriClient';
+import { browserDevtools, type DevtoolsAction } from '../../lib/tauriClient';
+import { normalizeUrl } from '../../lib/browserWebview';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 import { readPdfText } from '../../lib/tauriClient';
@@ -517,6 +521,54 @@ const AGENT_LOOKUP_TOOL: ToolSpec = {
 /** Web tools — search + headless browser (backend curls/launches, no CORS). */
 const WEB_TOOLS: ToolSpec[] = [
   {
+    id: 'browser_panel',
+    name: 'browser_panel',
+    description:
+      'Open pages in the user’s EXTERNAL browser (the OS default browser — the user sees pages there; that browser cannot be scripted). Actions: "navigate" (default — open a URL; Google search via https://www.google.com/search?q=<query>), "read" (open it AND return the rendered page text via the playwright reader — open+summarize in one step), "new_tab" (open another URL in a new tab), "eval" (run JavaScript on the agent’s headless automation copy — see browser_e2e), "list_tabs" (note: the external browser manages its own tabs).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['navigate', 'read', 'eval', 'new_tab', 'list_tabs'],
+          description: 'The action to run (default "navigate")',
+        },
+        url: { type: 'string', description: 'URL — for "navigate"/"read" (required) and "new_tab"' },
+        wait_ms: { type: 'number', description: 'For "read": how long to let the page run before reading (ms, default 1200)' },
+        js: { type: 'string', description: 'For "eval": JavaScript to run on the headless automation page' },
+      },
+    },
+    run: async (input) => {
+      const action = String(input.action ?? 'navigate');
+      const url = input.url ? String(input.url) : undefined;
+      if (action === 'read') {
+        if (!url) return 'error: read needs a url';
+        const target = normalizeUrl(url);
+        await openInBrowser(target);
+        const page = await browserPage(target, Number(input.wait_ms ?? 1200) || undefined);
+        return 'Opened ' + (page.url || target) + ' in your default browser.\n\ntitle: ' + page.title + '\n\n' + page.text;
+      }
+      if (action === 'eval') {
+        const js = String(input.js ?? '');
+        if (!js) return 'error: eval needs a js snippet';
+        return browserDevtools('eval', { js });
+      }
+      if (action === 'new_tab') {
+        if (!url) return 'error: new_tab needs a url';
+        const target = normalizeUrl(url);
+        await openInBrowser(target);
+        return 'Opened ' + target + ' in a new tab of your default browser.';
+      }
+      if (action === 'list_tabs') {
+        return 'The browser runs externally — it manages its own tabs; each navigate/new_tab opens one there.';
+      }
+      if (!url) return 'error: navigate needs a url';
+      const target = normalizeUrl(url);
+      await openInBrowser(target);
+      return 'Opened ' + target + ' in your default browser.';
+    },
+  },
+  {
     id: 'web_search',
     name: 'web_search',
     description:
@@ -539,7 +591,7 @@ const WEB_TOOLS: ToolSpec[] = [
     id: 'playwright',
     name: 'playwright',
     description:
-      'Open a URL in headless Edge/Chrome and read the rendered page text (JavaScript already executed). Use after web_search to read a specific result.',
+      'Open a URL in headless Edge/Chrome and read the rendered page text (JavaScript already executed). INVISIBLE to the user — never use it to "open" a page the user asked to see (call browser_panel for that). Use after web_search or browser_panel to read/summarize a specific page.',
     input_schema: {
       type: 'object',
       properties: {
@@ -551,23 +603,6 @@ const WEB_TOOLS: ToolSpec[] = [
     run: async (input) => {
       const page = await browserPage(String(input.url ?? ''), Number(input.wait_ms ?? 1200) || undefined);
       return `title: ${page.title}\nurl: ${page.url}\n\n${page.text}`;
-    },
-  },
-  {
-    id: 'browser',
-    name: 'browser',
-    description:
-      'Open a URL in the user’s visible default browser window (the user can see and interact with the page). Use this to SHOW results/pages to the user — read content yourself with playwright instead.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        url: { type: 'string', description: 'The http(s) URL to open' },
-      },
-      required: ['url'],
-    },
-    run: async (input) => {
-      const url = String(input.url ?? '');
-      return openInBrowser(url);
     },
   },
 ];
@@ -605,6 +640,376 @@ const DEVTOOLS_TOOLS: ToolSpec[] = [
   },
 ];
 
+/** E2E testing against the page the in-app browser panel currently shows.
+ * Results come back through the title channel (Tauri eval has no return
+ * value: the page writes §-prefixed JSON into document.title, the backend
+ * reads it back). */
+/** E2E testing through the agent's headless automation session — the user
+ * watches pages in their EXTERNAL browser; that browser cannot be scripted,
+ * so interactive steps run on the headless copy instead. */
+const E2E_TOOLS: ToolSpec[] = [
+  {
+    id: 'browser_e2e',
+    name: 'browser_e2e',
+    description:
+      'Drive and E2E-test a page on the agent’s headless automation session (the user watches pages in their external browser — that one cannot be scripted). Workflow: goto → snapshot (assigns element refs e1,e2,…) → click/type/fill_form/select_option/press_key using the ref or a CSS selector → assert_url/assert_title/assert_text/assert_element_visible/assert_value → text/evaluate/wait_for/console_messages/storage/cookies/network_requests/screenshot. Returns PASS/FAIL and live page data.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'goto', 'back', 'forward', 'reload', 'snapshot', 'find',
+            'click', 'type', 'select_option', 'press_key', 'fill_form',
+            'scroll',
+            'assert_url', 'assert_title', 'assert_text', 'assert_element_visible', 'assert_value',
+            'text', 'evaluate', 'wait_for', 'console_messages', 'storage', 'cookies',
+            'network_requests', 'screenshot',
+          ],
+          description: 'The browser step to run (default "goto")',
+        },
+        url: { type: 'string', description: 'For "goto": http(s) URL to open' },
+        selector: { type: 'string', description: 'Target element: ref from snapshot (e.g. "e3") or CSS selector' },
+        value: { type: 'string', description: 'For "type"/"storage set"/"assert_value": the text/value' },
+        text: { type: 'string', description: 'For "type": text (alias of value); for "assert_text"/"wait_for": the text' },
+        contains: { type: 'string', description: 'For "assert_url"/"assert_title"/"assert_text"/"find": substring that must appear' },
+        values: { type: 'string', description: 'For "select_option": comma-separated option values/texts' },
+        fields: { type: 'string', description: 'For "fill_form": JSON array [{selector,value}] filled in one pass' },
+        key: { type: 'string', description: 'For "press_key": key name, e.g. "Enter", "Tab", "Escape"' },
+        js: { type: 'string', description: 'For "evaluate": JavaScript to run inside the page; its return value comes back' },
+        kind: { type: 'string', enum: ['local', 'session'], description: 'For "storage": which store (default local)' },
+        op: { type: 'string', enum: ['list', 'get', 'set', 'delete', 'clear'], description: 'For "storage": operation (default list)' },
+        submit: { type: 'boolean', description: 'For "type": press Enter / submit the form after typing' },
+        wait_ms: { type: 'number', description: 'Settle time for navigation actions / fixed wait (ms, default 1500)' },
+        max: { type: 'number', description: 'Truncate returned page text to this many chars (default 3000)' },
+        network_idle: { type: 'boolean', description: 'For "wait_for": wait until the page has no new network activity' },
+        idle_ms: { type: 'number', description: 'For wait_for network_idle: quiet period that counts as idle (ms, default 500)' },
+      },
+      required: ['action'],
+    },
+    run: async (input) => {
+      const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+      const action = String(input.action ?? 'goto');
+      const wait = Number.isFinite(Number(input.wait_ms)) ? Number(input.wait_ms) : 1500;
+      const max = Number.isFinite(Number(input.max)) ? Number(input.max) : 3000;
+      const resolveSel = (target: string) =>
+        /^e\d+$/.test(target) ? '[data-pigry-ref="' + target + '"]' : target;
+      const evalJs = async (js: string) =>
+        browserDevtools('eval', { js: '(function(){' + js + '})()' });
+      const read = async (js: string, readMax?: number) => {
+        try {
+          const raw = await evalJs(js);
+          return { ok: true, message: (raw || '').slice(0, readMax ?? max) };
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : String(error) };
+        }
+      };
+      const navInfo = () => read('return document.title + " | " + location.href;', 300);
+
+      // ---- navigation family --------------------------------------------
+      if (action === 'goto') {
+        const url = normalizeUrl(String(input.url ?? ''));
+        if (!url) return 'error: goto needs a url';
+        const summary = await browserDevtools('open', { url, waitMs: wait });
+        return 'GOTO ' + url + '\n' + summary;
+      }
+      if (action === 'back' || action === 'forward' || action === 'reload') {
+        const js = action === 'reload' ? 'location.reload();' : 'history.' + action + '();';
+        await evalJs(js);
+        await sleep(wait);
+        const res = await navInfo();
+        return (action.toUpperCase() + ' done. ' + (res.ok ? res.message : '')).trim();
+      }
+
+      // ---- snapshot / find -------------------------------------------------
+      const SNAPSHOT_CORE =
+        "var sels='a,button,input,textarea,select,[role=button],[role=link],[role=textbox],[role=checkbox],[role=combobox],[role=radio],[onclick],[contenteditable=true]';" +
+        'var out=[];var n=0;document.querySelectorAll(sels).forEach(function(el){var r=el.getBoundingClientRect();' +
+        'if(r.width<1||r.height<1||out.length>=80)return;var ref="e"+(++n);el.setAttribute("data-pigry-ref",ref);' +
+        "var lb=(el.getAttribute('aria-label')||el.innerText||el.value||el.getAttribute('placeholder')||el.getAttribute('title')||'');" +
+        "lb=lb.trim().replace(/\\s+/g,' ').slice(0,60);var tag=el.tagName.toLowerCase();var ty=el.getAttribute('type');" +
+        "out.push(ref+' <'+tag+(ty?' type='+ty:'')+'>'+(lb?' \"'+lb+'\"':'')+(tag==='a'&&el.getAttribute('href')?' href='+el.getAttribute('href').slice(0,60):''));});return out;";
+      if (action === 'snapshot' || action === 'find') {
+        const needle = action === 'find' ? String(input.contains ?? input.text ?? '').toLowerCase() : '';
+        if (action === 'find' && !needle) return 'error: find needs a contains string';
+        const js =
+          SNAPSHOT_CORE +
+          'var f=' + JSON.stringify(needle) + ';' +
+          (action === 'find'
+            ? 'out=out.filter(function(l){return l.toLowerCase().indexOf(f)!==-1;});'
+            : '') +
+          'return document.title+" | "+location.href+"\\n"+(out.length?out.join("\\n"):"(no matching interactive elements)");';
+        const res = await read(js, max);
+        return res.ok
+          ? 'SNAPSHOT (interactive elements — use the refs as the selector):\n' + res.message
+          : 'FAIL: ' + action + ' — ' + res.message;
+      }
+
+      // ---- interactions ----------------------------------------------------
+      if (action === 'click') {
+        const sel = resolveSel(String(input.selector ?? ''));
+        if (!sel) return 'error: click needs a selector (run snapshot first)';
+        const dbl = input.double_click === true;
+        const res = await read(
+          'var el=document.querySelector(' + JSON.stringify(sel) + ');' +
+          'if(!el)throw new Error("no element " + ' + JSON.stringify(sel) + ');' +
+          'el.scrollIntoView({block:"center"});' +
+          (dbl
+            ? 'el.dispatchEvent(new MouseEvent("dblclick",{bubbles:true}));'
+            : 'el.click();') +
+          'return "clicked";',
+        );
+        return res.ok ? 'CLICK ' + sel + ' — ' + res.message : 'FAIL: click — ' + res.message;
+      }
+      if (action === 'type') {
+        const sel = resolveSel(String(input.selector ?? ''));
+        if (!sel) return 'error: type needs a selector';
+        const value = String(input.value ?? input.text ?? '');
+        if (!value) return 'error: type needs a value/text';
+        const submit = input.submit === true;
+        const res = await read(
+          'var el=document.querySelector(' + JSON.stringify(sel) + ');' +
+          'if(!el)throw new Error("no element");el.focus();el.value=' + JSON.stringify(value) + ';' +
+          'el.dispatchEvent(new Event("input",{bubbles:true}));' +
+          (submit
+            ? 'if(el.form){el.form.requestSubmit?el.form.requestSubmit():el.form.submit();}else{el.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}));}' +
+              'return "typed+submitted";'
+            : 'return "typed";'),
+          300,
+        );
+        return res.ok ? 'TYPE ' + sel + ' — ' + res.message : 'FAIL: type — ' + res.message;
+      }
+      if (action === 'select_option') {
+        const sel = resolveSel(String(input.selector ?? ''));
+        const values = String(input.values ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+        if (!sel || values.length === 0) return 'error: select_option needs a selector and values';
+        const res = await read(
+          'var el=document.querySelector(' + JSON.stringify(sel) + ');' +
+          'if(!el)throw new Error("no element");' +
+          'var vals=' + JSON.stringify(values) + ';' +
+          'Array.prototype.forEach.call(el.options,function(o){o.selected=vals.indexOf(o.value)!==-1||vals.indexOf(o.text)!==-1;});' +
+          'el.dispatchEvent(new Event("change",{bubbles:true}));return "selected";',
+          300,
+        );
+        return res.ok ? 'SELECT ' + sel + ' — ' + res.message : 'FAIL: select_option — ' + res.message;
+      }
+      if (action === 'press_key') {
+        const key = String(input.key ?? 'Enter');
+        const res = await read(
+          'var el=document.activeElement||document.body;' +
+          'el.dispatchEvent(new KeyboardEvent("keydown",{key:' + JSON.stringify(key) + ',bubbles:true}));' +
+          'el.dispatchEvent(new KeyboardEvent("keyup",{key:' + JSON.stringify(key) + ',bubbles:true}));' +
+          'return "pressed ' + key + '";',
+          300,
+        );
+        return res.ok ? res.message : 'FAIL: press_key — ' + res.message;
+      }
+      if (action === 'fill_form') {
+        const fields = String(input.fields ?? '');
+        let parsedFields: Array<{ selector: string; value: string }> = [];
+        try { parsedFields = JSON.parse(fields || '[]'); } catch { return 'error: fill_form needs fields as JSON [{selector,value}]'; }
+        if (!Array.isArray(parsedFields) || parsedFields.length === 0) return 'error: fill_form needs fields as JSON [{selector,value}]';
+        const res = await read(
+          'var fields=' + JSON.stringify(parsedFields) + ';' +
+          'var done=0;fields.forEach(function(f){var el=document.querySelector(f.selector);if(!el)return;' +
+          'el.focus();el.value=f.value;el.dispatchEvent(new Event("input",{bubbles:true}));done++;});' +
+          'return "filled "+done+"/"+fields.length;',
+          300,
+        );
+        return res.ok ? 'FILL_FORM — ' + res.message : 'FAIL: fill_form — ' + res.message;
+      }
+      if (action === 'scroll') {
+        const x = Number.isFinite(Number(input.x)) ? Number(input.x) : 0;
+        const y = Number.isFinite(Number(input.y)) ? Number(input.y) : 600;
+        await evalJs('window.scrollBy(' + x + ', ' + y + ');');
+        return 'SCROLL by ' + x + ', ' + y;
+      }
+
+      // ---- asserts ---------------------------------------------------------
+      if (action === 'assert_url') {
+        const needle = String(input.contains ?? input.url ?? '').toLowerCase();
+        if (!needle) return 'error: assert_url needs a contains substring';
+        const res = await read('return location.href.toLowerCase();', 500);
+        return res.ok && res.message.indexOf(needle) !== -1
+          ? 'PASS: url contains ' + needle
+          : 'FAIL: url is ' + (res.ok ? res.message : res.message) + ' — expected to contain ' + needle;
+      }
+      if (action === 'assert_title') {
+        const needle = String(input.contains ?? '').toLowerCase();
+        const res = await read('return document.title.toLowerCase();', 300);
+        return res.ok && (!needle || res.message.indexOf(needle) !== -1)
+          ? 'PASS: title is ' + res.message
+          : 'FAIL: title is ' + res.message + (needle ? ' — expected to contain ' + needle : '');
+      }
+      if (action === 'assert_text') {
+        const needle = String(input.contains ?? input.text ?? '');
+        if (!needle) return 'error: assert_text needs a contains string';
+        const res = await read('return document.body.innerText;', max);
+        return res.ok && res.message.indexOf(needle) !== -1
+          ? 'PASS: page text contains ' + needle
+          : 'FAIL: page text does not contain ' + needle;
+      }
+      if (action === 'assert_element_visible') {
+        const sel = resolveSel(String(input.selector ?? ''));
+        if (!sel) return 'error: assert_element_visible needs a selector';
+        const res = await read(
+          'var el=document.querySelector(' + JSON.stringify(sel) + ');' +
+          'if(!el)throw new Error("no element");' +
+          'var r=el.getBoundingClientRect();' +
+          'return (r.width>0&&r.height>0&&el.offsetParent!==null)?"visible":"hidden";',
+          200,
+        );
+        return res.ok && res.message === 'visible'
+          ? 'PASS: ' + sel + ' is visible'
+          : 'FAIL: ' + sel + ' is not visible';
+      }
+      if (action === 'assert_value') {
+        const sel = resolveSel(String(input.selector ?? ''));
+        const expected = String(input.value ?? '');
+        const res = await read(
+          'var el=document.querySelector(' + JSON.stringify(sel) + ');' +
+          'if(!el)throw new Error("no element");return String(el.value);',
+          300,
+        );
+        return res.ok && res.message === expected
+          ? 'PASS: value is ' + expected
+          : 'FAIL: value is ' + (res.ok ? res.message : res.message) + ' — expected ' + expected;
+      }
+
+      // ---- readers ---------------------------------------------------------
+      if (action === 'text') {
+        const res = await read('return document.body ? document.body.innerText : "";', max);
+        return res.ok ? res.message : 'FAIL: text — ' + res.message;
+      }
+      if (action === 'evaluate') {
+        const js = String(input.js ?? '');
+        if (!js) return 'error: evaluate needs a js snippet';
+        try {
+          const raw = await evalJs(js);
+          return (raw || '(no result)').slice(0, max);
+        } catch (error) {
+          return 'error: ' + (error instanceof Error ? error.message : String(error));
+        }
+      }
+      if (action === 'wait_for') {
+        const needle = String(input.contains ?? input.text ?? '');
+        if (!needle) return 'error: wait_for needs a contains string';
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const res = await read('return document.body ? document.body.innerText : "";', max);
+          if (res.ok && res.message.indexOf(needle) !== -1) {
+            return 'PASS: page text contains ' + needle;
+          }
+          await sleep(Number(input.idle_ms ?? 500) + 400);
+        }
+        return 'FAIL: page text does not contain ' + needle + ' after waiting';
+      }
+      if (action === 'console_messages') {
+        return browserDevtools('console', { waitMs: 60 });
+      }
+
+      // ---- storage / cookies ------------------------------------------------
+      if (action === 'storage') {
+        const kind = String(input.kind ?? 'local') === 'session' ? 'sessionStorage' : 'localStorage';
+        const op = String(input.op ?? 'list');
+        const store = kind === 'sessionStorage' ? 'sessionStorage' : 'localStorage';
+        const key = String(input.value ?? '');
+        const js =
+          op === 'clear' ? store + '.clear();return "cleared";' :
+          op === 'set' ? store + '.setItem(' + JSON.stringify(key) + ',' + JSON.stringify(String(input.text ?? '')) + ');return "set";' :
+          op === 'delete' ? store + '.removeItem(' + JSON.stringify(key) + ');return "deleted";' :
+          op === 'get' ? 'return ' + store + '.getItem(' + JSON.stringify(key) + ') || "";' :
+          'return JSON.stringify(' + store + ')';
+        const res = await read(js, max);
+        return res.ok ? kind + ' ' + op + ': ' + res.message : 'FAIL: storage — ' + res.message;
+      }
+      if (action === 'cookies') {
+        const res = await read('return document.cookie || "(no cookies for this origin)";', max);
+        return res.ok ? 'cookies (this origin only): ' + res.message : 'FAIL: cookies — ' + res.message;
+      }
+
+      // ---- network / screenshot ---------------------------------------------
+      if (action === 'network_requests') {
+        const raw = await browserDevtools('network', { waitMs: 60 });
+        let rows: Array<{ method: string; url: string; status: number; type?: string; size?: number; failed?: boolean }> = [];
+        try { rows = JSON.parse(raw || '[]'); } catch { rows = []; }
+        if (!Array.isArray(rows) || rows.length === 0) return '(no network requests captured — goto a page first)';
+        return rows
+          .map((n, i) =>
+            (i + 1) + '. [' + (n.failed ? 'FAIL' : n.status || '…') + '] ' + n.method + ' ' + n.url +
+            (n.type ? '  (' + n.type + ')' : '') + (n.size ? '  ' + Math.round(n.size) + 'B' : ''),
+          )
+          .join('\n');
+      }
+      if (action === 'screenshot') {
+        return browserDevtools('screenshot');
+      }
+
+      return 'error: unknown browser_e2e action "' + action + '"';
+    },
+  },
+];
+
+
+/** Thin, self-describing tools for the high-value CDP extras — dedicated
+ * names so models reliably pick them (enum actions get missed). Each
+ * targets the page the browser panel currently shows. */
+const BROWSER_EXTRAS: ToolSpec[] = [
+  {
+    id: 'browser_screenshot',
+    name: 'browser_screenshot',
+    description:
+      'Screenshot the page on the agent’s headless automation session and save it as a PNG. Returns the file path. Run browser_e2e action "goto" first so the session shows the target page.',
+    input_schema: { type: 'object', properties: {} },
+    run: async () => {
+      try {
+        const path = await browserDevtools('screenshot');
+        return 'PASS: screenshot saved to: ' + path;
+      } catch (error) {
+        return 'FAIL: screenshot — ' + (error instanceof Error ? error.message : String(error));
+      }
+    },
+  },
+  {
+    id: 'browser_pdf',
+    name: 'browser_pdf',
+    description:
+      'Not supported in the external-browser mode — the agent’s headless session cannot print PDFs. Use browser_screenshot instead, or ask the user to print from their browser.',
+    input_schema: { type: 'object', properties: {} },
+    run: async () => {
+      return 'FAIL: pdf — not supported in the external-browser mode. Use browser_screenshot instead.';
+    },
+  },
+  {
+    id: 'browser_network_requests',
+    name: 'browser_network_requests',
+    description:
+      'List the network requests (method, status, URL, type, size) captured on the agent’s headless automation session since the last goto. Recording starts at the first browser_e2e/browser_devtools call. Pass `contains` to filter by URL keyword.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contains: { type: 'string', description: 'Only show requests whose URL contains this substring' },
+      },
+    },
+    run: async (input) => {
+      try {
+        const raw = await browserDevtools('network', { waitMs: 60 });
+        let rows = [];
+        try { rows = JSON.parse(raw || '[]'); } catch { rows = []; }
+        if (!Array.isArray(rows) || rows.length === 0) return '(no network requests captured — run browser_e2e action "goto" first)';
+        const filter = input.contains ? String(input.contains).toLowerCase() : '';
+        return rows
+          .filter(function (n) { return !filter || n.url.toLowerCase().indexOf(filter) !== -1; })
+          .map(function (n, i) {
+            return (i + 1) + ' [' + (n.failed ? 'FAIL' : n.status || '…') + '] ' + n.method + ' ' + n.url + (n.type ? '  (' + n.type + ' )' : '') + (n.size ? '  ' + Math.round(n.size) + 'B' : '');
+          })
+          .join('\n');
+      } catch (error) {
+        return 'FAIL: network — ' + (error instanceof Error ? error.message : String(error));
+      }
+    },
+  },
+];
+
 /** Short label shown as a tool-activity chip in the chat bubble. */
 function toolLabel(name: string, input: Record<string, unknown>, output: string): string {
   if (name === 'write_file') return `write_file → ${String(input.path ?? '?')}`;
@@ -615,6 +1020,18 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
   if (name === 'list_files') return `list_files (${output.split('\n').length} paths)`;
   if (name === 'web_search') return `web_search: ${String(input.query ?? '?')}`;
   if (name === 'playwright') return `playwright → ${String(input.url ?? '?')}`;
+  if (name === 'browser_panel') {
+    const action = String(input.action ?? 'navigate');
+    return `browser_panel ${action}${input.url ? `: ${String(input.url)}` : ''}`;
+  }
+  if (name === 'browser_e2e') {
+    const action = String(input.action ?? '');
+    const detail = String(input.selector ?? input.url ?? input.contains ?? '');
+    return `browser_e2e ${action}${detail ? `: ${detail}` : ''}`;
+  }
+  if (name === 'browser_screenshot') return 'browser_screenshot — live page PNG';
+  if (name === 'browser_pdf') return 'browser_pdf — live page PDF';
+  if (name === 'browser_network_requests') return 'browser_network_requests';
   if (name === 'read_image') return `read_image → ${String(input.path ?? '?')}`;
   if (name === 'agent_contacts') return 'agent_contacts — team directory';
   if (name === 'read_pdf') return `read_pdf → ${String(input.path ?? '?')}`;
@@ -650,6 +1067,44 @@ function safeParse(body: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+/** Prompt + completion tokens a reply consumed (OpenAI or Anthropic usage
+ * shapes) — null when the provider reported nothing. */
+function usageFromParsed(parsed: Record<string, unknown> | null): number | null {
+  const usage = parsed?.usage as Record<string, unknown> | undefined;
+  if (!usage) return null;
+  const prompt = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0);
+  const completion = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
+  const total = prompt + completion;
+  return total > 0 ? total : null;
+}
+
+/** Rough token estimate for messages without provider usage (~4 chars/token). */
+function estimateTokens(message: ChatMessage): number {
+  return Math.ceil(((message.text?.length ?? 0) + (message.context?.length ?? 0)) / 4);
+}
+
+/** Context-window % this session has consumed by the time an assistant
+ * reply (at `index`) finished — the reply's own model when known, else the
+ * composer's pointed model; null when no window is resolvable. */
+function contextUsageAt(
+  messages: ChatMessage[],
+  index: number,
+  fallbackWindow: number | null,
+): number | null {
+  const reply = messages[index];
+  if (reply.role !== 'assistant') return null;
+  let contextWindow: number | null = null;
+  if (reply.used) contextWindow = resolveContextWindow(reply.used.split('·')[0]?.trim() ?? '');
+  contextWindow = contextWindow ?? fallbackWindow;
+  if (!contextWindow) return null;
+  let used = 0;
+  for (let i = 0; i <= index; i += 1) {
+    const msg = messages[i];
+    used += msg.role === 'assistant' && msg.tokens ? msg.tokens : estimateTokens(msg);
+  }
+  return Math.min(100, Math.max(1, Math.round((used / contextWindow) * 100)));
 }
 
 function textFromAnthropic(parsed: Record<string, unknown> | null): string {
@@ -724,6 +1179,23 @@ function cliEntry(id: string, name: string, type: 'claude-code' | 'codex', model
   };
 }
 
+/** Floating-browser coordination: the browser's native webviews composite
+ * above ALL app HTML, so while a modal overlay is open here (model picker,
+ * memory/skills dialogs) the browser must hide its webviews or they paint
+ * over the dialog. A module-level count spans every mounted panel instance
+ * agent overlay is open (event pigry:agent-overlay). */
+let openOverlays = 0;
+function emitOverlayChange(open: boolean) {
+  openOverlays = Math.max(0, openOverlays + (open ? 1 : -1));
+  window.dispatchEvent(new CustomEvent('pigry:agent-overlay', { detail: openOverlays > 0 }));
+}
+
+/** True while any panel instance has a modal overlay open — lets late
+ * mounts (e.g. the browser panel opened mid-dialog) sync immediately. */
+export function agentOverlayOpen(): boolean {
+  return openOverlays > 0;
+}
+
 interface AiAgentPanelProps {
   /** Active worktree file path (auto-attached as context). */
   fileName: string;
@@ -752,7 +1224,6 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const { repository, notify } = useRepository();
   // Chats and memories live under this team's .pigry/teams/<team>/ store.
   const team = defaultTeam ?? 'Copilot';
-  const chatScope = useMemo(() => ({ team }), [team]);
   const [providers, setProviders] = useState<AiProviderEntry[]>([]);
   const [activeId, setActiveId] = useState<string>(() => activeProviderId());
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
@@ -787,6 +1258,97 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const activeHistory =
     historySelection && historyKey !== dismissedHistory ? historySelection : null;
 
+  // Commit shared from a workspace screen (Commit graph / Branches / Cherry
+  // Pick / Rebase Branch / Push Commits / Merge preview) — attachable chip.
+  const [railCommit, setRailCommit] = useState<{ oid: string; summary: string } | null>(null);
+  const [dismissedRailCommit, setDismissedRailCommit] = useState('');
+  const [prevRailCommitOid, setPrevRailCommitOid] = useState('');
+  if (prevRailCommitOid !== (railCommit?.oid ?? '')) {
+    setPrevRailCommitOid(railCommit?.oid ?? '');
+    setDismissedRailCommit('');
+  }
+  const activeRailCommit =
+    railCommit && railCommit.oid !== dismissedRailCommit ? railCommit : null;
+
+  // Code highlighted (คลุมดำ) anywhere in the workspace — either captured
+  // from the DOM selection or reported by a Monaco diff editor via the
+  // bridge; `source` names the workspace menu, `path` the file when known.
+  const [railSelection, setRailSelection] = useState<{
+    text: string;
+    source: string;
+    path?: string;
+  } | null>(null);
+  const railSelKey = railSelection?.text ?? '';
+  const [dismissedRailSel, setDismissedRailSel] = useState('');
+  const [prevRailSelKey, setPrevRailSelKey] = useState(railSelKey);
+  if (prevRailSelKey !== railSelKey) {
+    setPrevRailSelKey(railSelKey);
+    setDismissedRailSel('');
+  }
+  const activeRailSelection =
+    railSelection && railSelKey !== dismissedRailSel ? railSelection : null;
+
+  // Context is scoped to the menu's own chat (each menu has a separate
+  // conversation) — switching menus drops the shared commit/selection so one
+  // menu's context never rides into another menu's chat.
+  const [prevTeamScope, setPrevTeamScope] = useState(team);
+  if (prevTeamScope !== team) {
+    setPrevTeamScope(team);
+    setRailCommit(null);
+    setRailSelection(null);
+  }
+
+  // Workspace → chat bridge: screens announce the commit the user opened.
+  useEffect(() => {
+    const onShareCommit = (event: Event) => {
+      const detail = (event as CustomEvent<{ oid?: string; summary?: string }>).detail;
+      if (!detail?.oid) return;
+      setRailCommit({ oid: detail.oid, summary: detail.summary ?? '' });
+    };
+    window.addEventListener('pigry:chat-commit', onShareCommit);
+    return () => window.removeEventListener('pigry:chat-commit', onShareCommit);
+  }, []);
+
+  // Monaco diff editors announce their selections through the bridge
+  // (Monaco doesn't fire DOM selection events).
+  useEffect(() => {
+    const onShareSelection = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string; path?: string; source?: string }>)
+        .detail;
+      const text = detail?.text ?? '';
+      if (!text.trim()) return;
+      setRailSelection({ text: text.slice(0, 8000), source: detail?.source ?? team, path: detail?.path });
+    };
+    window.addEventListener('pigry:chat-selection', onShareSelection);
+    return () => window.removeEventListener('pigry:chat-selection', onShareSelection);
+  }, [team]);
+
+  // Capture highlighted text anywhere in the app (debounced) — except inside
+  // this panel (chat text isn't context) and inside Monaco editors (they
+  // report through the bridge above, their DOM selection is not visible).
+  const panelRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    let timer = 0;
+    const onSelectionChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel?.toString() ?? '';
+        if (!sel || sel.isCollapsed || text.trim().length === 0) return;
+        const node = sel.anchorNode;
+        const el = node instanceof Element ? node : (node?.parentElement ?? null);
+        if (el && panelRef.current?.contains(el)) return;
+        if (el?.closest?.('.monaco-editor')) return;
+        setRailSelection({ text: text.slice(0, 8000), source: team });
+      }, 350);
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange);
+      window.clearTimeout(timer);
+    };
+  }, [team]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -813,6 +1375,18 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // Attribution stamped into every message: agent username + repo owner.
   const actingAgent = allAgents().find((agent) => agent.enabled);
   const agentUsername = actingAgent?.username || 'ai-agent';
+  // Tier 1: the hard-coded default agent of this menu's team — answers
+  // every turn that carries no @mention, with its own private memory.
+  const defaultAgent = builtinAgents().find(
+    (agent) => agent.enabled && agent.tier === 'default' && agent.team === team,
+  );
+  /** The agent identity this menu's chat belongs to: its own default agent
+   * (not shared with other menus' agents), falling back to the first
+   * enabled agent when the team has no default-tier one. */
+  const scopeAgent = defaultAgent?.username ?? agentUsername;
+  // Sessions are scoped by that agent — the same default agent continues one
+  // conversation across menus; a different menu agent gets its own thread.
+  const chatScope = useMemo(() => ({ agent: scopeAgent }), [scopeAgent]);
   const ownerName = ghUser?.name || repository?.account.name || 'local-user';
   const [images, setImages] = useState<ChatImage[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -980,6 +1554,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // and save the file on every change. Sessions with no messages are not kept.
   const [sessionId, setSessionId] = useState(() => activeSessionId(chatScope));
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  /** Context-usage dropdown beside the model pill (click the ctx ring). */
+  const [ctxDropOpen, setCtxDropOpen] = useState(false);
+  const ctxDropRef = useRef<HTMLDivElement | null>(null);
   const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
   const sessionsRef = useRef<HTMLDivElement | null>(null);
   /** Creation time of the current session (preserved across saves). */
@@ -1029,7 +1606,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         updatedAt: now(),
         messages,
         team,
-        agentUsername,
+        // Tagged with the scope agent so the agent-scoped session list
+        // (the same identity on every menu this agent serves) finds it.
+        agentUsername: scopeAgent,
         owner: ownerName,
       });
       if (!cancelled) setSessionList(await listSessions(chatScope));
@@ -1037,7 +1616,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     return () => {
       cancelled = true;
     };
-  }, [messages, sessionId, groupTitle, chatScope, team, agentUsername, ownerName]);
+  }, [messages, sessionId, groupTitle, chatScope, team, scopeAgent, ownerName]);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
@@ -1054,6 +1633,24 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     document.addEventListener('mousedown', onDoc, true);
     return () => document.removeEventListener('mousedown', onDoc, true);
   }, [sessionsOpen]);
+
+  // Outside click / Escape closes the context-usage dropdown.
+  useEffect(() => {
+    if (!ctxDropOpen) return;
+    const onDoc = (event: MouseEvent) => {
+      if (ctxDropRef.current?.contains(event.target as Node)) return;
+      setCtxDropOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCtxDropOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [ctxDropOpen]);
 
   // The signed-in GitHub account — real name + avatar on user messages.
   // Reads the shared ghProfile cache (fetched at app start, kept fresh by
@@ -1208,12 +1805,6 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setAttachedFiles((current) => current.filter((file) => file.path !== path));
   };
 
-  /** Tier 1: the hard-coded default agent of this menu's team — answers
-   * every turn that carries no @mention, with its own private memory. */
-  const defaultAgent = builtinAgents().find(
-    (agent) => agent.enabled && agent.tier === 'default' && agent.team === team,
-  );
-
   const send = async () => {
     const text = input.trim();
     if (!text || sending) return;
@@ -1277,6 +1868,21 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
     if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
+    // Browser rail assistant: keep "open this page" requests on the in-app
+    // panel — the headless readers are invisible to the user.
+    if (team === 'Browser') {
+      context +=
+        `\n\n[Browser tools — follow these rules exactly]\n` +
+        `The app has NO embedded browser: "navigate"/"new_tab" open pages in the user’s EXTERNAL ` +
+        `default browser (the user sees them there; that browser cannot be scripted).\n` +
+        `RULE 1 — When the user asks to open/show/visit a URL: call browser_panel (action "navigate"). ` +
+        `To open AND summarize in one step, use browser_panel action "read".\n` +
+        `RULE 2 — To search Google, open https://www.google.com/search?q=<url-encoded query>.\n` +
+        `RULE 3 — To interact with a page (fill/click/submit/verify), use browser_e2e — it runs on your ` +
+        `headless automation session (goto first, then snapshot → click/type → asserts).\n` +
+        `RULE 4 — browser_screenshot captures YOUR headless session (invisible to the user), not their browser.\n` +
+        `For captured network requests use browser_network_requests. A PDF export is not supported.`;
+    }
     // #tagged skills ride along in FULL — `#<id|name>` in the message calls
     // that skill explicitly.
     try {
@@ -1354,7 +1960,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       const toolBlocks: string[] = [];
       if (toolsText) {
         toolBlocks.push(
-          `[Available tools — you may reference these; the user runs them from the app]\n${toolsText}`,
+          `[Available tools — the CURRENT set, you may reference these; ignore any other tool names that appear in earlier turns of this conversation]\n${toolsText}`,
         );
       }
       if (mcpNames.length > 0) {
@@ -1381,6 +1987,22 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       } catch {
         // commit content unavailable — ride along without it
       }
+    }
+    if (activeRailCommit) {
+      // A commit the user opened on a workspace screen — full message + file list.
+      try {
+        const d = await getCommitDetail(activeRailCommit.oid);
+        const files = d.files
+          .map((f) => `${f.path} (${f.status} +${f.additions} -${f.deletions})`)
+          .join('\n');
+        context += `\n\n[Commit — ${d.shortOid} by ${d.authorName}, ${new Date(d.timeSeconds * 1000).toLocaleString()}]\n${d.message}${files ? `\nFiles:\n${files}` : ''}`;
+      } catch {
+        context += `\n\n[Commit — ${activeRailCommit.oid.slice(0, 7)}] ${activeRailCommit.summary}`;
+      }
+    }
+    if (activeRailSelection) {
+      // Code the user highlighted in a workspace screen's diff/list.
+      context += `\n\n[Selected code — ${activeRailSelection.path ?? activeRailSelection.source}]\n${activeRailSelection.text.slice(0, 8000)}`;
     }
     for (const attached of attachedFiles) {
       context += `\n\n[Attached file: ${attached.path}]\n${attached.content.slice(0, 12000)}`;
@@ -1608,9 +2230,38 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             })),
           ]
         : fullText;
+    // Every agent can always write ITS OWN memory — the note lands in the
+    // agent's private vector store (the team store backs unscoped turns).
+    const memoryTool: ToolSpec = {
+      id: 'agent-memory',
+      name: 'memory_save',
+      description:
+        'Save a durable note to YOUR OWN private memory (per-agent vector store, searched automatically at the start of every future turn). Use for facts, decisions, user preferences, progress and how-to notes you must remember later. One concise self-contained note per call — write it so it still makes sense weeks from now.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'The note to remember — self-contained, mentions the project/subject so it stays findable' },
+        },
+        required: ['text'],
+      },
+      run: async (input) => {
+        const note = String(input.text ?? '').trim();
+        if (!note) return 'error: memory_save needs a text';
+        const agentUsername = target && target.username ? target.username : undefined;
+        await memoryAdd(note, team, agentUsername);
+        return 'saved to your memory (' + team + (agentUsername ? ' / ' + agentUsername : '') + ')';
+      },
+    };
     const agentAllowed = target.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL].filter(
-      (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool].filter(
+      (tool) => {
+        if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
+        // The Browser team assistant must show pages through the in-app
+        // panel only — hard-drop the headless/external openers here so
+        // stale overrides can never hand them back to the model.
+        if (target.team === 'Browser' && (tool.id === 'playwright' || tool.id === 'browser')) return false;
+        return true;
+      },
     );
     const anthropicTools = tools.map((tool) => ({
       name: tool.name,
@@ -1625,7 +2276,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     let assistantText = '';
     let replyError = false;
     const toolEvents: string[] = [];
-    const apiMessages: Array<Record<string, unknown>> = [{ role: 'user', content }];
+    /** Last turn's provider-reported token usage (context % badge). */
+    let turnTokens: number | null = null;
+    // Conversation continuity: replay the prior turns (text only, last 20)
+    // ahead of the current one so the model keeps context across sends —
+    // without this every reply would be a fresh single-turn conversation.
+    const priorTurns = history.slice(0, -1).slice(-20);
+    const apiMessages: Array<Record<string, unknown>> = [
+      ...priorTurns.map((m) => ({
+        role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
+        content: String(m.text ?? ''),
+      })),
+      { role: 'user', content },
+    ];
     for (let iter = 0; iter < 8; iter++) {
       setActivity({ kind: 'thinking', label: '' });
       const payload = isAnthropic
@@ -1633,6 +2296,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
       const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
       const parsed = safeParse(result.body);
+      turnTokens = usageFromParsed(parsed);
       if (!result.ok) {
         const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
         replyError = true;
@@ -1732,6 +2396,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       agent: repliedAs,
       owner: ownerName,
       ...(usedLabel ? { used: usedLabel } : {}),
+      ...(turnTokens ? { tokens: turnTokens } : {}),
       ...(replyError ? { error: true } : {}),
       ...(toolEvents.length > 0 ? { toolEvents } : {}),
     };
@@ -1837,9 +2502,38 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         : fullText;
     // File tools this turn may call — the tagged agent's own allowlist wins
     // (empty list inherits everything).
+    // Every agent can always write ITS OWN memory — the note lands in the
+    // agent's private vector store (the team store backs unscoped turns).
+    const memoryTool: ToolSpec = {
+      id: 'agent-memory',
+      name: 'memory_save',
+      description:
+        'Save a durable note to YOUR OWN private memory (per-agent vector store, searched automatically at the start of every future turn). Use for facts, decisions, user preferences, progress and how-to notes you must remember later. One concise self-contained note per call — write it so it still makes sense weeks from now.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          text: { type: 'string', description: 'The note to remember — self-contained, mentions the project/subject so it stays findable' },
+        },
+        required: ['text'],
+      },
+      run: async (input) => {
+        const note = String(input.text ?? '').trim();
+        if (!note) return 'error: memory_save needs a text';
+        const agentUsername = target && target.username ? target.username : undefined;
+        await memoryAdd(note, team, agentUsername);
+        return 'saved to your memory (' + team + (agentUsername ? ' / ' + agentUsername : '') + ')';
+      },
+    };
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL].filter(
-      (tool) => agentAllowed.length === 0 || agentAllowed.includes(tool.id),
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool].filter(
+      (tool) => {
+        if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
+        // The Browser team assistant must show pages through the in-app
+        // panel only — hard-drop the headless/external openers here so
+        // stale overrides can never hand them back to the model.
+        if (target?.team === 'Browser' && (tool.id === 'playwright' || tool.id === 'browser')) return false;
+        return true;
+      },
     );
     const anthropicTools = tools.map((tool) => ({
       name: tool.name,
@@ -1855,6 +2549,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     let replyError = false;
     let assistantText = '';
     const toolEvents: string[] = [];
+    /** Last turn's provider-reported token usage (context % badge). */
+    let turnTokens: number | null = null;
     pendingImages.length = 0;
     try {
       if (tools.length === 0) {
@@ -1864,6 +2560,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
         const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
         const parsed = safeParse(result.body);
+        turnTokens = usageFromParsed(parsed);
         const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
         if (!result.ok) {
           replyError = true;
@@ -1875,7 +2572,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             assistantText = String(err?.error?.message ?? err?.message ?? result.error ?? 'Empty reply');
           }
         }
-        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}), ...(replyError ? { error: true } : {}) }];
+        working = [...history, { role: 'assistant', text: assistantText, time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}), ...(turnTokens ? { tokens: turnTokens } : {}), ...(replyError ? { error: true } : {}) }];
         setMessages(working);
       } else {
         // Agentic loop: the model may call file tools; results feed back
@@ -1888,6 +2585,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
           const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
           const parsed = safeParse(result.body);
+          turnTokens = usageFromParsed(parsed);
           if (!result.ok) {
             const err = parsed as { error?: { message?: string }; message?: string; code?: string } | null;
             replyError = true;
@@ -1990,6 +2688,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
             agent: repliedAs,
             owner: ownerName,
             ...(usedLabel ? { used: usedLabel } : {}),
+            ...(turnTokens ? { tokens: turnTokens } : {}),
             ...(replyError ? { error: true } : {}),
             ...(toolEvents.length > 0 ? { toolEvents } : {}),
           },
@@ -2062,6 +2761,35 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   // Selected effort level of the pointed model (composer pill chip).
   const activeEffort = pointedProvider?.models.find((m) => m.name === pointedModel)?.effort ?? '';
 
+  // Live context usage of this session — shown as a % chip beside the model
+  // pill. The default agent owns the thread, so this is its context window
+  // (provider-reported tokens when available, ~4 chars/token estimate else).
+  const sessionTokens = useMemo(
+    () =>
+      messages.reduce(
+        (sum, m) => sum + (m.role === 'assistant' && m.tokens ? m.tokens : estimateTokens(m)),
+        0,
+      ),
+    [messages],
+  );
+  const pointedModelEntry = pointedProvider?.models.find((m) => m.name === pointedModel);
+  const pointedWindow = resolveContextWindow(pointedModel, pointedModelEntry);
+  /** Recent assistant turns for the context dropdown — newest first. */
+  const ctxTurns = useMemo(() => {
+    const turns: Array<{ used: string; tokens: number; time?: number }> = [];
+    for (let i = messages.length - 1; i >= 0 && turns.length < 6; i -= 1) {
+      const m = messages[i];
+      if (m.role === 'assistant' && m.used) {
+        turns.push({ used: m.used, tokens: m.tokens ?? estimateTokens(m), time: m.time });
+      }
+    }
+    return turns;
+  }, [messages]);
+  const sessionCtxPct =
+    pointedWindow && sessionTokens > 0
+      ? Math.min(100, Math.max(1, Math.round((sessionTokens / pointedWindow) * 100)))
+      : null;
+
   /** The group name in the header: custom name > auto title > default. */
   const headerTitle =
     groupTitle.custom && groupTitle.name
@@ -2077,8 +2805,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setEditingTitle(false);
   };
 
+  // While a modal overlay is open, tell the floating browser to hide its
+  // native webviews (they composite above all HTML and would cover the
+  // dialog). The cleanup keeps the count correct on close AND unmount.
+  const overlayOpen = modelDialogOpen || knowDialog !== null;
+  useEffect(() => {
+    if (overlayOpen) emitOverlayChange(true);
+    return () => {
+      if (overlayOpen) emitOverlayChange(false);
+    };
+  }, [overlayOpen]);
+
   return (
-    <aside className="explorer-ai" style={{ width }}>
+    <aside ref={panelRef} className="explorer-ai" style={{ width }}>
       <header className="explorer-ai__header">
         <button
           type="button"
@@ -2355,6 +3094,20 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                           {message.used}
                         </span>
                       )}
+                      {!isUser &&
+                        (() => {
+                          const pct = contextUsageAt(messages, index, pointedWindow);
+                          if (pct === null) return null;
+                          return (
+                            <span
+                              className={`ai-ctx${pct >= 90 ? ' ai-ctx--danger' : pct >= 70 ? ' ai-ctx--warn' : ''}`}
+                              title={`Context window used so far in this session (${message.tokens ? 'provider usage' : 'estimated'})`}
+                            >
+                              <CtxRing pct={pct} size={12} />
+                              {pct}%
+                            </span>
+                          );
+                        })()}
                       {message.time && (
                         <span className="explorer-ai__msg-time">{fmtMsgTime(message.time)}</span>
                       )}
@@ -2498,8 +3251,46 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               <Quote size={12} strokeWidth={1.5} />
             </button>
           </div>
-          {(activeSelection || activeHistory || attachedFiles.length > 0 || images.length > 0) && (
+          {(activeSelection || activeHistory || activeRailCommit || activeRailSelection || attachedFiles.length > 0 || images.length > 0) && (
             <div className="ai-composer__attachments">
+              {activeRailCommit && (
+                <span
+                  className="ai-composer__sel-chip"
+                  title={`Commit ${activeRailCommit.oid.slice(0, 7)} — its message and changed files are included with your next message`}
+                >
+                  <GitCommitHorizontal size={10} strokeWidth={1.5} />
+                  {activeRailCommit.summary.split('\n')[0].slice(0, 32)}
+                  <span className="ai-composer__sel-range">@ {activeRailCommit.oid.slice(0, 7)}</span>
+                  <button
+                    type="button"
+                    aria-label="Remove commit from chat"
+                    onClick={() => setDismissedRailCommit(activeRailCommit.oid)}
+                  >
+                    <X size={9} strokeWidth={2} />
+                  </button>
+                </span>
+              )}
+              {activeRailSelection && (
+                <span
+                  className="ai-composer__sel-chip"
+                  title={`Highlighted code from ${activeRailSelection.path ?? activeRailSelection.source} — included with your next message`}
+                >
+                  <FileText size={10} strokeWidth={1.5} />
+                  {activeRailSelection.path
+                    ? activeRailSelection.path.split('/').pop()
+                    : activeRailSelection.source}
+                  <span className="ai-composer__sel-range">
+                    {activeRailSelection.text.split('\n').length} line{activeRailSelection.text.split('\n').length === 1 ? '' : 's'}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Remove highlighted code from chat"
+                    onClick={() => setDismissedRailSel(activeRailSelection.text)}
+                  >
+                    <X size={9} strokeWidth={2} />
+                  </button>
+                </span>
+              )}
               {activeHistory && (
                 <span
                   className="ai-composer__sel-chip"
@@ -2686,6 +3477,64 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               />
             </div>
             <div className="ai-composer__right">
+              {sessionCtxPct !== null && (
+                <div className="ai-composer__ctxwrap">
+                  <button
+                    type="button"
+                    className={`ai-composer__ctx ai-ctx${sessionCtxPct >= 90 ? ' ai-ctx--danger' : sessionCtxPct >= 70 ? ' ai-ctx--warn' : ''}`}
+                    title="Context usage details"
+                    aria-expanded={ctxDropOpen}
+                    onClick={() => setCtxDropOpen((open) => !open)}
+                  >
+                    <CtxRing pct={sessionCtxPct} />
+                    {sessionCtxPct}%
+                  </button>
+                  {ctxDropOpen && (
+                    <div className="ai-ctxdrop" ref={ctxDropRef}>
+                      <header className="ai-ctxdrop__head">
+                        <span>Context usage</span>
+                        <span className={`ai-ctx${sessionCtxPct >= 90 ? ' ai-ctx--danger' : sessionCtxPct >= 70 ? ' ai-ctx--warn' : ''}`}>
+                          <CtxRing pct={sessionCtxPct} size={18} />
+                          {sessionCtxPct}%
+                        </span>
+                      </header>
+                      <div className="ai-ctxdrop__rows">
+                        <div className="ai-ctxdrop__row">
+                          <span>Model</span>
+                          <code>{providerLabel}{activeEffort ? ` · effort ${activeEffort}` : ''}</code>
+                        </div>
+                        <div className="ai-ctxdrop__row">
+                          <span>Window</span>
+                          <code>{(pointedWindow! / 1000).toLocaleString()}k tokens</code>
+                        </div>
+                        <div className="ai-ctxdrop__row">
+                          <span>Used</span>
+                          <code>~{sessionTokens.toLocaleString()} tokens</code>
+                        </div>
+                      </div>
+                      {ctxTurns.length > 0 && (
+                        <>
+                          <h5 className="ai-ctxdrop__section">Recent turns</h5>
+                          <ul className="ai-ctxdrop__turns">
+                            {ctxTurns.map((turn, i) => (
+                              <li key={i} className="ai-ctxdrop__turn">
+                                <span className="ai-ctxdrop__turn-model">{turn.used}</span>
+                                <span className="ai-ctxdrop__turn-tokens">
+                                  ~{turn.tokens.toLocaleString()} tok
+                                  {turn.time ? ` · ${fmtMsgTime(turn.time)}` : ''}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      <footer className="ai-ctxdrop__note">
+                        Turns without provider-reported usage are estimated (~4 chars/token).
+                      </footer>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 className="explorer-ai__model-pill"

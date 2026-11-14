@@ -903,7 +903,7 @@ export async function browserPage(url: string, waitMs?: number): Promise<Browser
   return invoke('browser_page', { url, waitMs: waitMs ?? null });
 }
 
-export type DevtoolsAction = 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'close';
+export type DevtoolsAction = 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'network' | 'close';
 
 export async function openInBrowser(url: string): Promise<string> {
   return invoke('browser', { url });

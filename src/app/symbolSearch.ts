@@ -20,7 +20,7 @@ const PATTERNS: Array<{ re: RegExp; kind: SymbolItem['kind'] }> = [
   // TS class/object methods: indented `name(args) [ret] {` — no arrow callbacks.
   { re: /^\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^<>]*>)?\([^)]*\)\s*(?::\s*[^{=]+)?\{/, kind: 'method' },
   { re: /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*(?::[^=]+)?=/, kind: 'variable' },
-  // JSON / object-literal keys:  "name": "orbit"
+  // JSON / object-literal keys:  "name": "pigry"
   { re: /^\s*"([^"]+)"\s*:/, kind: 'key' },
 ];
 

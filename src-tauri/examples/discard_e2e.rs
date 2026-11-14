@@ -3,7 +3,7 @@
 //! with two hunks, verifying with git diff afterwards.
 
 fn main() {
-    let repo = "C:\\Users\\ondev\\Projects\\orbit";
+    let repo = "C:\\Users\\ondev\\Projects\\pigry";
     let path = "scratch-hunks.txt";
 
     // Show the two hunks the UI would list.

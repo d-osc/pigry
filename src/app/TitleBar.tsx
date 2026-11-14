@@ -1,10 +1,8 @@
 import {
   ChevronDown,
   CircleUserRound,
-  Container,
   FolderOpen,
   GitFork,
-  Globe,
   LogIn,
   LogOut,
   Minus,
@@ -15,9 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useRepository } from '../hooks/useRepository';
-import { OrbitMark } from './OrbitMark';
-import { BrowserPanel } from './BrowserPanel';
-import { ContainersPanel } from './ContainersPanel';
+import { PigryMark } from './PigryMark';
 import { ghAccountList, ghAuthStatus, ghLogout, ghSwitchAccount, isTauri } from '../lib/tauriClient';
 import { updateGhProfileFromAccounts } from '../lib/ghProfile';
 import type { GhAccount } from '../types/repository';
@@ -57,23 +53,6 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
 
   // Native-style title-bar context menu (right-click).
   const [winMenu, setWinMenu] = useState<{ x: number; y: number } | null>(null);
-  /** Floating in-app browser (native webview). */
-  const [browserOpen, setBrowserOpen] = useState(false);
-  /** Folded into the browser button — panel hidden, tabs stay alive. */
-  const [browserFolded, setBrowserFolded] = useState(false);
-  /** Floating server-containers manager. */
-  const [containersOpen, setContainersOpen] = useState(false);
-
-  const toggleBrowser = () => {
-    if (!browserOpen) {
-      setBrowserOpen(true);
-      setBrowserFolded(false);
-    } else if (browserFolded) {
-      setBrowserFolded(false);
-    } else {
-      setBrowserFolded(true);
-    }
-  };
   const winMenuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!winMenu) return;
@@ -84,6 +63,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
     document.addEventListener('mousedown', onDocMouseDown, true);
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
   }, [winMenu]);
+
   const [repoMenuOpen, setRepoMenuOpen] = useState(false);
   const [recentRepos, setRecentRepos] = useState<Array<{ name: string; path: string }>>(
     () => {
@@ -304,7 +284,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
         onClick={onGoHome}
       >
         <span className="title-bar__logo" aria-hidden="true">
-          <OrbitMark size={20} />
+          <PigryMark size={20} />
         </span>
         <span className="title-bar__name">PIGRY</span>
         <span className="title-bar__beta">GIT</span>
@@ -527,28 +507,6 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
       </div>
 
       <div className="title-bar__actions">
-        <button
-          type="button"
-          className={`title-bar__win-button${browserOpen ? ' title-bar__win-button--active' : ''}`}
-          aria-label="Toggle browser"
-          title={
-            browserOpen && !browserFolded
-              ? 'Fold browser into this button'
-              : 'Restore browser'
-          }
-          onClick={toggleBrowser}
-        >
-          <Globe size={13} strokeWidth={1.5} />
-        </button>
-        <button
-          type="button"
-          className={`title-bar__win-button${containersOpen ? ' title-bar__win-button--active' : ''}`}
-          aria-label="Server containers"
-          title={containersOpen ? 'Hide server containers' : 'Server containers'}
-          onClick={() => setContainersOpen((open) => !open)}
-        >
-          <Container size={13} strokeWidth={1.5} />
-        </button>
         <div className="title-bar__win-controls">
           <button
             type="button"
@@ -623,24 +581,6 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
           </div>
         )}
       </div>
-
-      {browserOpen && (
-        <BrowserPanel
-          minimized={browserFolded}
-          forceHidden={containersOpen}
-          onMinimize={() => setBrowserFolded(true)}
-          onClose={() => {
-            setBrowserOpen(false);
-            setBrowserFolded(false);
-          }}
-        />
-      )}
-      {containersOpen && (
-        <ContainersPanel
-          repoPath={repository?.localPath ?? null}
-          onClose={() => setContainersOpen(false)}
-        />
-      )}
     </header>
   );
 }

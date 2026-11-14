@@ -1,5 +1,5 @@
 //! App configuration — remembers recently opened repositories.
-//! Stored as JSON under the OS app-config dir: `<config>/orbit/config.json`.
+//! Stored as JSON under the OS app-config dir: `<config>/pigry/config.json`.
 
 use std::fs;
 use std::path::PathBuf;

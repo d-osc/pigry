@@ -8,7 +8,7 @@ use git2::Repository;
 use super::*;
 
 fn scratch_repo(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("orbit-settings-{}-{}", name, std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pigry-settings-{}-{}", name, std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     Repository::init(&dir).unwrap();
@@ -18,14 +18,14 @@ fn scratch_repo(name: &str) -> PathBuf {
 #[test]
 fn user_info_roundtrip_writes_local_config() {
     let dir = scratch_repo("identity");
-    set_user_info(&dir, "Orbit Dev", "dev@orbit.app").unwrap();
+    set_user_info(&dir, "Pigry Dev", "dev@pigry.app").unwrap();
     let info = get_user_info(&dir).unwrap();
-    assert_eq!(info.name.as_deref(), Some("Orbit Dev"));
-    assert_eq!(info.email.as_deref(), Some("dev@orbit.app"));
+    assert_eq!(info.name.as_deref(), Some("Pigry Dev"));
+    assert_eq!(info.email.as_deref(), Some("dev@pigry.app"));
 
     // The local config file itself carries the values.
     let raw = fs::read_to_string(dir.join(".git").join("config")).unwrap();
-    assert!(raw.contains("dev@orbit.app"));
+    assert!(raw.contains("dev@pigry.app"));
 }
 
 #[test]

@@ -302,7 +302,7 @@ export function MergePanel({
                     original={baseContent}
                     modified={result}
                     language={language}
-                    theme="orbit-dark"
+                    theme="pigry-dark"
                     options={{
                       renderSideBySide: true,
                       fontSize: 11,

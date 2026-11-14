@@ -1,7 +1,7 @@
 /** AI provider store — shared by Settings and the AI agent panels.
  *
- * Providers live in localStorage under `orbit:ai-providers`; the active one
- * is `orbit:ai-active`. The legacy single-provider key `orbit:ai-provider`
+ * Providers live in localStorage under `pigry:ai-providers`; the active one
+ * is `pigry:ai-active`. The legacy single-provider key `pigry:ai-provider`
  * is kept mirrored so older consumers keep working.
  */
 import type { AiProviderEntry, AiModelEntry, AiApiFormat } from '../types/repository';
@@ -508,6 +508,8 @@ const GEMINI_THINKING = JSON.stringify({
 
 /** Best-effort registry of common model families — matched by substring. */
 const KNOWN_MODEL_SPECS: Array<[pattern: string, spec: KnownModelSpec]> = [
+  ['glm-5.3', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
+  ['glm-5', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4.5-air', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4.5', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
@@ -544,6 +546,27 @@ export function matchModelSpec(name: string): KnownModelSpec | null {
     if (lower.includes(entry[0]) && (!hit || entry[0].length > hit[0].length)) hit = entry;
   }
   return hit ? { ...hit[1] } : null;
+}
+
+/** Context window of a model, best-effort: the provider catalog's exact
+ * number first, then the known-model registry, then the "128K"/"1M"
+ * capability badge shown on the model entry. Null when all three fail. */
+export function resolveContextWindow(
+  name: string,
+  entry?: { contextWindow?: number; context?: string },
+): number | null {
+  if (entry?.contextWindow && entry.contextWindow > 0) return entry.contextWindow;
+  const spec = matchModelSpec(name);
+  if (spec?.contextWindow) return spec.contextWindow;
+  const badge = entry?.context?.trim() ?? '';
+  const match = /^([\d.]+)\s*([kKmM])$/.exec(badge);
+  if (match) {
+    const n = parseFloat(match[1]);
+    if (Number.isFinite(n) && n > 0) {
+      return match[2].toLowerCase() === 'm' ? Math.round(n * 1_000_000) : Math.round(n * 1000);
+    }
+  }
+  return null;
 }
 
 /** Payload fragment for a model's selected effort level — shallow-merged
