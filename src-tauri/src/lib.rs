@@ -31,7 +31,7 @@ mod command_no_window {
         fn no_window(&mut self) -> &mut Self { self }
     }
     impl CommandNoWindow for &mut Command {
-        fn no_window(self) -> &mut Self { self }
+        fn no_window(&mut self) -> &mut Self { self }
     }
 }
 pub use command_no_window::CommandNoWindow;
