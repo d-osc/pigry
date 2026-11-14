@@ -1,0 +1,6 @@
+{
+  "Scope": "Debug Tauri plus descendant WebView2 processes, disposable one-file repository, after first publish",
+  "Processes": 8,
+  "WorkingSetMiB": 617.6,
+  "PrivateMiB": 379.3
+}

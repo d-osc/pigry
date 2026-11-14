@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Cherry Pick screen — browse recent commits, inspect one, and pick it onto
  * the current branch (staged, commit to finish). Conflicted picks surface
  * the conflicted files with an abort action. */
@@ -26,6 +27,8 @@ import './CherryPickScreen.css';
 const MAX_ROWS = 40;
 
 export function CherryPickScreen() {
+  const fileGate = useRequestGate();
+  const detailGate = useRequestGate();
   const { repository, refresh, notify } = useRepository();
   const avatarMap = useCommitAvatars();
   const headOid = repository?.headOid ?? '';
@@ -67,6 +70,8 @@ export function CherryPickScreen() {
     };
   }, [headOid, branchFilter]);
   const selectCommit = async (row: CommitRow) => {
+    const isCurrent = detailGate.begin();
+    fileGate.invalidate();
     // Clicking the selected row again collapses its detail.
     if (selected?.oid === row.oid) {
       setSelected(null);
@@ -82,15 +87,19 @@ export function CherryPickScreen() {
     shareCommitWithChat({ oid: row.oid, summary: row.summary });
     setLoadingDetail(true);
     try {
-      setDetail(await getCommitDetail(row.oid));
-    } catch {
+      const result = await getCommitDetail(row.oid);
+      if (isCurrent()) setDetail(result);
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setDetail(null);
     } finally {
-      setLoadingDetail(false);
+      if (isCurrent()) setLoadingDetail(false);
     }
   };
 
   const openCompare = async (oid: string, parentOid: string | null, filePath: string) => {
+    const isCurrent = fileGate.begin();
     const key = `${oid}:${filePath}`;
     if (openFile === key) {
       setOpenFile(null);
@@ -105,15 +114,18 @@ export function CherryPickScreen() {
         parentOid ? readFileAtCommit(filePath, parentOid) : null,
         readFileAtCommit(filePath, oid),
       ]);
+      if (!isCurrent()) return;
       setFileContent({
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || languageForPath(filePath),
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setFileContent(null);
     } finally {
-      setLoadingFile(false);
+      if (isCurrent()) setLoadingFile(false);
     }
   };
 
@@ -372,7 +384,6 @@ export function CherryPickScreen() {
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

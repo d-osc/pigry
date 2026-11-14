@@ -1,0 +1,5 @@
+{
+  "InvalidTokenRejected": true,
+  "ExistingCredentialsWork": true,
+  "Scope": "Read-only GitHub /user request with a deliberately invalid process-local token, then restored existing credentials"
+}

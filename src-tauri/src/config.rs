@@ -19,6 +19,11 @@ pub struct AppConfig {
 const MAX_RECENT: usize = 10;
 
 fn config_file(app: &tauri::AppHandle) -> PathBuf {
+    // Debug-only isolation for desktop smoke tests; release builds always use the OS directory.
+    #[cfg(debug_assertions)]
+    if let Some(dir) = std::env::var_os("PIGRY_TEST_CONFIG_DIR") {
+        return PathBuf::from(dir).join("config.json");
+    }
     let dir = app
         .path()
         .app_config_dir()

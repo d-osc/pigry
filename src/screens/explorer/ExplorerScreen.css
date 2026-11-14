@@ -636,7 +636,7 @@
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
   line-height: 20px;
-  color: #c9ced8;
+  color: var(--text-mid);
   white-space: pre;
   overflow-x: auto;
 }

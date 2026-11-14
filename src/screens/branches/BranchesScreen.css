@@ -354,7 +354,7 @@
 }
 
 .branches__file-status--D {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .branches__file-status--R {
@@ -443,7 +443,7 @@
 }
 
 .stats-del {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
   font-family: var(--font-mono);
   margin-left: 4px;
 }
@@ -507,7 +507,7 @@
 }
 
 .branches__act--danger:hover {
-  color: #e79098;
+  color: var(--red);
 }
 
 /* "New branch" button in the commits pane header. */
@@ -591,7 +591,7 @@
 }
 
 .bdlg__hint--danger {
-  color: #e79098;
+  color: var(--red);
 }
 
 .bdlg__ref {
@@ -650,17 +650,17 @@
 .bdlg__btn--accent {
   border-color: var(--accent);
   background: var(--accent);
-  color: #0d1020;
+  color: var(--on-accent);
 }
 
 .bdlg__btn--accent:hover:not(:disabled) {
-  color: #0d1020;
+  color: var(--on-accent);
   filter: brightness(1.1);
 }
 
 .bdlg__btn--danger {
-  border-color: #e79098;
-  background: #e79098;
+  border-color: var(--red);
+  background: var(--red);
   color: #221014;
 }
 

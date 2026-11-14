@@ -1073,6 +1073,9 @@ export interface PushPreview {
 }
 
 export async function pushPreview(): Promise<PushPreview> {
+  if (!isTauri()) {
+    throw new Error('Open the Pigry desktop app to preview and push commits from a local repository.');
+  }
   return invoke('push_preview');
 }
 
@@ -1242,4 +1245,9 @@ export async function memorySearch(
   agent?: string,
 ): Promise<MemoryHit[]> {
   return invoke('memory_search', { scope: memoryScope(team, agent) ?? null, query, limit });
+}
+
+/** Debug-only startup probe; the backend writes only inside an isolated test config. */
+export async function reportValidationReady(): Promise<void> {
+  if (import.meta.env.DEV && isTauri()) await invoke('validation_ready');
 }

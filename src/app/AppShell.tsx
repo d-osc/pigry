@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar } from './StatusBar';
@@ -10,7 +10,7 @@ import { ChevronLeft, ChevronsRight, Undo2 } from 'lucide-react';
 import type { NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
-import { getFileTree, gitCliStatus, readWorktreeFile } from '../lib/tauriClient';
+import { getFileTree, gitCliStatus, readWorktreeFile, reportValidationReady } from '../lib/tauriClient';
 import { AiAgentPanel } from '../screens/explorer/AiAgentPanel';
 import { ResizeHandle } from './ResizeHandle';
 import { teamForScreen } from '../lib/agentExtras';
@@ -19,26 +19,26 @@ import {
   RepositoryProvider,
   type RepositoryContextValue,
 } from '../hooks/useRepository';
-import { MergeBranchScreen } from '../screens/merge-branch/MergeBranchScreen';
-import { RebaseBranchScreen } from '../screens/rebase-branch/RebaseBranchScreen';
-import { PushCommitsScreen } from '../screens/push-commits/PushCommitsScreen';
-import { StashesScreen } from '../screens/stashes/StashesScreen';
-import { CherryPickScreen } from '../screens/cherry-pick/CherryPickScreen';
-import { BranchesScreen } from '../screens/branches/BranchesScreen';
-import { WorkingChangesScreen } from '../screens/working-changes/WorkingChangesScreen';
-import { AppSettingsScreen } from '../screens/settings/AppSettingsScreen';
-import { CommitGraphScreen } from '../screens/commit-graph/CommitGraphScreen';
-import { ExplorerScreen } from '../screens/explorer/ExplorerScreen';
-import { ProjectsScreen } from '../screens/projects/ProjectsScreen';
-import { PullRequestsScreen } from '../screens/pull-requests/PullRequestsScreen';
-import { AiAgentScreen } from '../screens/ai-agent/AiAgentScreen';
-import { ReleasesScreen } from '../screens/releases/ReleasesScreen';
-import { IssuesScreen } from '../screens/issues/IssuesScreen';
-import { ActionsScreen } from '../screens/actions/ActionsScreen';
-import { InsightsScreen } from '../screens/insights/InsightsScreen';
-import { WikiScreen } from '../screens/wiki/WikiScreen';
-import { SecurityScreen } from '../screens/security/SecurityScreen';
-import { HomeScreen } from '../screens/home/HomeScreen';
+const MergeBranchScreen = lazy(() => import('../screens/merge-branch/MergeBranchScreen').then((module) => ({ default: module.MergeBranchScreen })));
+const RebaseBranchScreen = lazy(() => import('../screens/rebase-branch/RebaseBranchScreen').then((module) => ({ default: module.RebaseBranchScreen })));
+const PushCommitsScreen = lazy(() => import('../screens/push-commits/PushCommitsScreen').then((module) => ({ default: module.PushCommitsScreen })));
+const StashesScreen = lazy(() => import('../screens/stashes/StashesScreen').then((module) => ({ default: module.StashesScreen })));
+const CherryPickScreen = lazy(() => import('../screens/cherry-pick/CherryPickScreen').then((module) => ({ default: module.CherryPickScreen })));
+const BranchesScreen = lazy(() => import('../screens/branches/BranchesScreen').then((module) => ({ default: module.BranchesScreen })));
+const WorkingChangesScreen = lazy(() => import('../screens/working-changes/WorkingChangesScreen').then((module) => ({ default: module.WorkingChangesScreen })));
+const AppSettingsScreen = lazy(() => import('../screens/settings/AppSettingsScreen').then((module) => ({ default: module.AppSettingsScreen })));
+const CommitGraphScreen = lazy(() => import('../screens/commit-graph/CommitGraphScreen').then((module) => ({ default: module.CommitGraphScreen })));
+const ExplorerScreen = lazy(() => import('../screens/explorer/ExplorerScreen').then((module) => ({ default: module.ExplorerScreen })));
+const ProjectsScreen = lazy(() => import('../screens/projects/ProjectsScreen').then((module) => ({ default: module.ProjectsScreen })));
+const PullRequestsScreen = lazy(() => import('../screens/pull-requests/PullRequestsScreen').then((module) => ({ default: module.PullRequestsScreen })));
+const AiAgentScreen = lazy(() => import('../screens/ai-agent/AiAgentScreen').then((module) => ({ default: module.AiAgentScreen })));
+const ReleasesScreen = lazy(() => import('../screens/releases/ReleasesScreen').then((module) => ({ default: module.ReleasesScreen })));
+const IssuesScreen = lazy(() => import('../screens/issues/IssuesScreen').then((module) => ({ default: module.IssuesScreen })));
+const ActionsScreen = lazy(() => import('../screens/actions/ActionsScreen').then((module) => ({ default: module.ActionsScreen })));
+const InsightsScreen = lazy(() => import('../screens/insights/InsightsScreen').then((module) => ({ default: module.InsightsScreen })));
+const WikiScreen = lazy(() => import('../screens/wiki/WikiScreen').then((module) => ({ default: module.WikiScreen })));
+const SecurityScreen = lazy(() => import('../screens/security/SecurityScreen').then((module) => ({ default: module.SecurityScreen })));
+const HomeScreen = lazy(() => import('../screens/home/HomeScreen').then((module) => ({ default: module.HomeScreen })));
 import { ErrorBoundary } from './ErrorBoundary';
 import './AppShell.css';
 
@@ -223,6 +223,20 @@ function AppShellInner() {
   const [railWidth, setRailWidth] = useState(340);
   const repository = useRepository();
   const { mode } = repository;
+  const readyReported = useRef(false);
+  useEffect(() => {
+    if (!repository.state || readyReported.current) return;
+    readyReported.current = true;
+    // Wait until Home's deferred module has rendered, rather than measuring only the shell.
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('.home__card')) {
+        observer.disconnect(); void reportValidationReady().catch(() => {});
+      }
+    });
+    if (document.querySelector('.home__card')) void reportValidationReady().catch(() => {});
+    else observer.observe(document.getElementById('root')!, { subtree: true, childList: true });
+    return () => observer.disconnect();
+  }, [repository.state]);
   // The landing screen (repository picker) shows at startup; "Go home"
   // re-opens it mid-session while the workspace stays loaded behind it.
   const [showHome, setShowHome] = useState(() => mode === 'tauri');
@@ -449,6 +463,7 @@ function AppShellInner() {
         }}
       />
       <GitMissingBanner />
+      <ErrorBoundary><Suspense fallback={<div className="screen-loading" role="status">Loading…</div>}>
       {screen === 'app-settings' ? (
         // The app settings page is repo-agnostic — it takes over the whole
         // body from wherever it was opened (workspace or Home picker).
@@ -464,7 +479,7 @@ function AppShellInner() {
         </main>
       ) : (
         <>
-          {mode === 'tauri' && (showHome || !repository.repository) && (
+          {(showHome || !repository.repository) && (
             <HomeScreen
               onBackToWorkspace={
                 repository.repository ? () => setShowHome(false) : undefined
@@ -495,9 +510,9 @@ function AppShellInner() {
                 <main className="app-shell__workspace">
                   <RebaseBanner onAbort={() => void repository.abortRebase()} />
                   <ErrorBanner />
-                  <ErrorBoundary>
+                  <ErrorBoundary key={`${repository.repository?.localPath}:${repository.repository?.currentBranch}:${screen}`}><Suspense fallback={<div className="screen-loading" role="status">Loading workspace…</div>}>
                     {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
-                  </ErrorBoundary>
+                  </Suspense></ErrorBoundary>
                 </main>
                 {AI_RAIL_SCREENS.includes(screen) && railOpen && (
                   <ResizeHandle
@@ -581,6 +596,7 @@ function AppShellInner() {
       {shortcutsOpen && <ShortcutSheet onClose={() => setShortcutsOpen(false)} />}
       {rebaseBase && <RebaseModal baseOid={rebaseBase} onClose={() => setRebaseBase(null)} />}
       <ToastContainer toasts={repository.toasts} />
+      </Suspense></ErrorBoundary>
     </div>
   );
 }

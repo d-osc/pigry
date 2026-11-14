@@ -211,7 +211,7 @@
   background: color-mix(in srgb, var(--accent, #8b9dff) 14%, transparent);
 }
 .pigry-conflict-marker {
-  background: color-mix(in srgb, var(--danger, #e79098) 30%, transparent);
+  background: color-mix(in srgb, var(--danger, var(--red)) 30%, transparent);
 }
 .pigry-conflict-actions {
   display: flex;

@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Rebase Branch screen — replay the current branch onto another branch.
  * Pick a base, optionally edit the plan (reorder / squash / drop), then
  * rebase. A conflicted rebase surfaces its files with an abort action. */
@@ -53,6 +54,7 @@ const NEXT_ACTION: Record<RebaseAction, RebaseAction> = {
 };
 
 export function RebaseBranchScreen() {
+  const fileGate = useRequestGate();
   const { repository, refresh, notify } = useRepository();
   const avatarMap = useCommitAvatars();
   const currentBranch = repository?.currentBranch ?? '';
@@ -204,6 +206,7 @@ export function RebaseBranchScreen() {
 
   /** Toggle the before/after diff of one file inside the expanded commit. */
   const openCompare = async (oid: string, parentOid: string | null, filePath: string) => {
+    const isCurrent = fileGate.begin();
     const key = `${oid}:${filePath}`;
     if (openFile === key) {
       setOpenFile(null);
@@ -218,15 +221,18 @@ export function RebaseBranchScreen() {
         parentOid ? readFileAtCommit(filePath, parentOid) : null,
         readFileAtCommit(filePath, oid),
       ]);
+      if (!isCurrent()) return;
       setFileContent({
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || languageForPath(filePath),
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setFileContent(null);
     } finally {
-      setLoadingFile(false);
+      if (isCurrent()) setLoadingFile(false);
     }
   };
 
@@ -513,7 +519,6 @@ export function RebaseBranchScreen() {
                                       original={fileContent?.before ?? ''}
                                       modified={fileContent?.after ?? ''}
                                       language={fileContent?.language ?? 'plaintext'}
-                                      theme="pigry-dark"
                                       options={{
                                         readOnly: true,
                                         renderSideBySide: splitView,

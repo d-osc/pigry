@@ -34,7 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { aiChat,
-  openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+  openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memoryRemove, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
 import { effortPayloadFragment, providerStatus, resolveContextWindow } from '../../lib/aiProviders';
@@ -44,8 +44,6 @@ import { listSkills, getSkillContent } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
 import { browserDevtools, type DevtoolsAction } from '../../lib/tauriClient';
 import { normalizeUrl } from '../../lib/browserWebview';
-import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
 import { readPdfText } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
@@ -403,6 +401,7 @@ const DOC_TOOLS: ToolSpec[] = [
     run: async (input) => {
       const path = String(input.path ?? '');
       const bin = await readBinaryFile(path);
+      const { default: mammoth } = await import('mammoth');
       const text = await mammoth
         .extractRawText({ arrayBuffer: b64ToArrayBuffer(bin.data) })
         .then((result: { value: string }) => result.value);
@@ -424,6 +423,7 @@ const DOC_TOOLS: ToolSpec[] = [
     run: async (input) => {
       const path = String(input.path ?? '');
       const bin = await readBinaryFile(path);
+      const XLSX = await import('xlsx');
       const wb = XLSX.read(b64ToArrayBuffer(bin.data), { type: 'array' });
       const parts: string[] = [];
       for (const name of wb.SheetNames) {
@@ -1024,6 +1024,7 @@ function toolLabel(name: string, input: Record<string, unknown>, output: string)
     const action = String(input.action ?? 'navigate');
     return `browser_panel ${action}${input.url ? `: ${String(input.url)}` : ''}`;
   }
+  if (name === 'send_message') return 'send_message → @' + String(input.to ?? '?');
   if (name === 'browser_e2e') {
     const action = String(input.action ?? '');
     const detail = String(input.selector ?? input.url ?? input.contains ?? '');
@@ -1664,7 +1665,62 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   );
 
   /** Starts a fresh conversation; the previous one stays in history. */
+  /** Rolling auto-summarize — every 15 messages since the last summary,
+   * the recent slice is distilled into the agent's own memory. Closing the
+   * app mid-session therefore loses at most those 15 messages of progress.
+   * The New-chat button summarizes everything remaining as well. */
+  const summarizedUpToRef = useRef(0);
+  useEffect(() => {
+    if (sending) return;
+    if (messages.length - summarizedUpToRef.current < 15) return;
+    const slice = messages.slice(summarizedUpToRef.current);
+    summarizedUpToRef.current = messages.length;
+    void summarizeSessionToMemory(slice);
+  }, [messages, sending]);
+  /** Auto-summarizes the ending session into the session owner's memory —
+   * progress survives even when the agent never called memory_save itself.
+   * Fire-and-forget: never blocks the new chat from starting. */
+  const summarizeSessionToMemory = async (history: ChatMessage[]) => {
+    if (history.length < 4) return;
+    const target = allAgents().find(
+      (agent) => agent.enabled && agent.username === scopeAgent,
+    );
+    if (!target) return;
+    const transcript = history
+      .slice(-30)
+      .map((m) =>
+        (m.role === 'assistant' ? '@' + (m.agent ?? target.username) + ': ' : 'user: ') +
+        String(m.text ?? '').replace(/\s+/g, ' ').slice(0, 300),
+      )
+      .join('\n');
+    const instruction: ChatMessage = {
+      role: 'user',
+      text:
+        '[session-end task] The conversation below is ending. Extract the durable facts, decisions, user preferences and progress as 1-3 short memory notes. One note per line, each self-contained. Return ONLY the note lines — no numbering, no commentary.\n\n--- CONVERSATION ---\n' +
+        transcript,
+      time: Date.now(),
+      owner: 'system',
+    };
+    try {
+      const reply = await runIsolatedTurn([instruction], target);
+      const notes = (reply.text || '')
+        .split('\n')
+        .map((l) => l.replace(/^[-*\d.\s]+/, '').trim())
+        .filter((l) => l.length > 10)
+        .slice(0, 5);
+      for (const note of notes) {
+        await memoryAdd(note, team, target.username);
+      }
+      if (notes.length > 0) {
+        notify('Session summarized — ' + notes.length + ' note(s) saved to @' + target.username + ' memory', 'success');
+      }
+    } catch {
+      // provider unavailable — silently skip
+    }
+  };
   const startNewChat = () => {
+    // Auto-summarize the ending session into the agent's own memory.
+    void summarizeSessionToMemory(messages);
     const id = `chat-${now().toString(36)}`;
     setActiveSessionId(id, chatScope);
     setSessionId(id);
@@ -2030,7 +2086,10 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setInput('');
     setImages([]);
     closeMention();
-    if (mentioned.length >= 2) {
+    // ANY @mention routes through the parallel path — each mentioned agent
+    // gets the exchange recorded in ITS OWN session (single @mention works
+    // the same way, targets.length === 1).
+    if (mentioned.length >= 1) {
       await doSendParallel(history, mentioned);
       return;
     }
@@ -2087,6 +2146,71 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
    * genuinely work simultaneously on separate CPU processes). Each turn is
    * self-contained: no shared mutable state, no progressive streaming; the
    * finished reply lands as its own bubble the moment it completes. */
+  /** One-hop agent-to-agent messaging — agent A asks agent B a question
+   * and receives the reply of agent B inside its own turn. Depth-limited to one hop
+   * so conversations can never loop. */
+  const messageDepthRef = useRef(0);
+  /** DM replies collected during the current turn — shown as bubbles and
+   * spliced into the turn's history so later writes keep them. */
+  const dmBubblesRef = useRef<ChatMessage[]>([]);
+  const askAgent = async (
+    fromUsername: string,
+    toUsername: string,
+    message: string,
+    images?: Array<{ dataUrl: string }>,
+  ): Promise<string> => {
+    const to = allAgents().find(
+      (agent) => agent.enabled && agent.username === toUsername,
+    );
+    if (!to) return 'error: no agent @' + toUsername;
+    if (to.username === fromUsername) return 'error: you cannot message yourself';
+    if (messageDepthRef.current >= 3) {
+      return 'error: message depth limit (3) reached — stop forwarding and reply directly';
+    }
+    messageDepthRef.current += 1;
+    try {
+      const reply = await runIsolatedTurn(
+        [
+          {
+            role: 'user',
+            text: '[Direct message from @' + fromUsername + ']' + '\n\n' + message,
+            time: Date.now(),
+            owner: fromUsername,
+            images: (images ?? []).map(function (image) { return image.dataUrl; }),
+          },
+        ],
+        to,
+      );
+      return reply.text || '(empty reply)';
+    } finally {
+      messageDepthRef.current -= 1;
+    }
+  };
+
+  /** Records one group-chat exchange into the MENTIONED agent's own
+   * session — so agent B remembers conversations it joined, even though
+   * the group transcript lives in the panel owner's session. */
+  const appendToAgentSession = async (
+    username: string,
+    userText: string,
+    replyText: string,
+    teamName: string,
+  ): Promise<void> => {
+    const scope = { agent: username };
+    const sessions = await listSessions(scope);
+    let session = sessions.find((s) => s.id === activeSessionId(scope)) ?? sessions[0];
+    if (!session) {
+      session = { id: 'chat-' + Date.now().toString(36), title: '', createdAt: Date.now(), updatedAt: Date.now(), messages: [], team: teamName, agentUsername: username };
+    }
+    const userMsg: AiChatMessage = { role: 'user', text: '[group chat] ' + userText, time: Date.now(), owner: username };
+    const replyMsg: AiChatMessage = { role: 'assistant', text: replyText, time: Date.now(), agent: username, owner: username };
+    session.messages = [...session.messages, userMsg, replyMsg].slice(-100);
+    session.updatedAt = Date.now();
+    if (!session.titleCustom && !session.title) session.title = titleFromMessages(session.messages);
+    await saveSession(session);
+    setActiveSessionId(session.id, scope);
+  };
+
   const doSendParallel = async (
     history: ChatMessage[],
     targets: AgentEntry[],
@@ -2126,6 +2250,19 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         }
         return updated;
       });
+      // Record each mentioned agent's exchange into ITS OWN session — the
+      // agent remembers the group conversation in its own thread later.
+      const lastUserText = String(history[history.length - 1]?.text ?? '');
+      for (const target of targets) {
+        const reply = replies.get(target.username);
+        if (!reply) continue;
+        void appendToAgentSession(
+          target.username,
+          lastUserText,
+          reply.text ?? '',
+          target.team ?? team,
+        ).catch(() => {});
+      }
       // after-reply hooks run once for the whole parallel batch.
       try {
         await runEventHooks('after-reply', repository?.localPath ?? '.');
@@ -2252,8 +2389,96 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         return 'saved to your memory (' + team + (agentUsername ? ' / ' + agentUsername : '') + ')';
       },
     };
+    /** Direct agent-to-agent messaging — one hop, depth-limited. */
+    const agentMessageTool: ToolSpec = {
+      id: 'agent-message',
+      name: 'send_message',
+      description:
+        'Send a direct message to another agent in this workspace and receive its reply inside your turn. Use agent_contacts / agent_lookup to find the right @username first. Chains up to 3 agents deep (A asks B, B may ask C); deeper forwards are refused. The receiving agent does not see this conversation. Optionally attach workspace images (paths) for the receiving agent. Do NOT message yourself.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: 'The @username (without the @) of the receiving agent' },
+          message: { type: 'string', description: 'The message or question for that agent — self-contained' },
+          images: { type: 'string', description: 'Optional: comma-separated workspace image paths (png/jpg/gif/webp) to attach for the receiving agent' },
+        },
+        required: ['to', 'message'],
+      },
+            run: async (input) => {
+        const to = String(input.to ?? '').replace(/^@/, '').trim();
+        const message = String(input.message ?? '').trim();
+        if (!to || !message) return 'error: send_message needs to + message';
+        const imagePaths = String(input.images ?? '').split(',').map(function (p) { return p.trim(); }).filter(Boolean).slice(0, 4);
+        const images: Array<{ dataUrl: string }> = [];
+        for (const imagePath of imagePaths) {
+          try {
+            const img = await readBinaryFile(imagePath);
+            if (!img.mime.startsWith('image/')) throw new Error(imagePath + ' is not an image');
+            images.push({ dataUrl: 'data:' + img.mime + ';base64,' + img.data });
+          } catch (error) {
+            return 'error: could not load image ' + imagePath + ': ' + (error instanceof Error ? error.message : String(error));
+          }
+        }
+        const reply = await askAgent(target.username, to, message, images);
+        const bubble: ChatMessage = {
+          role: 'assistant',
+          text: reply,
+          time: Date.now(),
+          agent: to,
+          owner: target ? 'self' : 'self',
+        };
+        dmBubblesRef.current = [...dmBubblesRef.current, bubble];
+        setMessages((current) => [...current, bubble]);
+        return 'reply from @' + to + ':\n' + reply;
+      },
+    };
+    /** Recall / manage YOUR OWN private memory (agent-scoped vector store). */
+    const memoryRecallTool: ToolSpec = {
+      id: 'agent-memory-recall',
+      name: 'memory_recall',
+      description:
+        'Search YOUR OWN private memory (per-agent vector store — notes you saved with memory_save plus anything noted for you). Returns matching notes with their ids. Use to recall what you previously noted about a topic, or before memory_forget.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'What to look for — semantic search over your notes' },
+          limit: { type: 'number', description: 'Max notes to return (default 10)' },
+        },
+        required: ['query'],
+      },
+      run: async (input) => {
+        const query = String(input.query ?? '').trim();
+        if (!query) return 'error: memory_recall needs a query';
+        const hits = await memorySearch(query, Number.isFinite(Number(input.limit)) ? Number(input.limit) : 10, team, target.username);
+        if (hits.length === 0) return '(no matching notes in your memory)';
+        return hits.map(function (h) { return h.id + " — " + h.text; }).join("\n");
+      },
+    };
+    const memoryForgetTool: ToolSpec = {
+      id: 'agent-memory-forget',
+      name: 'memory_forget',
+      description:
+        'Delete notes from YOUR OWN private memory. Pass an id from memory_recall, or a query — every note matching the query is removed. Deletion is permanent.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Exact note id (from memory_recall) to remove' },
+          query: { type: 'string', description: 'Alternative: remove every note matching this query' },
+        },
+      },
+      run: async (input) => {
+        const id = String(input.id ?? '').trim();
+        const query = String(input.query ?? '').trim();
+        if (!id && !query) return 'error: memory_forget needs an id or a query';
+        if (id) { await memoryRemove(id, team, target.username); return 'forgot note ' + id; }
+        const hits = await memorySearch(query, 20, team, target.username);
+        if (hits.length === 0) return '(no matching notes to forget)';
+        for (var hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target.username); }
+        return 'forgot ' + hits.length + ' note(s) matching ' + query;
+      },
+    };
     const agentAllowed = target.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
       (tool) => {
         if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
         // The Browser team assistant must show pages through the in-app
@@ -2442,6 +2667,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
           : provider.type === 'zcode-cli'
             ? 'zcode'
             : provider.type;
+      // DM bubbles collected during send_message calls — keep them visible
+      // across every later setMessages(working) write.
+      if (dmBubblesRef.current.length > 0) {
+        history = [...history, ...dmBubblesRef.current];
+        dmBubblesRef.current = [];
+      }
       let working = history;
       try {
         const output = await cliAgentRun(cli, last.text, provider.model || undefined);
@@ -2524,8 +2755,75 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         return 'saved to your memory (' + team + (agentUsername ? ' / ' + agentUsername : '') + ')';
       },
     };
+    /** Direct agent-to-agent messaging — one hop, depth-limited. */
+    const agentMessageTool: ToolSpec = {
+      id: 'agent-message',
+      name: 'send_message',
+      description:
+        'Send a direct message to another agent in this workspace and receive its reply inside your turn. Use agent_contacts / agent_lookup to find the right @username first. Chains up to 3 agents deep (A asks B, B may ask C); deeper forwards are refused. The receiving agent does not see this conversation. Optionally attach workspace images (paths) for the receiving agent. Do NOT message yourself.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          to: { type: 'string', description: 'The @username (without the @) of the receiving agent' },
+          message: { type: 'string', description: 'The message or question for that agent — self-contained' },
+          images: { type: 'string', description: 'Optional: comma-separated workspace image paths (png/jpg/gif/webp) to attach for the receiving agent' },
+        },
+        required: ['to', 'message'],
+      },
+      run: async (input) => {
+        const to = String(input.to ?? '').replace(/^@/, '').trim();
+        const message = String(input.message ?? '').trim();
+        if (!to || !message) return 'error: send_message needs to + message';
+        return askAgent(target?.username || 'ai-agent', to, message);
+      },
+    };
+    /** Recall / manage YOUR OWN private memory (agent-scoped vector store). */
+    const memoryRecallTool: ToolSpec = {
+      id: 'agent-memory-recall',
+      name: 'memory_recall',
+      description:
+        'Search YOUR OWN private memory (per-agent vector store — notes you saved with memory_save plus anything noted for you). Returns matching notes with their ids. Use to recall what you previously noted about a topic, or before memory_forget.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'What to look for — semantic search over your notes' },
+          limit: { type: 'number', description: 'Max notes to return (default 10)' },
+        },
+        required: ['query'],
+      },
+      run: async (input) => {
+        const query = String(input.query ?? '').trim();
+        if (!query) return 'error: memory_recall needs a query';
+        const hits = await memorySearch(query, Number.isFinite(Number(input.limit)) ? Number(input.limit) : 10, team, target?.username);
+        if (hits.length === 0) return '(no matching notes in your memory)';
+        return hits.map(function (h) { return h.id + " — " + h.text; }).join("\n");
+      },
+    };
+    const memoryForgetTool: ToolSpec = {
+      id: 'agent-memory-forget',
+      name: 'memory_forget',
+      description:
+        'Delete notes from YOUR OWN private memory. Pass an id from memory_recall, or a query — every note matching the query is removed. Deletion is permanent.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Exact note id (from memory_recall) to remove' },
+          query: { type: 'string', description: 'Alternative: remove every note matching this query' },
+        },
+      },
+      run: async (input) => {
+        const id = String(input.id ?? '').trim();
+        const query = String(input.query ?? '').trim();
+        if (!id && !query) return 'error: memory_forget needs an id or a query';
+        if (id) { await memoryRemove(id, team, target?.username); return 'forgot note ' + id; }
+        const hits = await memorySearch(query, 20, team, target?.username);
+        if (hits.length === 0) return '(no matching notes to forget)';
+        for (var hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target?.username); }
+        return 'forgot ' + hits.length + ' note(s) matching ' + query;
+      },
+    };
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool].filter(
+    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
       (tool) => {
         if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
         // The Browser team assistant must show pages through the in-app

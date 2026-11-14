@@ -72,7 +72,7 @@
 }
 
 .hunk-bar__stage--unstage:hover:not(:disabled) {
-  background: #5d4a35;
+  background: var(--orange-tint);
 }
 .hunk-bar__actions {
   margin-left: auto;
@@ -82,10 +82,10 @@
 }
 
 .hunk-bar__stage--discard {
-  background: #3b2530;
+  background: var(--red-tint);
   color: var(--red);
 }
 
 .hunk-bar__stage--discard:hover:not(:disabled) {
-  background: #5d3944;
+  background: var(--red);
 }

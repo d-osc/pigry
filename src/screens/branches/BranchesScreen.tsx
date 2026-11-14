@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Branches screen — every local and remote branch on the left (with
  * local/cloud symbols + search), the selected branch's commits on the right
  * (with commit search, expandable detail and per-file compares).
@@ -81,12 +82,16 @@ function loadSplitWidth(): number {
 }
 
 export function BranchesScreen() {
+  const fileGate = useRequestGate();
+  const detailGate = useRequestGate();
   const { repository, refresh, notify } = useRepository();
   const avatarMap = useCommitAvatars();
   const [branchQuery, setBranchQuery] = useState('');
   const [selectedRef, setSelectedRef] = useState<string | null>(null);
   const [rows, setRows] = useState<CommitRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [rowsError, setRowsError] = useState<string | null>(null);
+  const [rowsAttempt, setRowsAttempt] = useState(0);
   const [loadingRows, setLoadingRows] = useState(true);
   const [commitQuery, setCommitQuery] = useState('');
   const [selectedCommit, setSelectedCommit] = useState<CommitRow | null>(null);
@@ -209,6 +214,10 @@ export function BranchesScreen() {
   useEffect(() => {
     if (!effectiveRef) return;
     let cancelled = false;
+    setLoadingRows(true);
+    setRowsError(null);
+    detailGate.invalidate();
+    fileGate.invalidate();
     getBranchCommits(effectiveRef)
       .then((history) => {
         if (cancelled) return;
@@ -220,17 +229,20 @@ export function BranchesScreen() {
         setFileContent(null);
         setLoadingRows(false);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) return;
+        setRowsError(error instanceof Error ? error.message : String(error));
         setRows([]);
         setLoadingRows(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [effectiveRef, headOid]);
+  }, [effectiveRef, headOid, rowsAttempt, detailGate, fileGate]);
 
   const selectCommit = async (row: CommitRow) => {
+    const isCurrent = detailGate.begin();
+    fileGate.invalidate();
     if (selectedCommit?.oid === row.oid) {
       setSelectedCommit(null);
       setDetail(null);
@@ -245,15 +257,19 @@ export function BranchesScreen() {
     shareCommitWithChat({ oid: row.oid, summary: row.summary });
     setLoadingDetail(true);
     try {
-      setDetail(await getCommitDetail(row.oid));
-    } catch {
+      const result = await getCommitDetail(row.oid);
+      if (isCurrent()) setDetail(result);
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setDetail(null);
     } finally {
-      setLoadingDetail(false);
+      if (isCurrent()) setLoadingDetail(false);
     }
   };
 
   const openCompare = async (oid: string, parentOid: string | null, filePath: string) => {
+    const isCurrent = fileGate.begin();
     const key = `${oid}:${filePath}`;
     if (openFile === key) {
       setOpenFile(null);
@@ -269,15 +285,18 @@ export function BranchesScreen() {
           parentOid ? readFileAtCommit(filePath, parentOid) : null,
           readFileAtCommit(filePath, oid),
         ]);
+      if (!isCurrent()) return;
       setFileContent({
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || languageForPath(filePath),
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setFileContent(null);
     } finally {
-      setLoadingFile(false);
+      if (isCurrent()) setLoadingFile(false);
     }
   };
 
@@ -511,6 +530,7 @@ export function BranchesScreen() {
             }}
         />
         <ul className="branches__rows">
+          {rowsError && <li className="branches__empty" role="alert">{rowsError}<button className="outline-button" onClick={() => setRowsAttempt((n) => n + 1)}>Try again</button></li>}
           {loadingRows && <li className="branches__empty">Loading commits…</li>}
           {!loadingRows && filteredRows.map((row) => {
             const isSelected = selectedCommit?.oid === row.oid;
@@ -633,7 +653,6 @@ export function BranchesScreen() {
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

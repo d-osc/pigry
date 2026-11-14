@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
@@ -70,6 +71,7 @@ function toDisplayIssue(gh: GhIssue): IssueRow {
 }
 
 export function IssuesScreen() {
+  const listGate = useRequestGate();
   const { notify } = useRepository();
   const [listWidth, setListWidth] = useState(400);
   const [issues, setIssues] = useState<GhIssue[]>([]);
@@ -121,11 +123,13 @@ export function IssuesScreen() {
   );
 
   const loadList = async () => {
+    const isCurrent = listGate.begin();
     setRefreshing(true);
     setListLoading(true);
     setListError(null);
     try {
       const list = await ghIssueList();
+      if (!isCurrent()) return;
       setIssues(list);
       setLive(true);
       setSyncedAt(Date.now());
@@ -134,10 +138,11 @@ export function IssuesScreen() {
       );
       setDetailNonce((nonce) => nonce + 1);
     } catch (error) {
+      if (!isCurrent()) return;
       setListError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRefreshing(false);
-      setListLoading(false);
+      if (isCurrent()) setRefreshing(false);
+      if (isCurrent()) setListLoading(false);
     }
   };
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '../../editor/ThemedEditors';
 import { GitCompare } from 'lucide-react';
 import { readFileAtCommit } from '../../lib/tauriClient';
 import { useFileHistory } from '../../hooks/useFileHistory';
@@ -20,6 +20,8 @@ interface ComparePanelProps {
 
 interface BaseEntry {
   oid: string;
+  path: string;
+  error?: string;
   content: string | null;
 }
 
@@ -30,7 +32,8 @@ export function ComparePanel({
   baseOid,
   refName,
 }: ComparePanelProps) {
-  const { commits } = useFileHistory(path, refName ?? null);
+  const { commits, error: historyError, retry: retryHistory } = useFileHistory(path, refName ?? null);
+  const [attempt, setAttempt] = useState(0);
   const [base, setBase] = useState<BaseEntry | null>(null);
   // Inline (unified) by default; Split renders side-by-side like the editor.
   const [split, setSplit] = useState(false);
@@ -49,18 +52,20 @@ export function ComparePanel({
         if (!cancelled) {
           setBase({
             oid: baseCommit.oid,
+            path,
             content: result.binary || result.tooLarge ? null : result.content,
           });
         }
       })
-      .catch(() => {
-        if (!cancelled) setBase({ oid: baseCommit.oid, content: null });
+      .catch((error: unknown) => {
+        if (!cancelled) setBase({ oid: baseCommit.oid, path, content: null, error: error instanceof Error ? error.message : String(error) });
       });
     return () => {
       cancelled = true;
     };
-  }, [path, baseCommit?.oid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [path, baseCommit?.oid, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (historyError) return <aside className="compare-panel"><div className="compare-panel__empty" role="alert">{historyError}<button className="outline-button" onClick={retryHistory}>Try again</button></div></aside>;
   if (!baseCommit) {
     return (
       <aside className="compare-panel">
@@ -74,7 +79,7 @@ export function ComparePanel({
   }
 
   const baseContent =
-    base?.oid === baseCommit.oid ? (base.content ?? '') : undefined;
+    base?.oid === baseCommit.oid && base.path === path ? (base.content ?? '') : undefined;
 
   return (
     <aside className="compare-panel">
@@ -117,7 +122,9 @@ export function ComparePanel({
         </div>
       </div>
       <div className="compare-panel__editor">
-        {baseContent === undefined ? (
+        {base?.path === path && base.oid === baseCommit.oid && (base.error || base.content === null) ? (
+          <div className="compare-panel__empty" role="alert">{base.error ?? 'Binary or oversized file — comparison unavailable.'}<button className="outline-button" onClick={() => setAttempt((n) => n + 1)}>Try again</button></div>
+        ) : baseContent === undefined ? (
           <div className="compare-panel__empty">Loading base…</div>
         ) : (
           <DiffEditor
@@ -125,7 +132,6 @@ export function ComparePanel({
             original={baseContent}
             modified={workingContent}
             language={language}
-            theme="pigry-dark"
             options={{
               readOnly: true,
               renderSideBySide: split,

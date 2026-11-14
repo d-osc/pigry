@@ -67,6 +67,8 @@ function languageTag(path: string): string {
 
 export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal }: ExplorerScreenProps) {
   const { repository, stage, unstage, discard, notify } = useRepository();
+  const [treeError, setTreeError] = useState<string | null>(null);
+  const [treeAttempt, setTreeAttempt] = useState(0);
   const [tree, setTree] = useState<FileTreeData | null>(null);
   // Remounted by AppShell on openPath change (key), so the initializer runs.
   const [selectedPath, setSelectedPath] = useState<string | null>(openPath ?? null);
@@ -197,17 +199,18 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
 
   useEffect(() => {
     let cancelled = false;
+    setTreeError(null);
     getFileTree()
       .then((result) => {
         if (!cancelled) setTree(result);
       })
-      .catch(() => {
-        if (!cancelled) setTree(null);
+      .catch((error: unknown) => {
+        if (!cancelled) { setTreeError(error instanceof Error ? error.message : String(error)); setTree(null); }
       });
     return () => {
       cancelled = true;
     };
-  }, [changeFingerprint]);
+  }, [changeFingerprint, treeAttempt]);
 
   // The first file is auto-opened as an implicit tab, but once the user closes
   // every tab the Explorer stays empty until a file is picked again.
@@ -919,6 +922,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               ))}
             </div>
           ) : (
+          <>
+          {treeError && <div className="code-results__error" role="alert">{treeError}<button className="outline-button" onClick={() => setTreeAttempt((n) => n + 1)}>Try again</button></div>}
           <FileTree
             tree={tree}
             selectedPath={activePath}
@@ -940,6 +945,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             onMove={(sourcePath, targetFolder) => void handleMove(sourcePath, targetFolder)}
             revealPath={activePath}
           />
+          </>
           )}
           <div className="explorer-tree-foot">
             <span>

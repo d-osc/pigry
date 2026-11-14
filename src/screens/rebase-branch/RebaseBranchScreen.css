@@ -41,7 +41,7 @@
 /* In-progress / conflict card */
 .rb__conflict {
   padding: 10px 14px;
-  border: 1px solid var(--danger, #e79098);
+  border: 1px solid var(--danger, var(--red));
   border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
@@ -55,7 +55,7 @@
   gap: 6px;
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .rb__conflict-files {
@@ -87,8 +87,8 @@
 }
 
 .rb__abort-btn:hover {
-  border-color: var(--danger, #e79098);
-  color: var(--danger, #e79098);
+  border-color: var(--danger, var(--red));
+  color: var(--danger, var(--red));
 }
 
 .rb__conflict-hint {
@@ -266,7 +266,7 @@
 }
 
 .rb__file-status--D {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .rb__file-status--R {
@@ -372,7 +372,7 @@
 }
 
 .rb__action[data-action='drop'] {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
   border-color: rgb(231 144 152 / 40%);
 }
 

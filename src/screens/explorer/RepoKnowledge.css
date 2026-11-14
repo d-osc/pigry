@@ -276,7 +276,7 @@
   border-radius: var(--radius);
   background: var(--accent);
   border: none;
-  color: #10131c;
+  color: var(--on-accent);
   font-size: var(--fs-xs);
   font-weight: 600;
   cursor: pointer;
@@ -358,11 +358,11 @@
 .know-editor__btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #10131c;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
 .know-editor__btn--primary:hover:not(:disabled) {
-  color: #10131c;
+  color: var(--on-accent);
   filter: brightness(1.08);
 }

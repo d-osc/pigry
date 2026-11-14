@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Copy, KeyRound, Loader2, LogIn, LogOut, Search, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { ghAccountList, ghAuthStatus, ghDeviceFlowPoll, ghDeviceFlowStart, ghInstall, ghLoginWithToken, ghOpenUrl, ghReleaseList, ghSwitchAccount, ghTokenScopes } from '../../lib/tauriClient';
+import { check as checkUpdater } from '@tauri-apps/plugin-updater';
+import { relaunch as relaunchApp } from '@tauri-apps/plugin-process';
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../lib/theme';
 import { ProviderManager } from './ProviderManager';
 import appPackage from '../../../package.json';
@@ -254,6 +256,11 @@ export function AppSettingsScreen({
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'uptodate' | 'available' | 'none' | 'error'>('idle');
   const [latestTag, setLatestTag] = useState('');
   const [autoCheck, setAutoCheck] = useState(() => readBool('pigry:check-updates', true));
+  // Tauri updater — download + install + relaunch (all platforms).
+  const [installStatus, setInstallStatus] = useState<'idle' | 'downloading' | 'installing' | 'done' | 'error'>('idle');
+  const [installPct, setInstallPct] = useState(0);
+  const [installError, setInstallError] = useState('');
+
 
   const checkForUpdates = async () => {
     setUpdateStatus('checking');
@@ -272,6 +279,40 @@ export function AppSettingsScreen({
     }
   };
 
+  /** Downloads the update (with progress), installs it and relaunches the
+   * app — Tauri updater, works on Windows / Linux / macOS (x86_64 + arm64).
+   * Errors surface when the release endpoint is unreachable (private repo). */
+  const installUpdate = async () => {
+    setInstallStatus('downloading');
+    setInstallError('');
+    try {
+      const update = await checkUpdater();
+      if (!update) {
+        setInstallStatus('done');
+        notify('No update package found on the release endpoint', 'error');
+        return;
+      }
+      let total = 0;
+      let received = 0;
+      await update.downloadAndInstall(function (event) {
+        if (event.event === 'Started') {
+          total = event.data.contentLength || 0;
+        } else if (event.event === 'Progress') {
+          received += event.data.chunkLength || 0;
+          if (total > 0) setInstallPct(Math.min(100, Math.round((received / total) * 100)));
+        } else if (event.event === 'Finished') {
+          setInstallPct(100);
+        }
+      });
+      setInstallStatus('done');
+      notify('Update installed — relaunching…', 'success');
+      setTimeout(function () { void relaunchApp(); }, 1200);
+    } catch (error) {
+      setInstallStatus('error');
+      setInstallError(error instanceof Error ? error.message : String(error));
+      notify('Update failed', 'error');
+    }
+  };
   // Auto check on entering the Update section (once per mount).
   useEffect(() => {
     if (activeSection === 'update' && autoCheck && updateStatus === 'idle') {
@@ -1053,6 +1094,29 @@ export function AppSettingsScreen({
                     <span className="app-settings__pill app-settings__pill--checking">
                       update available: {latestTag}
                     </span>
+                  )}
+                  <button
+                    type="button"
+                    className="app-settings__button"
+                    disabled={installStatus === 'downloading' || installStatus === 'installing'}
+                    onClick={() => void installUpdate()}
+                  >
+                    {installStatus === 'downloading'
+                      ? installPct > 0 && installPct < 100
+                        ? 'Downloading… ' + installPct + '%'
+                        : 'Downloading…'
+                      : installStatus === 'installing'
+                        ? 'Installing…'
+                        : 'Download & install'}
+                  </button>
+                  {installStatus === 'downloading' && installPct > 0 && installPct < 100 && (
+                    <span className="app-settings__pill">{installPct}%</span>
+                  )}
+                  {installStatus === 'done' && (
+                    <span className="app-settings__pill app-settings__pill--in">installed — relaunching…</span>
+                  )}
+                  {installStatus === 'error' && installError && (
+                    <span className="app-settings__pill app-settings__pill--out">{installError}</span>
                   )}
                   {updateStatus === 'none' && (
                     <span className="app-settings__pill">no releases on GitHub yet</span>

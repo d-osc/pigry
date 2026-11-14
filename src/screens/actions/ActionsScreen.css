@@ -326,7 +326,7 @@
   margin: 0 20px;
   padding: 8px 12px;
   border-radius: var(--radius);
-  background: #3b2530;
+  background: var(--red-tint);
   font-size: var(--fs-xs);
   color: var(--text-secondary);
 }

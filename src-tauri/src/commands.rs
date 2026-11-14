@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::config::{self, AppConfig};
@@ -255,12 +255,16 @@ fn open_repo_sync(
     state: &Mutex<AppState>,
     path: &str,
 ) -> Result<AppStatePayload, String> {
-    git2::Repository::discover(path)
+    let repo = git2::Repository::discover(path)
         .map_err(|e| format!("not a git repository: {}", e.message()))?;
+    let root = repo.workdir().ok_or("Open a working repository, not a bare remote")?.to_path_buf();
     let mut state = state.lock().map_err(|e| e.to_string())?;
-    config::set_active(&mut state.config, path);
+    config::set_active(&mut state.config, &root.to_string_lossy());
     config::save(app, &state.config);
-    state.repo_path = Some(PathBuf::from(path));
+    state.repo_path = Some(root.clone());
+    if let Some(holder) = app.try_state::<FileWatcherHolder>() {
+        holder.watcher.lock().map_err(|e| e.to_string())?.watch(&root.to_string_lossy());
+    }
     Ok(build_payload(&state))
 }
 
@@ -304,6 +308,9 @@ pub async fn close_repository(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<AppStatePayload, String> {
     let mut state = state.lock().map_err(|e| e.to_string())?;
+    if let Some(holder) = app.try_state::<FileWatcherHolder>() {
+        holder.watcher.lock().map_err(|e| e.to_string())?.stop();
+    }
     state.repo_path = None;
     state.config.active = None;
     config::save(&app, &state.config);

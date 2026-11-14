@@ -35,5 +35,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/d-osc/pigry/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGMzFGNzBGQkE0MTVCM0YKUldRL1cwRzZEL2N4anptSWVhODF2QXBNQzVRUlhWWjhmQ0JWT2dZTlJ0TUcwbUMwcWxBaE1nS3AK"
+    }
   }
 }

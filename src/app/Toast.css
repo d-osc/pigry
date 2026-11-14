@@ -28,7 +28,7 @@
 }
 
 .toast--error {
-  border-color: #5d3944;
+  border-color: var(--red);
 }
 
 .toast--error svg {

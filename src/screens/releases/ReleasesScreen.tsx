@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -82,6 +83,7 @@ function isTauriRuntime() {
 }
 
 export function ReleasesScreen() {
+  const listGate = useRequestGate();
   const { repository, notify } = useRepository();
   const [listWidth, setListWidth] = useState(360);
   const [selected, setSelected] = useState<string | null>(null);
@@ -119,10 +121,12 @@ export function ReleasesScreen() {
   const { history } = useCommitHistory(false, 0, repository?.headOid ?? null);
 
   const loadList = async () => {
+    const isCurrent = listGate.begin();
     setListLoading(true);
     setListError(null);
     try {
       const list = await ghReleaseList();
+      if (!isCurrent()) return;
       setReleases(list);
       setLive(true);
       setSyncedAt(Date.now());
@@ -132,9 +136,10 @@ export function ReleasesScreen() {
           : (list.find((release) => release.isLatest) ?? list[0])?.tagName ?? null,
       );
     } catch (error) {
+      if (!isCurrent()) return;
       setListError(error instanceof Error ? error.message : String(error));
     } finally {
-      setListLoading(false);
+      if (isCurrent()) setListLoading(false);
     }
   };
 

@@ -1380,3 +1380,21 @@ fn read_binary_file_returns_base64_and_mime() {
     assert!(read_binary_file(&dir, "../escape.png").is_err(), "traversal rejected");
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn rejected_commit_hook_preserves_head_and_staging() {
+    let dir = scratch_repo("commit-hook");
+    write(&dir, "file.txt", "initial"); commit_all(&dir, "initial");
+    let before = crate::gitcli::run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    write(&dir, "file.txt", "pending"); stage_paths(&dir, &["file.txt".into()]).unwrap();
+    let hook = dir.join(".git/hooks/pre-commit");
+    fs::write(&hook, "#!/bin/sh\necho 'Rejected by validation hook' >&2\nexit 1\n").unwrap();
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt; fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap(); }
+    let error = commit(&dir, "must fail", "keep draft", false).unwrap_err();
+    assert!(error.contains("Rejected by validation hook"), "{error}");
+    assert_eq!(crate::gitcli::run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), before);
+    assert!(build_state(&dir).unwrap().files.iter().any(|file| file.staged));
+    fs::remove_file(hook).unwrap(); commit(&dir, "retry succeeds", "keep draft", false).unwrap();
+    let _ = fs::remove_dir_all(dir);
+}

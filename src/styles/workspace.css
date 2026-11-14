@@ -1,0 +1,250 @@
+/* Workspace visual system. Imported after screen styles so shared controls
+   have one size and screen-specific treatments stay together. */
+:root {
+  --surface-shadow: 0 4px 18px rgb(0 0 0 / 10%);
+  --control-height: 34px;
+}
+[data-theme='light'] { --surface-shadow: 0 4px 18px rgb(28 39 65 / 5%); }
+
+/* Shared page hierarchy and controls */
+.screen-header { padding: 24px 28px 8px; flex-wrap: wrap; row-gap: 10px; }
+.screen-header__title, .explorer-screen__title, .commit-history__title,
+.working-changes__title, .push__title, .stashes__title, .cherry__title,
+.rb__title, .merge-branch__title, .projects__title {
+  font-size: 23px; line-height: 1.35; font-weight: 600; letter-spacing: -.035em;
+}
+.screen-toolbar { padding: 14px 28px 18px; flex-wrap: wrap; }
+.screen-search { height: var(--control-height); background: var(--bg-input); }
+.primary-button, .outline-button, .chip-button, .ghost-button {
+  min-height: var(--control-height); height: auto; padding: 7px 12px;
+  border-radius: var(--radius); font-size: var(--fs-sm);
+}
+.primary-button { color: #fff; background: var(--button-primary); border: 1px solid transparent; }
+.primary-button:hover:not(:disabled) { background: var(--button-primary-hover); }
+.outline-button, .chip-button { color: var(--text-secondary); background: var(--bg-panel); border: 1px solid var(--border); }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button:disabled { opacity: .5; }
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+.context-menu { padding: 6px; border-radius: 10px; box-shadow: var(--surface-shadow); }
+.context-menu button { min-height: 34px; }
+
+/* Explorer: distinct tree, tabs, editor and assistant surfaces */
+.explorer-screen__bar { padding: 22px 24px 18px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.explorer-screen__subtitle { font-size: 12px; }
+.explorer-screen__tree { background: var(--bg-sidebar); }
+.explorer-tree-head { height: 42px; }
+.explorer-tabs { min-height: 42px; background: var(--bg-sidebar); }
+.explorer-tab { min-height: 40px; padding-inline: 14px; }
+.explorer-tab--active { background: var(--bg-panel); box-shadow: inset 0 2px 0 var(--accent); }
+.explorer-ai__header { min-height: 46px; background: var(--bg-panel); }
+.explorer-ai__card { border-radius: 10px; }
+.explorer-ai__input { border-radius: 10px; }
+
+/* Copilot: give the conversation room, without stretching text edge to edge */
+.agent-screen__body { margin-top: 18px; border-top: 1px solid var(--border); }
+.agent-screen__body .explorer-ai { background: var(--bg-workspace); }
+.agent-screen__body .explorer-ai__body { padding: 24px clamp(16px, 4vw, 64px); }
+.agent-screen__body .explorer-ai__footer { padding: 16px clamp(16px, 4vw, 64px); background: var(--bg-panel); }
+.agent-screen__scope { background: var(--accent-tint-1); color: var(--accent); border-radius: 999px; padding: 4px 10px; }
+
+/* Working changes and history: keep diff/graph geometry intact */
+.working-changes__header, .commit-history__header { padding: 22px 24px 18px; gap: 16px; border-bottom: 1px solid var(--border); }
+.working-changes__title-row, .working-changes__context-row, .commit-history__title-row,
+.commit-history__filters { flex-wrap: wrap; row-gap: 10px; }
+.working-changes__subtitle, .commit-history__subtitle { color: var(--text-secondary); }
+.working-changes__files-and-commit { background: var(--bg-sidebar); }
+.commit-history__columns { background: var(--bg-sidebar); }
+.commit-row--clickable:not(.commit-row--selected):hover { background: color-mix(in srgb, var(--accent) 6%, var(--bg-workspace)); }
+.commit-row__sha { color: var(--accent); }
+.ref-pill, .branch-pill { border-radius: 6px; }
+.working-changes__empty { padding: 48px 24px; }
+
+/* Git operations: readable task headers, deliberate cards and commit lists */
+.push-screen, .stashes-screen, .cherry-screen, .rb-screen, .merge-branch { padding: 24px 28px 36px; gap: 22px; }
+.push__header, .cherry__header, .rb__header, .merge-branch__head { padding-bottom: 18px; border-bottom: 1px solid var(--border); gap: 10px; }
+.push__section, .stashes__section { gap: 14px; }
+.push__commits, .stashes__list, .cherry__rows, .rb__list {
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg-panel); overflow: auto;
+}
+.push__commit-row, .stashes__entry-row, .cherry__row, .rb__row-main { min-height: 48px; padding: 12px 14px; }
+.push__commit-row:hover, .cherry__row:hover, .rb__row-main:hover { background: var(--bg-card); }
+.push__commit-summary, .stashes__entry-message, .cherry__row-summary, .rb__summary { font-size: 13px; }
+.push__commit-sha, .cherry__row-sha, .rb__oid { color: var(--accent); }
+.stashes__create { padding: 16px; border: 1px solid var(--border); background: var(--bg-panel); border-radius: 10px; flex-wrap: wrap; }
+.stashes__input { min-width: 140px; min-height: 36px; }
+.cherry__branch-select, .rb__branch-select, .branches__search { min-height: 34px; }
+.merge-branch__strategy { padding: 18px; border-radius: 10px; background: var(--bg-panel); }
+.merge-branch__branch { min-height: 34px; border-radius: 8px; }
+.merge-branch__section { margin-bottom: 28px; }
+.push__empty, .stashes__empty, .cherry__empty, .rb__empty, .merge-branch__empty, .branches__empty {
+  padding: 28px 20px; border: 1px dashed var(--border-strong); border-radius: 10px;
+  color: var(--text-secondary); background: var(--bg-panel); line-height: 1.8;
+}
+.branches-screen { padding: 24px; }
+.branches__pane-title { font-size: 15px; padding-bottom: 10px; }
+.branches__item { border-radius: 8px; margin-bottom: 4px; }
+.branches__row { min-height: 46px; }
+.branches__detail { background: var(--bg-panel); border-radius: 10px; padding: 16px; }
+
+/* PRs, issues, releases and workflows: scannable master/detail views */
+.pr-list, .issues-list, .releases-list, .actions-runs { background: var(--bg-sidebar); }
+.pr-list__tabs, .issues-list__tabs, .releases-list__tabs, .actions-runs__head { min-height: 46px; background: var(--bg-sidebar); }
+.pr-row, .issue-row, .release-row, .actions-run { padding: 16px 18px; transition: background var(--transition-fast); }
+.pr-row__title, .issue-row__title, .release-row__title, .actions-run__title { font-size: 13px; line-height: 1.6; font-weight: 500; }
+.pr-row--selected, .issue-row--selected, .release-row--selected, .actions-run--selected {
+  background: var(--accent-tint-1); box-shadow: inset 3px 0 0 var(--accent);
+}
+.pr-detail__title, .issue-detail__title, .release-detail__tag, .actions-detail__title { font-size: 22px; line-height: 1.45; letter-spacing: -.025em; }
+.pr-detail__rail, .issue-detail__rail { background: var(--bg-panel); padding: 20px; }
+.pr-comment, .issue-comment { border-radius: 10px; }
+.pr-detail__actions, .release-assets, .actions-artifacts { border-radius: 10px; background: var(--bg-panel); }
+.pr-detail__tabs, .issue-detail__tabs, .actions-detail__tabs { gap: 18px; }
+.release-asset, .actions-artifact { padding-block: 14px; }
+.actions-console { background: var(--bg-code); }
+
+/* Projects: cards, overview and board use the same surface hierarchy */
+.projects__overview { background: var(--bg-panel); border-bottom: 1px solid var(--border); }
+.projects__heading { padding-block: 20px; }
+.projects__subtitle { color: var(--text-secondary); line-height: 1.7; }
+.projects__milestone { border-radius: 10px; }
+.projects__columns { gap: 16px; padding: 20px; }
+.projects__column { border-radius: 12px; background: var(--bg-sidebar); border: 1px solid var(--border); }
+.projects__column-head { padding: 16px 14px; }
+.projects__item { margin: 0 10px 10px; padding: 16px; border-radius: 10px; background: var(--bg-panel); box-shadow: var(--surface-shadow); }
+.projects__item-title { font-size: 13px; line-height: 1.6; }
+.projects__item:hover { border-color: var(--border-hover); }
+.ptable__card, .proad__card { border-radius: 10px; }
+
+/* Wiki: calm reading surface and clear navigation */
+.wiki-pages { background: var(--bg-sidebar); }
+.wiki-page { min-height: 36px; margin: 3px 8px; border-radius: 7px; }
+.wiki-page--active { background: var(--accent-tint-1); color: var(--accent); }
+.wiki-article { padding: 28px 36px; }
+.wiki-article__title { font-size: 30px; letter-spacing: -.04em; line-height: 1.3; }
+.wiki-md { font-size: 14px; line-height: 1.85; }
+.wiki-callout, .wiki-terminal, .wiki-md__code { border-radius: 10px; }
+.wiki-toc { background: var(--bg-panel); padding: 20px; }
+
+/* Insights and security: separate metrics from investigation details */
+.insights-kpis { gap: 16px; }
+.insights-kpi, .insights-panel, .security-qcard { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-panel); box-shadow: var(--surface-shadow); padding: 20px; }
+.insights-kpi__value, .security-qcard__value { font-size: 30px; letter-spacing: -.04em; }
+.insights-kpi__label, .security-qcard__label { color: var(--text-secondary); font-size: 12px; }
+.insights-screen__row { gap: 16px; }
+.security-screen__summary { margin: 18px 24px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-panel); }
+.security-findings { background: var(--bg-sidebar); }
+.security-finding { padding: 16px; }
+.security-finding--selected { box-shadow: inset 3px 0 0 var(--accent); }
+.security-detail__title { font-size: 23px; line-height: 1.5; letter-spacing: -.025em; }
+.security-code, .security-detail__suggested, .security-assistant { border-radius: 10px; }
+
+/* Settings: a quiet menu and well-separated preference groups */
+.app-settings { padding: 28px 32px; gap: 24px; }
+.app-settings__topbar h1 { font-size: 25px; font-weight: 600; letter-spacing: -.035em; }
+.app-settings__search { height: 36px; }
+.app-settings__menu { background: var(--bg-sidebar); border-radius: 10px; padding: 12px; }
+.app-settings__menu-item { min-height: 38px; border-radius: 7px; }
+.app-settings__content { padding: 24px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; }
+.app-settings__row { padding-block: 20px; }
+.app-settings__account, .app-settings__provider-form { border-radius: 10px; }
+.app-settings__seg { padding: 4px; border-radius: 9px; background: var(--bg-input); }
+.app-settings__seg-btn { min-height: 30px; border-radius: 6px; }
+.app-settings__seg-btn--active { background: var(--accent-tint-1); color: var(--accent); }
+
+/* Reflow toolbars without changing resizable diff or graph dimensions. */
+@media (max-width: 1100px) {
+  .screen-header__meta { margin-left: 0; flex-basis: 100%; }
+  .explorer-screen__bar-actions { flex-wrap: wrap; }
+  .explorer-screen__subtitle { flex-basis: 100%; }
+  .insights-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insights-screen__row { flex-wrap: wrap; }
+  .pr-detail__rail, .issue-detail__rail { width: 180px; padding: 14px; }
+}
+@media (max-width: 760px) {
+  .screen-header, .explorer-screen__bar { padding: 18px 16px 10px; }
+  .screen-toolbar { padding: 12px 16px; }
+  .push-screen, .stashes-screen, .cherry-screen, .rb-screen, .merge-branch { padding: 20px 16px; }
+  .wiki-article { padding: 20px; }
+  .wiki-toc { display: none; }
+  .app-settings { padding: 20px 16px; }
+  .app-settings__topbar { flex-wrap: wrap; }
+  .app-settings__search { flex-basis: 100%; max-width: none; }
+  .app-settings__menu { width: 150px; }
+  .app-settings__content { padding: 16px; }
+  .app-settings__row { flex-wrap: wrap; gap: 12px; }
+}
+
+/* Theme-safe text and empty states, including repos without GitHub data. */
+.commit-row__message { color: var(--text-primary); }
+.commit-history__title-row { gap: 10px; }
+.merge-branch__run-btn { background: var(--button-primary); color: #fff; }
+.release-detail__placeholder {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px; padding: 40px;
+  color: var(--text-secondary); text-align: center; line-height: 1.8;
+}
+.release-detail__placeholder > svg { width: 32px; height: 32px; color: var(--accent); }
+.release-detail__placeholder p:first-of-type { font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.release-detail__placeholder p { max-width: 440px; }
+.pr-empty, .pr-detail__placeholder, .wiki-placeholder, .insights-screen__empty,
+.security-state, .projects__state { line-height: 1.8; }
+.pr-empty__hint, .security-state__desc, .projects__state-desc { color: var(--text-secondary); }
+@media (max-width: 760px) {
+  .merge-branch__strategies { grid-template-columns: 1fr; }
+  .stashes__entry-row { flex-wrap: wrap; gap: 10px; }
+  .stashes__entry-actions { flex-wrap: wrap; }
+}
+
+.commit-history__title-row > :first-child { margin-right: 0; }
+.prov-mgr { gap: 16px; }
+.prov-mgr__header { flex-wrap: wrap; }
+.prov-mgr__add { min-height: 34px; }
+.app-settings__button { min-height: 32px; }
+@media (max-width: 1100px) {
+  .app-settings__menu { width: 180px; }
+  .app-settings__scope-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* GitHub-style controls and restrained, border-led surfaces. */
+:root { --surface-shadow: 0 1px 0 rgb(0 0 0 / 10%); --control-height: 32px; }
+[data-theme='light'] { --surface-shadow: 0 1px 0 rgb(31 35 40 / 4%); }
+.primary-button, .merge-branch__run-btn {
+  background: var(--button-primary); border: 1px solid var(--button-primary-border);
+  color: #fff; font-weight: 600; box-shadow: 0 1px 0 rgb(0 0 0 / 10%);
+}
+.primary-button:hover:not(:disabled), .merge-branch__run-btn:hover:not(:disabled) { background: var(--button-primary-hover); }
+.outline-button, .chip-button { color: var(--text-primary); background: var(--button-default); font-weight: 500; box-shadow: var(--surface-shadow); }
+.outline-button:hover:not(:disabled), .chip-button:hover:not(:disabled) { background: var(--button-default-hover); border-color: var(--border-hover); }
+.screen-header__title, .explorer-screen__title, .commit-history__title,
+.working-changes__title, .push__title, .stashes__title, .cherry__title,
+.rb__title, .merge-branch__title, .projects__title { font-size: 22px; letter-spacing: -.025em; }
+.nav-item { position: relative; }
+.nav-item--active, .nav-item--active:hover { color: var(--text-primary); background: var(--nav-active-bg); box-shadow: none; }
+.nav-item--active::before { content: ''; position: absolute; left: -8px; top: 7px; bottom: 7px; width: 4px; border-radius: 6px; background: var(--nav-indicator); }
+.nav-item--active .nav-item__icon { color: var(--text-primary); }
+.nav-item__badge { padding: 0 6px; border-radius: 999px; background: var(--bg-card); color: var(--text-secondary); }
+.nav-item--active .nav-item__badge { color: var(--text-primary); }
+.nav-sidebar__heading, .nav-section__title { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.repo-health { background: var(--bg-panel); }
+.title-bar__name { font-weight: 600; }
+.title-bar__repo { color: var(--accent); }
+.explorer-tabs, .commit-history__columns { background: var(--bg-panel); }
+.explorer-tab--active { box-shadow: inset 0 2px 0 var(--nav-indicator); background: var(--bg-workspace); }
+.commit-detail__tab--active, .insights-tab--active, .pr-detail__tab--active,
+.issues-list__tab--active, .pr-list__tab--active, .releases-list__tab--active,
+.actions-tab--active, .security-tab--active, .projects__view-tab--active { border-bottom-color: var(--nav-indicator); color: var(--text-primary); }
+.home { background: var(--bg-workspace); }
+.home__headline { font-size: clamp(30px, 3.4vw, 42px); }
+.home__card { background: var(--bg-workspace); box-shadow: var(--surface-shadow); border-radius: 8px; }
+.home__brand-mark { border-radius: 12px; }
+.home__recent-icon { background: var(--bg-panel); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; }
+.insights-kpi, .insights-panel, .security-qcard, .projects__item, .app-settings__content { background: var(--bg-workspace); box-shadow: var(--surface-shadow); border-radius: 6px; }
+.merge-branch__strategy { border-radius: 6px; background: var(--bg-panel); }
+.app-settings__menu-item--active { background: var(--nav-active-bg); color: var(--text-primary); box-shadow: inset 3px 0 0 var(--nav-indicator); }
+* { scrollbar-color: var(--border-strong) transparent; }
+::-webkit-scrollbar-thumb { background-color: var(--border-strong); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--border-hover); }
+
+.screen-loading { display: grid; place-items: center; flex: 1; min-height: 120px; color: var(--text-secondary); }
+[role='alert'] .outline-button { margin: 12px; }
+.diff-pane__notice[role='alert'], .compare-panel__empty[role='alert'], .file-history__empty[role='alert'] { display: flex; flex-direction: column; align-items: center; gap: 12px; overflow-wrap: anywhere; padding: 24px; }

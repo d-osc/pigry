@@ -15,7 +15,7 @@ export function CommitComposer() {
   const [generating, setGenerating] = useState(false);
 
   const stagedCount = repository?.files.filter((f) => f.staged).length ?? 0;
-  const canCommit = !busy && !committing && stagedCount > 0;
+  const canCommit = !busy && !committing && message.trim().length > 0 && (stagedCount > 0 || (amend && !!repository?.headOid));
 
   const [title, ...bodyLines] = useMemo(
     () => message.split('\n'),
@@ -28,7 +28,8 @@ export function CommitComposer() {
     if (!canCommit) return;
     setCommitting(true);
     try {
-      await commit(title ?? '', bodyLines.join('\n').trim(), amend);
+      const committed = await commit(title ?? '', bodyLines.join('\n').trim(), amend);
+      if (!committed) return;
       setMessage('');
       setAmend(false);
     } finally {

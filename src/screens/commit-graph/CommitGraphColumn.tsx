@@ -4,12 +4,12 @@ import './CommitGraphColumn.css';
 /** Lane colors from the design palette, cycling by lane index.
  *  Order matches the sidebar branch colors: indigo, purple, cyan, orange. */
 const LANE_COLORS = [
-  '#8b9dff', // accent (main)
-  '#b59aff', // purple
-  '#62cee7', // cyan
-  '#edb675', // orange
-  '#6dd6ad', // green
-  '#e79098', // red
+  'var(--accent)', // accent (main)
+  'var(--purple)', // purple
+  'var(--cyan)', // cyan
+  'var(--orange)', // orange
+  'var(--green)', // green
+  'var(--red)', // red
 ];
 
 const LANE_SPACING = 14;
@@ -131,7 +131,7 @@ export function CommitGraphColumn({
         cx={laneX(row.lane)}
         cy={middle}
         r={row.isHead ? 5 : 4}
-        fill={row.isHead ? '#e9ebf0' : laneColor(row.lane)}
+        fill={row.isHead ? 'var(--text-primary)' : laneColor(row.lane)}
         stroke={row.isHead ? laneColor(row.lane) : 'none'}
         strokeWidth={2}
       >

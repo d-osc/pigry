@@ -84,8 +84,6 @@ function seedDefaults(): AiProviderEntry[] {
   qwen.models = QWEN_MODELS.map(([name, vision]) => makeModel(name, vision));
   qwen.model = qwen.models[0]?.name ?? '';
   return [
-    makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-    makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
     qwen,
   ];
 }
@@ -362,6 +360,17 @@ function markClaudeProviders(list: AiProviderEntry[]): AiProviderEntry[] {
   return list;
 }
 
+/** External/CLI providers — wrap installed apps and binaries (claude-code,
+ * zcode-cli, codex, cursor, …). Removed from the app: pages open in the
+ * user’ external browser and chat runs on API providers only. */
+function isExternalProvider(entry: AiProviderEntry): boolean {
+  return (
+    APP_PROVIDER_TYPES.has(entry.type) ||
+    CLI_PROVIDER_TYPES.has(entry.type) ||
+    entry.detected === true
+  );
+}
+
 export function loadProviders(): AiProviderEntry[] {
   try {
     const raw = localStorage.getItem(LIST_KEY);
@@ -370,7 +379,7 @@ export function loadProviders(): AiProviderEntry[] {
       return markChatgptProviders(
         markAppProviders(
           applyRegistryDefaults(
-            ensureZaiTestProvider(ensureZaiDefaults(dedupeAppProviders(list.map(migrate)))),
+            ensureZaiTestProvider(ensureZaiDefaults(dedupeAppProviders(list.map(migrate)).filter(function (entry) { return !isExternalProvider(entry); }).filter(function (entry) { return entry.id !== 'builtin-zai' && entry.id !== 'builtin-start-plan'; }))),
           ),
         ),
       );
@@ -393,10 +402,8 @@ export function loadProviders(): AiProviderEntry[] {
             ensureZaiTestProvider(
               ensureZaiDefaults(
                 dedupeAppProviders([
-                  makeBuiltin('builtin-zai', 'Z.ai', 'zcode'),
-                  makeBuiltin('builtin-start-plan', 'Start Plan', 'openai'),
                   entry,
-                ]),
+                ].filter(function (entry) { return !isExternalProvider(entry); }).filter(function (entry) { return entry.id !== 'builtin-zai' && entry.id !== 'builtin-start-plan'; })),
               ),
             ),
           ),
@@ -422,7 +429,10 @@ export function loadProviders(): AiProviderEntry[] {
 
 export function saveProviders(providers: AiProviderEntry[], activeId?: string) {
   try {
-    localStorage.setItem(LIST_KEY, JSON.stringify(providers));
+    localStorage.setItem(
+      LIST_KEY,
+      JSON.stringify(providers.filter(function (entry) { return !isExternalProvider(entry); }).filter(function (entry) { return entry.id !== 'builtin-zai' && entry.id !== 'builtin-start-plan'; })),
+    );
   } catch {
     // session-only
   }

@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -91,6 +92,7 @@ function toDisplayPr(gh: GhPullRequest): PullRequest {
 }
 
 export function PullRequestsScreen() {
+  const listGate = useRequestGate();
   const { repository, refresh, notify } = useRepository();
   const [prListWidth, setPrListWidth] = useState(440);
   const [prs, setPrs] = useState<GhPullRequest[]>([]);
@@ -144,11 +146,13 @@ export function PullRequestsScreen() {
   );
 
   const loadList = async () => {
+    const isCurrent = listGate.begin();
     setRefreshing(true);
     setListLoading(true);
     setListError(null);
     try {
       const list = await ghPrList();
+      if (!isCurrent()) return;
       setPrs(list);
       setLive(true);
       setSyncedAt(Date.now());
@@ -157,10 +161,11 @@ export function PullRequestsScreen() {
       );
       setDetailNonce((nonce) => nonce + 1);
     } catch (error) {
+      if (!isCurrent()) return;
       setListError(error instanceof Error ? error.message : String(error));
     } finally {
-      setRefreshing(false);
-      setListLoading(false);
+      if (isCurrent()) setRefreshing(false);
+      if (isCurrent()) setListLoading(false);
     }
   };
 

@@ -128,7 +128,7 @@
 
 .changed-file__status--deleted {
   color: var(--red);
-  background: #3b2530;
+  background: var(--red-tint);
 }
 
 .changed-file__meta {
@@ -197,5 +197,5 @@
 
 .changed-file__status--conflicted {
   color: var(--red);
-  background: #3b2530;
+  background: var(--red-tint);
 }

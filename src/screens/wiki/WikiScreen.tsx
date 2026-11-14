@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 import { useEffect, useMemo, useState } from 'react';
 import {
   BookMarked,
@@ -49,6 +50,7 @@ function toFileName(title: string): string {
 }
 
 export function WikiScreen() {
+  const listGate = useRequestGate();
   const { notify } = useRepository();
   const [pagesWidth, setPagesWidth] = useState(240);
   const [tocWidth, setTocWidth] = useState(200);
@@ -76,11 +78,13 @@ export function WikiScreen() {
 
   // Full load: probe → clone/fetch → list pages.
   const loadWiki = async () => {
+    const isCurrent = listGate.begin();
     setPhase('loading');
     setLoadError('');
     setPagesLoading(true);
     try {
       const st = await wikiCheck();
+      if (!isCurrent()) return;
       setStatus(st);
       if (!st.supported) {
         setPhase('unsupported');
@@ -92,7 +96,9 @@ export function WikiScreen() {
         return;
       }
       await wikiSync();
+      if (!isCurrent()) return;
       const list = await wikiList();
+      if (!isCurrent()) return;
       setPages(list);
       setActiveFile((current) =>
         list.some((entry) => entry.file === current)
@@ -102,10 +108,11 @@ export function WikiScreen() {
       setSyncedAt(Date.now());
       setPhase('ready');
     } catch (error) {
+      if (!isCurrent()) return;
       setLoadError(error instanceof Error ? error.message : String(error));
       setPhase('error');
     } finally {
-      setPagesLoading(false);
+      if (isCurrent()) setPagesLoading(false);
     }
   };
 

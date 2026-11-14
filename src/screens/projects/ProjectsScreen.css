@@ -1226,19 +1226,19 @@
 }
 
 .proad__bar--ready {
-  background: #1a2a30;
+  background: var(--accent-tint-1);
   border: 1px solid #31515b;
   color: var(--cyan);
 }
 
 .proad__bar--active {
-  background: #302a22;
+  background: var(--orange-tint);
   border: 1px solid #66513a;
   color: var(--orange);
 }
 
 .proad__bar--done {
-  background: #1b2b29;
+  background: var(--green-tint);
   border: 1px dashed #335046;
   color: var(--text-secondary);
 }

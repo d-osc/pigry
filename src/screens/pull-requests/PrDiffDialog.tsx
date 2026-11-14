@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '../../editor/ThemedEditors';
 import { Clock, FileClock, GitCompare, X } from 'lucide-react';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
 import type { Monaco } from '@monaco-editor/react';
@@ -352,7 +352,6 @@ export function PrDiffDialog({
                   original={active.original}
                   modified={active.modified}
                   language={active.language}
-                  theme="pigry-dark"
                   onMount={(diffEditor, monaco) => {
                     setModifiedEditor(diffEditor.getModifiedEditor());
                     setMonacoInst(monaco);

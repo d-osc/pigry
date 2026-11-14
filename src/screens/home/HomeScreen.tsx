@@ -6,6 +6,9 @@ import {
   FolderOpen,
   GitBranch,
   History,
+  ArrowUpRight,
+  GitCommitHorizontal,
+  Sparkles,
 } from 'lucide-react';
 import { PigryMark } from '../../app/PigryMark';
 import { useRepository } from '../../hooks/useRepository';
@@ -46,7 +49,14 @@ export function HomeScreen({
             </span>
             PIGRY <span className="home__brand-chip">GIT</span>
           </h1>
-          <p className="home__brand-sub">Select a repository to start working.</p>
+          <span className="home__eyebrow">YOUR NEXT COMMIT STARTS HERE</span>
+          <h2 className="home__headline">Good work starts{' '}<br />with a clear workspace.</h2>
+          <p className="home__brand-sub">Your code, branches, and ideas. All in one place.</p>
+          <div className="home__features" aria-label="Workspace features">
+            <span><GitBranch size={14} /> Branch with confidence</span>
+            <span><GitCommitHorizontal size={14} /> Review every change</span>
+            <span><Sparkles size={14} /> Build with AI</span>
+          </div>
           {onBackToWorkspace && (
             <button
               type="button"
@@ -60,6 +70,11 @@ export function HomeScreen({
         </header>
 
         <div className="home__card">
+          <div className="home__card-heading">
+            <span className="home__eyebrow">LET’S GET TO WORK</span>
+            <h2>Open your workspace</h2>
+            <p>Pick a local project or bring one from a remote.</p>
+          </div>
           <div className="home__actions">
             <button
               type="button"
@@ -68,11 +83,12 @@ export function HomeScreen({
               disabled={busy}
             >
               <FolderOpen size={13} strokeWidth={1.5} />
-              Open repository…
+              Open repository <ArrowUpRight size={15} />
             </button>
             <button
               type="button"
               className="outline-button"
+              aria-expanded={cloneOpen}
               onClick={() => setCloneOpen((open) => !open)}
               disabled={busy}
             >
@@ -85,6 +101,7 @@ export function HomeScreen({
             <div className="home__clone">
               <input
                 className="home__clone-input"
+                aria-label="Repository URL"
                 placeholder="Repository URL…"
                 value={cloneUrl}
                 onChange={(event) => setCloneUrl(event.target.value)}
@@ -92,6 +109,7 @@ export function HomeScreen({
               />
               <input
                 className="home__clone-input"
+                aria-label="Target directory"
                 placeholder="Target directory…"
                 value={cloneTarget}
                 onChange={(event) => setCloneTarget(event.target.value)}

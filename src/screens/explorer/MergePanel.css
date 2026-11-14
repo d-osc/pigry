@@ -167,8 +167,8 @@
 }
 
 .merge-panel__btn--danger {
-  border-color: color-mix(in srgb, var(--danger, #e79098) 60%, transparent);
-  color: var(--danger, #e79098);
+  border-color: color-mix(in srgb, var(--danger, var(--red)) 60%, transparent);
+  color: var(--danger, var(--red));
 }
 
 .merge-panel__result {

@@ -127,9 +127,9 @@
   min-height: 0;
   display: block;
   padding: 32px;
-  background: #0d1117;
+  background: var(--bg-workspace);
   overflow-y: auto;
-  color: #e6edf3;
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   font-size: 15px;
   line-height: 1.7;
@@ -137,8 +137,8 @@
 }
 
 .file-viewer--md::-webkit-scrollbar { width: 10px; }
-.file-viewer--md::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
-.file-viewer--md::-webkit-scrollbar-thumb:hover { background: #8b949e; }
+.file-viewer--md::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+.file-viewer--md::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 .file-viewer--md::-webkit-scrollbar-track { background: transparent; }
 
 .file-md { max-width: 1012px; margin: 0 auto; }
@@ -149,27 +149,27 @@
   margin-bottom: 16px;
   font-weight: 600;
   line-height: 1.25;
-  color: #e6edf3;
+  color: var(--text-primary);
 }
-.file-md h1 { font-size: 1.9em; margin-top: 8px; margin-bottom: 20px; padding-bottom: 0.35em; border-bottom: 1px solid #30363d; }
-.file-md h2 { font-size: 1.45em; padding-bottom: 0.35em; border-bottom: 1px solid #30363d; }
+.file-md h1 { font-size: 1.9em; margin-top: 8px; margin-bottom: 20px; padding-bottom: 0.35em; border-bottom: 1px solid var(--border); }
+.file-md h2 { font-size: 1.45em; padding-bottom: 0.35em; border-bottom: 1px solid var(--border); }
 .file-md h3 { font-size: 1.2em; margin-bottom: 12px; }
-.file-md h4 { font-size: 0.95em; margin-bottom: 10px; color: #b6c2cf; letter-spacing: 0.01em; }
+.file-md h4 { font-size: 0.95em; margin-bottom: 10px; color: var(--text-secondary); letter-spacing: 0.01em; }
 .file-md h1 + p, .file-md h2 + p, .file-md h3 + p { margin-top: 0; }
 
 .file-md p { margin-top: 0; margin-bottom: 14px; }
 
-.file-md a { color: #4493f8; text-decoration: none; }
+.file-md a { color: var(--accent); text-decoration: none; }
 .file-md a:hover { text-decoration: underline; }
 
-.file-md strong { font-weight: 600; color: #e6edf3; }
+.file-md strong { font-weight: 600; color: var(--text-primary); }
 
 /* Lists */
 .file-md ul, .file-md ol { margin-top: 0; margin-bottom: 18px; padding-left: 1.75em; }
 .file-md li { line-height: 1.65; }
 .file-md li + li { margin-top: 6px; }
 .file-md li > ul, .file-md li > ol { margin-top: 0.25em; margin-bottom: 0; }
-.file-md li::marker { color: #8b949e; }
+.file-md li::marker { color: var(--text-muted); }
 
 /* Inline code */
 .file-md code {
@@ -178,10 +178,10 @@
   padding: 0.2em 0.4em;
   border-radius: 6px;
   background: rgba(110, 118, 129, 0.4);
-  color: #e6edf3;
+  color: var(--text-primary);
 }
 
-/* Code blocks — flat #161b22 surface */
+/* Code blocks — flat var(--bg-panel) surface */
 .file-md .wiki-md__code { margin: 0 0 16px; }
 .file-md .wiki-md__code pre {
   margin: 0;
@@ -189,13 +189,13 @@
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background: #161b22;
+  background: var(--bg-panel);
   border-radius: 6px;
 }
 .file-md .wiki-md__code code {
   padding: 0;
   background: none;
-  color: #e6edf3;
+  color: var(--text-primary);
   font-size: 100%;
 }
 
@@ -203,7 +203,7 @@
 .file-md blockquote {
   margin: 0 0 16px;
   padding: 0 1em;
-  color: #9198a1;
+  color: var(--text-secondary);
   border-left: 0.25em solid #3d444d;
 }
 .file-md blockquote p { margin-bottom: 8px; }
@@ -220,7 +220,7 @@
 }
 .file-md th, .file-md td {
   padding: 6px 13px;
-  border: 1px solid #30363d;
+  border: 1px solid var(--border);
 }
 .file-md th { font-weight: 600; }
 
@@ -229,7 +229,7 @@
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: #30363d;
+  background-color: var(--border);
   border: 0;
 }
 

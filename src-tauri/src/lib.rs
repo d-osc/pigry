@@ -27,8 +27,23 @@ use tauri::Manager;
 use commands::AppState;
 use watcher::FileWatcher;
 
+static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+#[tauri::command]
+fn validation_ready() {
+    #[cfg(debug_assertions)]
+    if let (Some(started), Some(dir)) = (STARTED.get(), std::env::var_os("PIGRY_TEST_CONFIG_DIR")) {
+        let file = std::path::PathBuf::from(dir).join("startup.json");
+        if !file.exists() {
+            let _ = std::fs::write(file, format!("{{\"homeReadyMs\":{}}}\n", started.elapsed().as_millis()));
+        }
+    }
+}
+
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = STARTED.set(std::time::Instant::now());
     // Dev builds only: expose WebView2's Chrome DevTools Protocol on a local
     // port so the agent's E2E tooling can attach to the panel pages
     // (network capture, live screenshots, PDF, file upload). Release builds
@@ -39,6 +54,8 @@ pub fn run() {
     }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let config = config::load(app.handle());
@@ -76,6 +93,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_state,
+            validation_ready,
             commands::open_repository,
             commands::pick_repository,
             commands::close_repository,

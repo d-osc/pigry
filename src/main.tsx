@@ -12,6 +12,8 @@ import { initGhProfile } from './lib/ghProfile';
 import { migrateLegacyStorage } from './lib/storageMigration';
 import { purgeSeededDefaults } from './lib/agentExtras';
 import App from './App';
+import './styles/screenStyles';
+import './styles/workspace.css';
 
 // Move persisted pigry:* settings to their pigry:* names before anything
 // reads them, then make sure every workspace menu has its default agent.

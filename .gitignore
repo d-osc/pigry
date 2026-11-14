@@ -10,3 +10,4 @@ patch-*.cjs
 src/styles/untitled.txt
 src/styles/new-folder/
 src/styles/new-folder-2/
+%USERPROFILE%/.tauri/

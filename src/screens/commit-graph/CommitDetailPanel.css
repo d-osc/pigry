@@ -44,7 +44,7 @@
 .commit-detail__tab-count {
   padding: 1px 5px;
   border-radius: 3px;
-  background: #252d49;
+  background: var(--accent-tint-1);
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--accent);
@@ -281,7 +281,7 @@
   min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
-  color: #bbc2cf;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -302,7 +302,7 @@
   text-align: right;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);
-  color: #f18b93;
+  color: var(--red);
   flex-shrink: 0;
 }
 
@@ -522,7 +522,7 @@
 
 .commit-detail__filenav-item--selected,
 .commit-detail__filenav-item--selected:hover {
-  background: #202a40;
+  background: var(--accent-tint-1);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -574,7 +574,7 @@
 }
 
 .commit-detail__filenav-del {
-  color: #f18b93;
+  color: var(--red);
 }
 
 .commit-detail__filenav-hint {
@@ -630,7 +630,7 @@
 }
 
 .commit-detail__del {
-  color: #f18b93;
+  color: var(--red);
 }
 
 .commit-detail__diffbar-actions {
@@ -671,7 +671,7 @@
   gap: 16px;
   height: 28px;
   padding: 0 16px 0 18px;
-  background: #1b2232;
+  background: var(--accent-tint-1);
 }
 
 .commit-detail__hunkhead svg {
@@ -713,11 +713,11 @@
 }
 
 .commit-detail__drow--add {
-  background: #162c26;
+  background: var(--green-tint);
 }
 
 .commit-detail__drow--del {
-  background: #342025;
+  background: var(--red-tint);
 }
 
 .commit-detail__dnum {
@@ -748,7 +748,7 @@
 }
 
 .commit-detail__drow--del .commit-detail__dsign {
-  color: #f18b93;
+  color: var(--red);
 }
 
 .commit-detail__dcode {
@@ -757,7 +757,7 @@
   padding-left: 12px;
   white-space: pre;
   overflow: hidden;
-  color: #cdd2dd;
+  color: var(--text-primary);
 }
 
 .commit-detail__drow--add .commit-detail__dcode {
@@ -765,7 +765,7 @@
 }
 
 .commit-detail__drow--del .commit-detail__dcode {
-  color: #f18b93;
+  color: var(--red);
 }
 
 .commit-detail__nexthunkrow {
@@ -774,7 +774,7 @@
   justify-content: space-between;
   height: 27px;
   padding: 0 18px;
-  background: #1b2232;
+  background: var(--accent-tint-1);
 }
 
 .commit-detail__nexthunkrow-label {

@@ -4,7 +4,7 @@
  *  • History — carry code from the commit picked in File history into the
  *    working file (side-by-side merge editor). */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DiffEditor } from '@monaco-editor/react';
+import { DiffEditor } from '../../editor/ThemedEditors';
 import { GitMerge } from 'lucide-react';
 import { readFileAtCommit, mergeBranch, mergeAbort, mergeStatus, type MergeStatusInfo } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
@@ -302,7 +302,6 @@ export function MergePanel({
                     original={baseContent}
                     modified={result}
                     language={language}
-                    theme="pigry-dark"
                     options={{
                       renderSideBySide: true,
                       fontSize: 11,

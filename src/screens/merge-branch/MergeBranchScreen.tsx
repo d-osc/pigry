@@ -1,7 +1,8 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Merge Branch screen — merge a branch INTO the checked-out branch with
  * strategy choice, conflict handling (file list + abort) and a result log. */
 import { useEffect, useRef, useState } from 'react';
-import { Editor } from '@monaco-editor/react';
+import { Editor } from '../../editor/ThemedEditors';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
@@ -31,6 +32,8 @@ const STRATEGIES: Array<{ id: MergeStrategy; title: string; detail: string }> = 
 ];
 
 export function MergeBranchScreen() {
+  const versionsGate = useRequestGate();
+  const commitGate = useRequestGate();
   const { repository, refresh, notify, mergeBranch, mergeAbort } = useRepository();
   const currentBranch = repository?.currentBranch ?? '';
   const branches = (repository?.branches ?? []).filter((b) => !b.isHead && b.name !== currentBranch);
@@ -61,6 +64,7 @@ export function MergeBranchScreen() {
     commit: { oid: string; parentOid: string | null },
     filePath: string,
   ) => {
+    const isCurrent = commitGate.begin();
     const key = commit.oid + ':' + filePath;
     if (commitCompare?.key === key) {
       setCommitCompare(null);
@@ -73,16 +77,19 @@ export function MergeBranchScreen() {
         commit.parentOid ? readFileAtCommit(filePath, commit.parentOid) : null,
         readFileAtCommit(filePath, commit.oid),
       ]);
+      if (!isCurrent()) return;
       setCommitCompare({
         key,
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || 'plaintext',
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setCommitCompare(null);
     } finally {
-      setLoadingCommitCompare(false);
+      if (isCurrent()) setLoadingCommitCompare(false);
     }
   };
 
@@ -107,6 +114,7 @@ export function MergeBranchScreen() {
   };
 
   const toggleFile = async (filePath: string) => {
+    const isCurrent = versionsGate.begin();
     if (expandedPath === filePath) {
       setExpandedPath(null);
       setVersions(null);
@@ -117,15 +125,18 @@ export function MergeBranchScreen() {
     setLoadingVersions(true);
     try {
       const result = await mergeFileVersions(filePath, effectiveSource || currentBranch);
+      if (!isCurrent()) return;
       setVersions({
         ours: result.ours ?? '',
         incoming: result.incoming ?? '',
         workdir: result.workdir ?? '',
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setVersions(null);
     } finally {
-      setLoadingVersions(false);
+      if (isCurrent()) setLoadingVersions(false);
     }
   };
 
@@ -191,7 +202,13 @@ export function MergeBranchScreen() {
     if (!effectiveSource || merging) return;
     setMerging(true);
     try {
-      await mergeBranch(effectiveSource, strategy);
+      const merged = await mergeBranch(effectiveSource, strategy);
+      if (!merged) {
+        const status = await mergeStatus().catch(() => null);
+        if (status) setConflict(status);
+        addLog('Merge did not complete. Check the error and resolve any conflicts before retrying.', 'error');
+        return;
+      }
       addLog(`Merged ${effectiveSource} into ${currentBranch}.`, 'success');
       setConflict(null);
       refresh();
@@ -384,7 +401,6 @@ export function MergeBranchScreen() {
                                           original={commitCompare?.before ?? ''}
                                           modified={commitCompare?.after ?? ''}
                                           language={commitCompare?.language ?? 'plaintext'}
-                                          theme="pigry-dark"
                                           options={{
                                             readOnly: true,
                                             renderSideBySide: splitView,
@@ -487,7 +503,6 @@ export function MergeBranchScreen() {
                             original={versions?.ours ?? ''}
                             modified={versions?.incoming ?? ''}
                             language={languageForPath(file.path)}
-                            theme="pigry-dark"
                             options={{
                               readOnly: true,
                               renderSideBySide: splitView,
@@ -747,7 +762,6 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
           key={path}
           value={value}
           language="plaintext"
-          theme="pigry-dark"
           onChange={(next) => {
             const nextText = next ?? '';
             setValue(nextText);

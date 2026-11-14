@@ -209,8 +209,8 @@
 }
 
 .stashes__action-btn--drop {
-  border-color: var(--danger, #e79098);
-  color: var(--danger, #e79098);
+  border-color: var(--danger, var(--red));
+  color: var(--danger, var(--red));
 }
 
 .stashes__view {
@@ -267,7 +267,7 @@
 }
 
 .stashes__file-status--D {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .stashes__file-path {
@@ -345,7 +345,7 @@
 }
 
 .stats-del {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
   font-family: var(--font-mono);
   margin-left: 4px;
 }

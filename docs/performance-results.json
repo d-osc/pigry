@@ -1,0 +1,7 @@
+{
+  "mainBundleBytes": 5650368,
+  "scope": "production main JS, uncompressed, before deferred screens and Office parsers",
+  "afterMainBundleBytes": 491794,
+  "afterMainBundleGzipBytes": 142548,
+  "reductionPercent": 91.3
+}

@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Push Commits screen — the local commits waiting for the upstream, each
  * expandable with its message and files, files open as before/after compares,
  * plus the push action itself. The list sorts by date (toggle) and reveals
@@ -8,7 +9,6 @@ import { ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, CloudUpload } from 'lu
 import { useRepository } from '../../hooks/useRepository';
 import {
   pushPreview,
-  gitPush,
   readFileAtCommit,
   type PushPreview,
   type PushPreviewCommit,
@@ -18,6 +18,7 @@ import { relativeTime } from '../../lib/relativeTime';
 import { shareCommitWithChat } from '../../lib/chatBridge';
 import '../../editor/monacoSetup';
 import './PushCommitsScreen.css';
+import { canPushPreview, parsePushSort, pushErrorMessage } from './pushState';
 
 interface FileVersions {
   before: string;
@@ -30,8 +31,7 @@ const SORT_KEY = 'pigry:push-sort-v2'; // v2: resets stale persisted orders
 
 function loadSortDir(): 'desc' | 'asc' {
   try {
-    const raw = localStorage.getItem(SORT_KEY);
-    if (raw === 'asc' || raw === 'desc') return raw;
+    return parsePushSort(localStorage.getItem(SORT_KEY));
   } catch {
     // corrupt cache — default
   }
@@ -39,10 +39,13 @@ function loadSortDir(): 'desc' | 'asc' {
 }
 
 export function PushCommitsScreen() {
-  const { repository, refresh, notify } = useRepository();
+  const fileGate = useRequestGate();
+  const { repository, pushRemote, busy, notify } = useRepository();
   const headOid = repository?.headOid ?? '';
   const [preview, setPreview] = useState<PushPreview | null>(null);
   const [pushing, setPushing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [versions, setVersions] = useState<FileVersions | null>(null);
@@ -57,7 +60,7 @@ export function PushCommitsScreen() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(SORT_KEY, JSON.stringify(sortDir));
+      localStorage.setItem(SORT_KEY, sortDir);
     } catch {
       // storage full — skip persist
     }
@@ -66,19 +69,22 @@ export function PushCommitsScreen() {
   // Reload whenever HEAD moves or the screen remounts.
   useEffect(() => {
     let cancelled = false;
+    setPreview(null);
+    setPreviewError(null);
     pushPreview()
       .then((result) => {
         if (!cancelled) setPreview(result);
       })
-      .catch(() => {
-        if (!cancelled) setPreview(null);
+      .catch((error: unknown) => {
+        if (!cancelled) setPreviewError(pushErrorMessage(error));
       });
     return () => {
       cancelled = true;
     };
-  }, [headOid]);
+  }, [headOid, repository?.localPath, repository?.currentBranch, reload]);
 
   const openCompare = async (commit: PushPreviewCommit, file: PushPreviewCommitFile) => {
+    const isCurrent = fileGate.begin();
     const key = `${commit.oid}:${file.path}`;
     if (expandedFile === key) {
       setExpandedFile(null);
@@ -93,26 +99,27 @@ export function PushCommitsScreen() {
         commit.parentOid ? readFileAtCommit(file.path, commit.parentOid) : null,
         readFileAtCommit(file.path, commit.oid),
       ]);
+      if (!isCurrent()) return;
       setVersions({
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || 'plaintext',
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setVersions(null);
     } finally {
-      setLoadingFile(false);
+      if (isCurrent()) setLoadingFile(false);
     }
   };
 
   const doPush = async () => {
-    if (pushing) return;
+    if (pushing || busy) return;
     setPushing(true);
     try {
-      const result = await gitPush();
-      notify(result.summary || 'Pushed', 'success');
-      refresh();
-      setPreview(await pushPreview());
+      if (!(await pushRemote())) return;
+      setReload((value) => value + 1);
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), 'error');
     } finally {
@@ -145,7 +152,15 @@ export function PushCommitsScreen() {
   if (!preview) {
     return (
       <div className="push-screen">
-        <p className="push__empty">Loading push preview…</p>
+        {previewError ? (
+          <section className="push__load-error" role="alert">
+            <h2>Could not load push preview</h2>
+            <p>{previewError}</p>
+            <button type="button" className="outline-button" onClick={() => setReload((value) => value + 1)}>
+              Try again
+            </button>
+          </section>
+        ) : <p className="push__empty" role="status">Loading push preview…</p>}
       </div>
     );
   }
@@ -169,7 +184,7 @@ export function PushCommitsScreen() {
         <button
           type="button"
           className="push__push-btn"
-          disabled={pushing || (!canPush && !hasUpstream)}
+          disabled={pushing || busy || !canPushPreview(preview.upstream, preview.ahead)}
           title={
             hasUpstream
               ? `Push ${preview.ahead} commit${preview.ahead === 1 ? '' : 's'} to ${preview.upstream}`
@@ -325,7 +340,6 @@ export function PushCommitsScreen() {
                                         original={versions?.before ?? ''}
                                         modified={versions?.after ?? ''}
                                         language={versions?.language ?? 'plaintext'}
-                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

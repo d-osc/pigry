@@ -22,8 +22,8 @@
 .error-banner {
   flex-shrink: 0;
   padding: 6px 24px;
-  background: #3b2530;
-  border-bottom: 1px solid #5d3944;
+  background: var(--red-tint);
+  border-bottom: 1px solid var(--red);
   color: var(--red);
   font-size: var(--fs-xs);
 }

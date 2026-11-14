@@ -169,7 +169,7 @@
 
 .commit-history__notice {
   padding: 6px 24px;
-  background: #3b2530;
+  background: var(--red-tint);
   color: var(--red);
   font-size: var(--fs-xs);
 }
@@ -293,10 +293,10 @@
   background: var(--bg-panel);
 }
 
-.commit-row--selected,
-.commit-row--selected:hover {
-  background: #202a40;
-  box-shadow: inset 2px 0 0 #344464;
+.commit-row.commit-row--selected,
+.commit-row.commit-row--selected:hover {
+  background: var(--accent-tint-1);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .commit-row__graph {
@@ -330,7 +330,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  color: #cbd0da;
+  color: var(--text-mid);
   font-size: var(--fs-md);
   overflow: hidden;
   white-space: nowrap;

@@ -3,7 +3,8 @@
  * so DOM `selectionchange` never sees it — this hooks the editor API
  * directly. Drop-in for DiffEditor plus a `chatMeta` prop. */
 import { type ComponentProps } from 'react';
-import { DiffEditor, type DiffOnMount } from '@monaco-editor/react';
+import type { DiffOnMount } from '@monaco-editor/react';
+import { DiffEditor } from '../editor/ThemedEditors';
 import { shareSelectionWithChat } from './chatBridge';
 
 interface ChatMeta {

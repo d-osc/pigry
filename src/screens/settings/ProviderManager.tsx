@@ -21,8 +21,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { aiChat, claudeUsage, cliDetect, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
-import { detectZcodeGlm, ZCODE_DEFAULT_MODEL } from '../../lib/zcode';
+import { aiChat, claudeUsage, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
+import { detectZcodeGlm } from '../../lib/zcode';
 import {
   API_FORMAT_LABEL,
   activeProviderId,
@@ -44,7 +44,6 @@ import './ProviderManager.css';
 type ModelTestState = 'running' | 'ok' | 'fail';
 
 /** Auto-scan for installed AI apps — once per app session. */
-let scannedAppsOnce = false;
 
 export function ProviderManager() {
   const { notify } = useRepository();
@@ -99,18 +98,6 @@ export function ProviderManager() {
 
   // Auto-fetch once when a z.ai-family provider without plan data is selected.
   const planFetchRef = useRef('');
-  useEffect(() => {
-    if (
-      (isZaiFamily || selected?.type === 'claude-code') &&
-      !selected?.planInfo &&
-      planFetchRef.current !== selected?.id &&
-      (selected?.apiKey || selected?.type === 'zcode-cli' || selected?.type === 'claude-code')
-    ) {
-      planFetchRef.current = selected.id;
-      void fetchPlan();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id]);
 
   const fetchPlan = async () => {
     if (!selected || planLoading) return;
@@ -125,6 +112,7 @@ export function ProviderManager() {
       }
       const body =
         selected.type === 'claude-code' ? await claudeUsage() : await zcodePlanSubscription(key);
+      // eslint-disable-next-line react-hooks/purity
       patch(selected.id, { planInfo: { fetchedAt: Date.now(), body } });
       notify(
         selected.type === 'claude-code' ? 'Usage scanned from Claude Code logs' : 'Plan subscription updated',
@@ -147,6 +135,18 @@ export function ProviderManager() {
   const patch = (id: string, changes: Partial<AiProviderEntry>) => {
     commit(providers.map((p) => (p.id === id ? { ...p, ...changes } : p)));
   };
+  useEffect(() => {
+    if (
+      (isZaiFamily || selected?.type === 'claude-code') &&
+      !selected?.planInfo &&
+      planFetchRef.current !== selected?.id &&
+      (selected?.apiKey || selected?.type === 'zcode-cli' || selected?.type === 'claude-code')
+    ) {
+      planFetchRef.current = selected.id;
+      void fetchPlan();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   const patchModel = (providerId: string, modelId: string, changes: Partial<AiModelEntry>) => {
     const next = providers.map((p) => {
@@ -262,280 +262,6 @@ export function ProviderManager() {
     }
   };
 
-  /** Scans for installed AI apps (ZCode, Claude Code, Codex, Copilot) and
-   * adds providers for the ones not configured yet, reading each app's own
-   * config for its default model. */
-  const scanApps = async (silent = false) => {
-    const added: string[] = [];
-    try {
-      let next = [...loadProviders()];
-      let mutated = false;
-      const hasType = (type: string) => next.some((p) => p.type === type);
-      const addDetected = (
-        type: string,
-        name: string,
-        configModels: string[],
-        effort = '',
-        baseUrl = '',
-        apiKey = '',
-        enabled = true,
-        usable = true,
-        launchKind?: string,
-        launchTarget?: string,
-        zcodeProvider = false,
-        apiFormatOverride?: 'anthropic' | 'openai',
-        claudeProvider = false,
-      ) => {
-        // The app's config is the source of truth: a detected provider's
-        // model list mirrors exactly what the app's config declares.
-        const model = configModels[0] ?? '';
-        const buildModels = () =>
-          configModels.map((m) => ({
-            id: newId('m'),
-            name: m,
-            vision: false,
-            enabled: true,
-            ...(m === model && effort ? { effort } : {}),
-          }));
-        const existing = next.find((p) => p.type === type);
-        if (existing) {
-          // Backfill/refresh from the app's config — drop stale entries that
-          // earlier (hardcoded-catalog) scans merged in, and attach launch
-          // info for providers added before it was detected.
-          const needsUsable = existing.usable !== usable;
-          const needsLaunch = Boolean(
-            launchKind && launchTarget && (!existing.launchKind || !existing.launchTarget),
-          );
-          if (configModels.length > 0) {
-            const same =
-              existing.model === model &&
-              existing.models.length === configModels.length &&
-              existing.models.every((m, i) => m.name === configModels[i]) &&
-              !needsUsable &&
-              !needsLaunch;
-            if (!same) {
-              next = next.map((p) =>
-                p.id === existing.id
-                  ? {
-                      ...p,
-                      model,
-                      models: buildModels(),
-                      usable,
-                      claudeProvider: claudeProvider || p.claudeProvider,
-                      ...(needsLaunch ? { launchKind, launchTarget } : {}),
-                    }
-                  : p,
-              );
-              mutated = true;
-            }
-          } else if (needsUsable || needsLaunch) {
-            next = next.map((p) =>
-              p.id === existing.id
-                ? { ...p, usable: needsUsable ? usable : p.usable, ...(needsLaunch ? { launchKind, launchTarget } : {}) }
-                : p,
-            );
-            mutated = true;
-          }
-          return;
-        }
-        next = [
-          ...next,
-          {
-            id: newId('p'),
-            name,
-            kind: 'custom',
-            detected: true,
-            zcodeProvider: zcodeProvider || undefined,
-            claudeProvider: claudeProvider || undefined,
-            type,
-            apiFormat: apiFormatOverride ?? 'openai',
-            baseUrl,
-            apiKey,
-            model,
-            enabled,
-            models: buildModels(),
-            ...(launchKind && launchTarget ? { launchKind, launchTarget } : {}),
-          },
-        ];
-        added.push(name);
-      };
-      const detected = await cliDetect().catch((error) => {
-        localStorage.setItem(
-          'pigry:scan-debug',
-          JSON.stringify({ at: Date.now(), phase: 'cliDetect-error', error: String(error) }),
-        );
-        throw error;
-      });
-      localStorage.setItem(
-        'pigry:scan-debug',
-        JSON.stringify({
-          at: Date.now(),
-          phase: 'cliDetect-ok',
-          apps: detected.apps?.length ?? -1,
-          zcode: detected.zcodeProviders?.length ?? -1,
-          claude: detected.claudeProviders?.length ?? -1,
-          desktop: detected.desktop?.length ?? -1,
-        }),
-      );
-
-      // ZCode's model set comes from its OWN plan subscription report — the
-      // modelCode entries the plan actually records (real usage).
-      let zcodeModel = '';
-      let zcodeKey = '';
-      let zcodePlanModels: string[] = [];
-      try {
-        const zcode = await detectZcodeGlm();
-        if (zcode) {
-          zcodeModel = zcode.model;
-          zcodeKey = zcode.apiKey;
-          if (!hasType('zcode')) {
-            addDetected(
-              'zcode',
-              zcode.name,
-              [zcode.model],
-              '',
-              zcode.baseUrl,
-              zcode.apiKey,
-            );
-          }
-          try {
-            const body = await zcodePlanSubscription(zcode.apiKey);
-            zcodePlanModels = planModelCodes(body);
-          } catch {
-            // plan API unreachable — fall back to the credential's model
-          }
-        }
-      } catch {
-        // ZCode desktop not installed / unreadable
-      }
-      // Every provider template in ZCode's own catalog becomes a provider in
-      // the "ZCode Providers" group — apiFormat/baseUrl/models from ZCode's
-      // config; the decrypted coding-plan key only fits z.ai-hosted rules.
-      // ChatGPT family — OpenAI API provider with models from Codex's own
-      // server-cached catalog (~/.codex/models_cache.json).
-      for (const cp of detected.chatgptProviders ?? []) {
-        addDetected(
-          cp.id,
-          cp.name,
-          cp.models,
-          '',
-          cp.baseUrl,
-          '',
-          false,
-          false,
-          undefined,
-          undefined,
-          false,
-          'openai',
-        );
-      }
-      for (const template of detected.zcodeProviders ?? []) {
-        const apiFormat =
-          template.apiType === 'anthropic-messages' ? 'anthropic' : 'openai';
-        const key = template.baseUrl.includes('api.z.ai') ? zcodeKey : '';
-        addDetected(
-          `zcode-${template.templateId}`,
-          template.name,
-          template.models ?? [],
-          '',
-          template.baseUrl,
-          key,
-          Boolean(key),
-          true,
-          undefined,
-          undefined,
-          true,
-          apiFormat,
-        );
-      }
-      // Generic scan — every detected CLI coding agent becomes a provider.
-      // zcode's CLI kind is distinct from the HTTP zcode providers;
-      // claude's canonical type is claude-code (matches earlier entries).
-      for (const app of detected.apps) {
-        const type =
-          app.binary === 'zcode' ? 'zcode-cli' : app.binary === 'claude' ? 'claude-code' : app.binary;
-        // zcode-cli: models come from ZCode desktop's own builtin config —
-        // falling back to the plan report, then the credential's model.
-        const configModels =
-          app.binary === 'zcode'
-            ? (app.models ?? []).length > 0
-              ? app.models
-              : zcodePlanModels.length > 0
-                ? zcodePlanModels
-                : [zcodeModel || ZCODE_DEFAULT_MODEL]
-            : app.model
-              ? [app.model]
-              : [];
-        addDetected(
-          type,
-          app.name,
-          configModels,
-          app.effort,
-          '',
-          '',
-          true,
-          app.usable !== false,
-          app.launchKind || 'cli',
-          app.launchTarget || app.binary,
-          app.binary === 'codex',
-        );
-      }
-      // Desktop AI apps — listed as detected inventory (they run in their
-      // own window with their own login; disabled until the user opts in).
-      for (const desktopApp of detected.desktop) {
-        addDetected(
-          desktopApp.id,
-          desktopApp.name,
-          [],
-          '',
-          '',
-          '',
-          false,
-          false,
-          desktopApp.launchKind,
-          desktopApp.launchTarget,
-          desktopApp.id === 'chatgpt-desktop',
-        );
-      }
-      // Claude catalog — Anthropic API provider with the account's own
-      // model catalog (models read from Claude Code's cached data).
-      for (const cp of detected.claudeProviders ?? []) {
-        addDetected(
-          cp.id,
-          cp.name,
-          cp.models,
-          '',
-          cp.baseUrl,
-          '',
-          false,
-          false,
-          undefined,
-          undefined,
-          false,
-          'anthropic',
-          true,
-        );
-      }
-      if (added.length > 0 || mutated) {
-        // Persist new providers AND re-grouping marks for earlier scans.
-        commit(next);
-        notify('Added AI apps: ' + added.join(', '), 'success');
-      } else if (!silent) {
-        notify('All installed AI apps are already configured', 'success');
-      }
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    }
-  };
-
-  // Scan once per app session when the settings screen opens.
-  useEffect(() => {
-    if (scannedAppsOnce) return;
-    scannedAppsOnce = true;
-    void scanApps(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Focus the name field as soon as rename mode starts.
   useEffect(() => {
     if (nameEditing) nameInputRef.current?.focus();
@@ -552,32 +278,7 @@ export function ProviderManager() {
   const builtins = providers.filter((p) => p.kind === 'builtin');
   // Claude family = flagged OR known claude provider types (flag-independent,
   // so entries created before the flag existed still group correctly).
-  const isClaudeFamily = (p: AiProviderEntry) =>
-    p.claudeProvider === true ||
-    p.type === 'claude-code' ||
-    p.type === 'claude-desktop' ||
-    p.type === 'claude-anthropic-api';
-  const isChatgptFamily = (p: AiProviderEntry) =>
-    p.chatgptProvider === true ||
-    p.type === 'codex' ||
-    p.type === 'chatgpt-desktop' ||
-    p.type.startsWith('chatgpt-');
-  const claudeProviders = providers.filter(
-    (p) => p.kind !== 'builtin' && isClaudeFamily(p) && !isChatgptFamily(p),
-  );
-  const zcodeProviders = providers.filter(
-    (p) => p.zcodeProvider && !p.claudeProvider && !isChatgptFamily(p) && !isClaudeFamily(p),
-  );
-  const chatgptProviders = providers.filter(
-    (p) => p.kind !== 'builtin' && isChatgptFamily(p) && !isClaudeFamily(p),
-  );
-  const customs = providers.filter(
-    (p) =>
-      p.kind !== 'builtin' &&
-      !p.zcodeProvider &&
-      !p.chatgptProvider &&
-      !isClaudeFamily(p),
-  );
+  const customs = providers.filter((p) => p.kind !== 'builtin');
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -649,15 +350,6 @@ export function ProviderManager() {
         <div className="prov-mgr__header-actions">
           <button
             type="button"
-            className="prov-mgr__ghost-btn"
-            title="Look for ZCode, Claude Code, Codex and Copilot installed on this machine"
-            onClick={() => void scanApps()}
-          >
-            <Sparkles size={12} strokeWidth={1.5} />
-            Detect AI apps
-          </button>
-          <button
-            type="button"
             className="prov-mgr__icon-btn"
             aria-label="Reload providers"
             title="Reload from saved configuration"
@@ -678,9 +370,6 @@ export function ProviderManager() {
       <div className="prov-mgr__body">
         <aside className="prov-mgr__rail" aria-label="Provider list">
           {renderGroup('providers', 'Providers', builtins)}
-          {renderGroup('claude', 'Claude Providers', claudeProviders)}
-          {renderGroup('zcode', 'ZCode Providers', zcodeProviders)}
-          {renderGroup('chatgpt', 'ChatGPT Providers', chatgptProviders)}
           {renderGroup('custom', 'Custom providers', customs)}
         </aside>
 
@@ -1002,25 +691,6 @@ interface PlanLimit {
   usageDetails?: Array<{ modelCode?: string; usage?: number }>;
 }
 
-/** Real model codes recorded by the z.ai coding plan (usage details). */
-function planModelCodes(body: string): string[] {
-  try {
-    const limits = (JSON.parse(body)?.data?.limits ?? []) as Array<{
-      usageDetails?: Array<{ modelCode?: string }>;
-    }>;
-    const codes: string[] = [];
-    for (const limit of limits) {
-      for (const detail of limit.usageDetails ?? []) {
-        if (detail.modelCode && !codes.includes(detail.modelCode)) {
-          codes.push(detail.modelCode);
-        }
-      }
-    }
-    return codes;
-  } catch {
-    return [];
-  }
-}
 
 function parsePlanLimits(body: string): PlanLimit[] {
   try {

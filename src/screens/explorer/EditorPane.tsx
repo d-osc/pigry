@@ -1,10 +1,11 @@
+import { mayReloadBuffer, savedBufferIsDirty } from '../../lib/editorBuffer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Editor, type Monaco } from '@monaco-editor/react';
+import type { Monaco } from '@monaco-editor/react';
+import { Editor } from '../../editor/ThemedEditors';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
 import { GitCompare, GitMerge, History, Quote, SquareTerminal, Eye,
 } from 'lucide-react';
 import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal } from '../../lib/tauriClient';
-import { currentResolvedTheme, THEME_CHANGED_EVENT } from '../../lib/theme';
 import { useRepository } from '../../hooks/useRepository';
 import { useFileBlame } from '../../hooks/useFileBlame';
 import { useLineChanges } from '../../hooks/useLineChanges';
@@ -95,6 +96,7 @@ export function EditorPane({
     path: string;
     content: WorktreeFileContent;
   } | null>(null);
+  const [saveError, setSaveError] = useState<{ path: string; message: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -129,18 +131,6 @@ export function EditorPane({
   const conflictRef = useRef<ConflictController | null>(null);
   const [editorInstance, setEditorInstance] =
     useState<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
-  // Editor colors follow the app theme (Settings → Appearance → Theme).
-  const [uiTheme, setUiTheme] = useState<'pigry-dark' | 'pigry-light'>(() =>
-    currentResolvedTheme() === 'light' ? 'pigry-light' : 'pigry-dark',
-  );
-
-  useEffect(() => {
-    const onThemeChange = () =>
-      setUiTheme(currentResolvedTheme() === 'light' ? 'pigry-light' : 'pigry-dark');
-    window.addEventListener(THEME_CHANGED_EVENT, onThemeChange);
-    return () => window.removeEventListener(THEME_CHANGED_EVENT, onThemeChange);
-  }, []);
-
   // App Settings screen pushes editor preference changes live.
   useEffect(() => {
     const onPrefs = (event: Event) => {
@@ -170,6 +160,11 @@ export function EditorPane({
   const monacoRef = useRef<Monaco | null>(null);
   const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
   const draftRef = useRef(draft);
+  const currentPath = useRef(path);
+  currentPath.current = path;
+  const bufferSnapshot = useRef({ path: entry?.path, draft, saved: entry?.content.content });
+  bufferSnapshot.current = { path: entry?.path, draft, saved: entry?.content.content };
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const jumpRef = useRef(onJumpToCommit);
   useEffect(() => {
     jumpRef.current = onJumpToCommit;
@@ -188,6 +183,8 @@ export function EditorPane({
 
   useEffect(() => {
     let cancelled = false;
+    const snapshot = bufferSnapshot.current;
+    if (!mayReloadBuffer(path, snapshot.path, snapshot.draft, snapshot.saved)) return;
     onBufferChange(null, path);
     if (kind !== 'text' && kind !== 'markdown' && kind !== 'svg') {
       // Images, PDFs and Office docs load as base64 for their viewers.
@@ -210,7 +207,10 @@ export function EditorPane({
       .then((content) => {
         if (!cancelled) {
           setLoadError(null);
+          const current = bufferSnapshot.current;
+          if (!mayReloadBuffer(path, current.path, current.draft, current.saved)) return;
           setEntry({ path, content });
+          draftRef.current = content.content;
           setDraft(content.content);
           onBufferChange(
             { content: content.content, language: content.language, dirty: false },
@@ -225,7 +225,7 @@ export function EditorPane({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path, kind, binReloadKey]);
+  }, [path, kind, binReloadKey, loadAttempt]);
 
   // Code-search navigation: reveal + highlight the hit line once loaded.
   // Defensive: never let navigation break the editor mount.
@@ -340,25 +340,31 @@ export function EditorPane({
 
   const save = useCallback(async () => {
     if (saving || busy) return;
+    const writtenSnapshot = draftRef.current;
+    setSaveError(null);
     setSaving(true);
     try {
-      await writeWorktreeFile(path, draftRef.current);
+      await writeWorktreeFile(path, writtenSnapshot);
+      if (currentPath.current !== path) return;
       setEntry((previous) =>
         previous && previous.path === path
-          ? { path, content: { ...previous.content, content: draftRef.current } }
+          ? { path, content: { ...previous.content, content: writtenSnapshot } }
           : previous,
       );
       await refresh();
+      if (currentPath.current !== path) return;
       setSavedFlash(true);
       window.setTimeout(() => setSavedFlash(false), 1500);
       onBufferChange(
         {
           content: draftRef.current,
           language: entry?.content.language ?? '',
-          dirty: false,
+          dirty: savedBufferIsDirty(draftRef.current, writtenSnapshot),
         },
         path,
       );
+    } catch (error) {
+      if (currentPath.current === path) setSaveError({ path, message: error instanceof Error ? error.message : String(error) });
     } finally {
       setSaving(false);
     }
@@ -551,6 +557,7 @@ export function EditorPane({
 
   return (
     <div className="editor-pane">
+      {saveError?.path === path && <div className="error-banner" role="alert">{saveError.message}<button className="outline-button" disabled={saving} onClick={() => void save()}>Retry save</button></div>}
       <div className="editor-pane__crumbrow">
         <nav className="editor-pane__breadcrumb" aria-label="File path">
           {segments.map((segment, index) => (
@@ -651,7 +658,7 @@ export function EditorPane({
 
       <div className="editor-pane__editor">
         {loadError ? (
-          <div className="editor-pane__notice">{loadError}</div>
+          <div className="editor-pane__notice" role="alert">{loadError}<button className="outline-button" onClick={() => setLoadAttempt((n) => n + 1)}>Try again</button></div>
         ) : kind !== 'text' && kind !== 'markdown' && kind !== 'svg' ? (
           // Images, PDFs and Office docs — dedicated viewers, no Monaco.
           bin ? (
@@ -678,28 +685,7 @@ export function EditorPane({
             key={path}
             value={draft}
             language={entry.content.language}
-            theme={uiTheme}
             onChange={handleDraftChange}
-            beforeMount={(monaco) => {
-              monaco.editor.defineTheme('pigry-dark', {
-                base: 'vs-dark',
-                inherit: true,
-                rules: [],
-                colors: {
-                  'editor.background': '#1a1d24',
-                  'editorGutter.background': '#1a1d24',
-                },
-              });
-              monaco.editor.defineTheme('pigry-light', {
-                base: 'vs',
-                inherit: true,
-                rules: [],
-                colors: {
-                  'editor.background': '#f4f6f8',
-                  'editorGutter.background': '#f4f6f8',
-                },
-              });
-            }}
             onMount={(editor, monaco) => {
               setEditorInstance(editor);
               monacoRef.current = monaco;

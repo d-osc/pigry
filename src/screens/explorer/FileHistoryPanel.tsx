@@ -17,7 +17,7 @@ export function FileHistoryPanel({
   onSelect,
   refName,
 }: FileHistoryPanelProps) {
-  const { commits, loading } = useFileHistory(path, refName ?? null);
+  const { commits, loading, error, retry } = useFileHistory(path, refName ?? null);
   const fileName = path.split('/').pop() ?? path;
 
   return (
@@ -30,7 +30,7 @@ export function FileHistoryPanel({
         </span>
       </header>
       <div className="file-history__list">
-        {loading ? (
+        {error ? (<div className="file-history__empty" role="alert">{error}<button className="outline-button" onClick={retry}>Try again</button></div>) : loading ? (
           <div className="file-history__empty">Loading…</div>
         ) : !commits || commits.length === 0 ? (
           <div className="file-history__empty">No commits touch this file</div>

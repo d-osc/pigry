@@ -1,0 +1,26 @@
+{
+  "scope": "Debug Tauri + Vite, Home rendered, includes child WebView2 processes; first sample fresh WebView profile, remaining samples cached",
+  "samples": [
+    {
+      "sample": 1,
+      "homeReadyMs": 1490,
+      "processes": 14,
+      "workingSetMiB": 588.4,
+      "privateMiB": 328.6
+    },
+    {
+      "sample": 2,
+      "homeReadyMs": 1576,
+      "processes": 14,
+      "workingSetMiB": 590.8,
+      "privateMiB": 336.3
+    },
+    {
+      "sample": 3,
+      "homeReadyMs": 1296,
+      "processes": 14,
+      "workingSetMiB": 579.8,
+      "privateMiB": 325.9
+    }
+  ]
+}

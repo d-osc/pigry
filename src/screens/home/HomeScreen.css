@@ -72,7 +72,7 @@
 
 .home__actions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
@@ -121,9 +121,9 @@
   max-width: 100%;
   margin: 0;
   padding: 8px 10px;
-  border: 1px solid #5d3944;
+  border: 1px solid var(--red);
   border-radius: var(--radius-sm);
-  background: #3b2530;
+  background: var(--red-tint);
   color: var(--red);
   font-size: var(--fs-xs);
   overflow-wrap: anywhere;
@@ -225,4 +225,46 @@
 
 .home__recent-go {
   color: var(--text-muted);
+}
+
+/* A calm welcome area, with the repository picker as the primary surface. */
+.home { background: radial-gradient(ellipse at 10% 20%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%), var(--bg-workspace); }
+.home__wrap { width: min(1080px, 100%); display: grid; grid-template-columns: 1fr 1.1fr; align-items: center; gap: 64px; padding: 64px 40px; }
+.home__brand { align-items: flex-start; gap: 16px; }
+.home__brand-name { font-size: 21px; gap: 12px; letter-spacing: .03em; margin-bottom: 24px; }
+.home__brand-mark { width: 52px; height: 52px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 16px; }
+.home__eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .14em; color: var(--accent); }
+.home__headline { font-size: clamp(30px, 3.4vw, 44px); font-weight: 600; line-height: 1.18; letter-spacing: -.045em; }
+.home__brand-sub { font-size: 14px; line-height: 1.8; max-width: 290px; }
+.home__features { display: flex; flex-direction: column; gap: 16px; margin-top: 24px; color: var(--text-secondary); font-size: 12px; }
+.home__features span { display: flex; align-items: center; gap: 10px; }
+.home__features svg { color: var(--accent); }
+.home__card { width: 100%; min-width: 0; padding: 30px; gap: 22px; border-radius: 18px; box-shadow: 0 20px 60px rgb(0 0 0 / 14%); }
+.home__card-heading { display: flex; flex-direction: column; gap: 8px; }
+.home__card-heading h2 { font-size: 22px; font-weight: 600; letter-spacing: -.035em; }
+.home__card-heading p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.home__actions { gap: 10px; }
+.home__actions .primary-button, .home__actions .outline-button { height: 42px; padding: 0 12px; font-size: 12px; }
+.home__recent { padding-top: 20px; border-top: 1px solid var(--border); gap: 6px; max-height: 340px; overflow-y: auto; }
+.home__recent-heading { font-size: 10px; padding: 0 0 10px; color: var(--text-secondary); }
+.home__recent-item { grid-template-columns: 34px minmax(0, 1fr) auto; padding: 12px 8px; border: 1px solid transparent; transition: background var(--transition-fast), border-color var(--transition-fast); }
+.home__recent-item:hover:not(:disabled) { border-color: var(--border); }
+.home__recent-icon { width: 34px; height: 34px; border-radius: 10px; }
+.home__recent-name { font-family: var(--font-ui); font-size: 13px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.home__recent-path { font-size: 11px; margin-top: 3px; }
+.home__recent-empty { padding: 28px 18px; line-height: 1.8; color: var(--text-secondary); }
+.home__clone { gap: 10px; padding: 16px; }
+.home__clone-input { height: 36px; font-size: 12px; }
+.home__clone-hint { font-size: 11px; line-height: 1.6; }
+.home__actions button:disabled, .home__recent-item:disabled { opacity: .5; }
+@media (max-width: 850px) {
+  .home__wrap { grid-template-columns: 1fr; max-width: 560px; gap: 32px; padding: 32px 24px; }
+  .home__brand-name { margin-bottom: 4px; }
+  .home__headline { font-size: 32px; }
+  .home__headline br { display: none; }
+  .home__features { flex-direction: row; flex-wrap: wrap; gap: 12px 18px; margin-top: 0; }
+}
+@media (max-width: 440px) {
+  .home__card { padding: 20px; }
+  .home__actions { grid-template-columns: 1fr; }
 }

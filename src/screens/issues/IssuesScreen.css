@@ -148,7 +148,7 @@
 
 .issue-label--red {
   color: var(--red);
-  background: #3b2530;
+  background: var(--red-tint);
 }
 
 .issue-label--purple {

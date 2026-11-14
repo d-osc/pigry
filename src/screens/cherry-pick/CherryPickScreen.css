@@ -40,7 +40,7 @@
 
 .cherry__conflict {
   padding: 10px 14px;
-  border: 1px solid var(--danger, #e79098);
+  border: 1px solid var(--danger, var(--red));
   border-radius: var(--radius-sm);
   display: flex;
   flex-direction: column;
@@ -54,7 +54,7 @@
   gap: 6px;
   font-size: var(--fs-xs);
   font-weight: 600;
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .cherry__conflict-files {
@@ -303,7 +303,7 @@
 }
 
 .cherry__file-status--D {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
 }
 
 .cherry__file-status--R {
@@ -392,7 +392,7 @@
 }
 
 .stats-del {
-  color: var(--danger, #e79098);
+  color: var(--danger, var(--red));
   font-family: var(--font-mono);
   margin-left: 4px;
 }

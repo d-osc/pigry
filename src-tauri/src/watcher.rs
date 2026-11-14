@@ -25,6 +25,10 @@ pub struct FileWatcher {
 
 /// Spawns the watcher thread and returns a handle.
 pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
+    spawn_with_callback(move || { let _ = app.emit("repo-changed", ()); })
+}
+
+fn spawn_with_callback(on_change: impl Fn() + Send + 'static) -> FileWatcher {
     let (tx, rx) = mpsc::channel::<WatcherCommand>();
 
     std::thread::spawn(move || {
@@ -39,29 +43,21 @@ pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
         let mut current: Option<PathBuf> = None;
 
         loop {
-            // 1. Drain watcher commands (non-blocking).
-            while let Ok(cmd) = rx.try_recv() {
-                match cmd {
-                    WatcherCommand::Watch(path) => {
-                        // Unwatch the old path first.
-                        if let Some(old) = current.take() {
-                            let _ = watcher.unwatch(&old);
-                        }
-                        current = Some(path.clone());
+            // Drain commands; dropping the handle also shuts down the watcher thread.
+            loop {
+                match rx.try_recv() {
+                    Ok(WatcherCommand::Watch(path)) => {
+                        if let Some(old) = current.take() { let _ = watcher.unwatch(&old); }
                         match watcher.watch(&path, RecursiveMode::Recursive) {
-                            Ok(()) => {
-                                println!("[pigry] watching {}", path.display());
-                            }
-                            Err(e) => {
-                                eprintln!("[pigry] watch failed: {e}");
-                            }
+                            Ok(()) => current = Some(path),
+                            Err(error) => eprintln!("[pigry] watch failed: {error}"),
                         }
                     }
-                    WatcherCommand::Stop => {
-                        if let Some(old) = current.take() {
-                            let _ = watcher.unwatch(&old);
-                        }
+                    Ok(WatcherCommand::Stop) => {
+                        if let Some(old) = current.take() { let _ = watcher.unwatch(&old); }
                     }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                    Err(mpsc::TryRecvError::Disconnected) => return,
                 }
             }
 
@@ -76,7 +72,7 @@ pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
                 std::thread::sleep(Duration::from_millis(500));
                 // Drain events that arrived during the debounce window.
                 while let Ok(_) = event_rx.try_recv() {}
-                let _ = app.emit("repo-changed", ());
+                on_change();
             }
 
             // 4. Brief sleep to avoid busy-waiting.
@@ -96,5 +92,30 @@ impl FileWatcher {
     /// Stops watching (repo closed).
     pub fn stop(&self) {
         let _ = self.tx.send(WatcherCommand::Stop);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    #[test]
+    fn external_edits_emit_and_stopping_detaches_repository() {
+        let path = std::env::temp_dir().join(format!("pigry-watcher-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        let count = Arc::new(AtomicUsize::new(0)); let calls = count.clone();
+        let watcher = spawn_with_callback(move || { calls.fetch_add(1, Ordering::SeqCst); });
+        watcher.watch(path.to_str().unwrap());
+        std::thread::sleep(Duration::from_millis(300));
+        std::fs::write(path.join("file.txt"), "external edit").unwrap();
+        for _ in 0..30 { if count.load(Ordering::SeqCst) > 0 { break; } std::thread::sleep(Duration::from_millis(100)); }
+        assert!(count.load(Ordering::SeqCst) > 0, "external edit should notify frontend");
+        watcher.stop(); std::thread::sleep(Duration::from_millis(900));
+        let before = count.load(Ordering::SeqCst);
+        std::fs::write(path.join("file.txt"), "after stop").unwrap();
+        std::thread::sleep(Duration::from_millis(900));
+        assert_eq!(count.load(Ordering::SeqCst), before);
+        drop(watcher); std::thread::sleep(Duration::from_millis(300));
+        std::fs::remove_dir_all(path).unwrap();
     }
 }

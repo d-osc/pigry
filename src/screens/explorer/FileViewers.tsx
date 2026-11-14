@@ -2,8 +2,6 @@
  * previews, PDFs and Office documents. Text files stay in Monaco; these
  * render when the extension routes away from the code editor. */
 import { useEffect, useMemo, useState } from 'react';
-import mammoth from 'mammoth';
-import * as XLSX from 'xlsx';
 import { ExternalLink } from 'lucide-react';
 import { openPathExternal } from '../../lib/tauriClient';
 import { renderMarkdown } from '../../lib/markdown';
@@ -120,8 +118,8 @@ function DocxViewer({ bin, path }: { bin: BinaryContent; path: string }) {
   useEffect(() => {
     let cancelled = false;
     const bytes = b64ToBytes(bin.data);
-    mammoth
-      .convertToHtml({ arrayBuffer: bytes.buffer as ArrayBuffer })
+    import('mammoth')
+      .then(({ default: mammoth }) => mammoth.convertToHtml({ arrayBuffer: bytes.buffer as ArrayBuffer }))
       .then((result) => {
         if (!cancelled) setHtml(result.value);
       })
@@ -159,6 +157,7 @@ function XlsxViewer({ bin }: { bin: BinaryContent }) {
     void (async () => {
       try {
         const bytes = b64ToBytes(bin.data);
+        const XLSX = await import('xlsx');
         const wb = XLSX.read(bytes, { type: 'array' });
         const first = wb.SheetNames[0];
         if (!first) {

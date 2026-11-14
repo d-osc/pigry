@@ -76,7 +76,7 @@
 }
 
 .security-level--medium {
-  color: #d4b13c !important;
+  color: var(--orange) !important;
 }
 
 .security-summary__suites {
@@ -108,7 +108,7 @@
 }
 
 .security-dot--medium {
-  background: #d4b13c;
+  background: var(--orange);
 }
 
 .security-dot--muted {
@@ -154,7 +154,7 @@
 }
 
 .security-tab__count--warn {
-  color: #d4b13c;
+  color: var(--orange);
 }
 
 .security-screen__body {
@@ -546,7 +546,7 @@
 }
 
 .security-qcard__flag--warn {
-  color: #d4b13c;
+  color: var(--orange);
 }
 
 .security-qcard__flag--ok {

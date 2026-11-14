@@ -485,7 +485,7 @@
 /* ---- Real-data additions ---- */
 
 .insights-kpi__delta--down {
-  background: #3b2530;
+  background: var(--red-tint);
   color: var(--red);
 }
 

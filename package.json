@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:git": "pwsh -NoProfile -File tools/test-git.ps1",
+    "test:desktop": "pwsh -NoProfile -File tools/smoke-desktop.ps1",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -16,6 +19,8 @@
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "lucide-react": "^1.70.0",
     "mammoth": "^1.13.0",
     "monaco-editor": "^0.57.0",

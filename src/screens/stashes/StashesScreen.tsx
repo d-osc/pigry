@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 /** Stashes screen — create stashes, view their contents, and apply/pop/drop
  * a selected entry (or the latest one) without leaving the screen. */
 import { useState } from 'react';
@@ -18,6 +19,8 @@ import '../../editor/monacoSetup';
 import './StashesScreen.css';
 
 export function StashesScreen() {
+  const fileGate = useRequestGate();
+  const detailGate = useRequestGate();
   const { repository, refresh, notify } = useRepository();
   const stashes = repository?.stashes ?? [];
   const dirtyCount = repository?.files.length ?? 0;
@@ -54,6 +57,8 @@ export function StashesScreen() {
   };
 
   const viewStash = async (index: number) => {
+    const isCurrent = detailGate.begin();
+    fileGate.invalidate();
     if (viewed === index) {
       setViewed(null);
       setPreview(null);
@@ -67,16 +72,19 @@ export function StashesScreen() {
     setFileContent(null);
     setLoadingView(true);
     try {
-      setPreview(await stashPreview(index));
+      const result = await stashPreview(index);
+      if (isCurrent()) setPreview(result);
     } catch (error) {
+      if (!isCurrent()) return;
       notify(error instanceof Error ? error.message : String(error), 'error');
       setViewed(null);
     } finally {
-      setLoadingView(false);
+      if (isCurrent()) setLoadingView(false);
     }
   };
 
   const openStashFile = async (index: number, filePath: string) => {
+    const isCurrent = fileGate.begin();
     const key = `${index}:${filePath}`;
     if (openFile === key) {
       setOpenFile(null);
@@ -92,15 +100,18 @@ export function StashesScreen() {
         preview.parentOid ? readFileAtCommit(filePath, preview.parentOid) : null,
         readFileAtCommit(filePath, preview.oid),
       ]);
+      if (!isCurrent()) return;
       setFileContent({
         before: before?.content ?? '',
         after: after?.content ?? '',
         language: after?.language || before?.language || languageForPath(filePath),
       });
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return;
+      notify(error instanceof Error ? error.message : String(error), 'error');
       setFileContent(null);
     } finally {
-      setLoadingFile(false);
+      if (isCurrent()) setLoadingFile(false);
     }
   };
 
@@ -294,7 +305,6 @@ export function StashesScreen() {
                                         original={fileContent?.before ?? ''}
                                         modified={fileContent?.after ?? ''}
                                         language={fileContent?.language ?? 'plaintext'}
-                                        theme="pigry-dark"
                                         options={{
                                           readOnly: true,
                                           renderSideBySide: splitView,

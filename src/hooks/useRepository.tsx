@@ -1,3 +1,4 @@
+import { useRequestGate } from './useRequestGate';
 /** Repository state provider — bridges the Rust backend and the UI. */
 import {
   createContext,
@@ -6,6 +7,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from 'react';
 import { listen } from '@tauri-apps/api/event';
@@ -37,39 +39,39 @@ export interface RepositoryContextValue {
   notifications: NotificationItem[];
   clearNotifications: () => void;
   repository: NonNullable<AppStatePayload['repository']> | null;
-  openRepository: (path: string) => Promise<void>;
-  pickRepository: () => Promise<void>;
-  refresh: () => Promise<void>;
-  stage: (paths: string[]) => Promise<void>;
-  unstage: (paths: string[]) => Promise<void>;
-  discard: (path: string) => Promise<void>;
-  commit: (title: string, body: string, amend: boolean) => Promise<void>;
-  stash: (message?: string) => Promise<void>;
-  stageHunk: (path: string, hunkIndex: number) => Promise<void>;
-  unstageHunk: (path: string, hunkIndex: number) => Promise<void>;
-  discardHunk: (path: string, hunkIndex: number) => Promise<void>;
+  openRepository: (path: string) => Promise<boolean | void>;
+  pickRepository: () => Promise<boolean | void>;
+  refresh: () => Promise<boolean | void>;
+  stage: (paths: string[]) => Promise<boolean | void>;
+  unstage: (paths: string[]) => Promise<boolean | void>;
+  discard: (path: string) => Promise<boolean | void>;
+  commit: (title: string, body: string, amend: boolean) => Promise<boolean>;
+  stash: (message?: string) => Promise<boolean | void>;
+  stageHunk: (path: string, hunkIndex: number) => Promise<boolean | void>;
+  unstageHunk: (path: string, hunkIndex: number) => Promise<boolean | void>;
+  discardHunk: (path: string, hunkIndex: number) => Promise<boolean | void>;
   stageLines: (
     path: string,
     side: 'staged' | 'unstaged',
     selectedOld: number[],
     selectedNew: number[],
-  ) => Promise<void>;
-  cloneRepo: (url: string, target: string) => Promise<void>;
-  rebaseOnto: (base: string) => Promise<void>;
-  interactiveRebase: (base: string, steps: RebaseStep[]) => Promise<void>;
-  abortRebase: () => Promise<void>;
-  revertCommit: (oid: string) => Promise<void>;
-  cherryPick: (oid: string) => Promise<void>;
-  mergeBranch: (branch: string, strategy?: string) => Promise<void>;
-  mergeAbort: () => Promise<void>;
-  stashApply: (index: number) => Promise<void>;
-  stashPop: (index: number) => Promise<void>;
-  stashDrop: (index: number) => Promise<void>;
-  createTag: (name: string) => Promise<void>;
-  deleteTag: (name: string) => Promise<void>;
-  createBranch: (name: string, checkout: boolean) => Promise<void>;
-  checkoutBranch: (name: string) => Promise<void>;
-  deleteBranch: (name: string) => Promise<void>;
+  ) => Promise<boolean | void>;
+  cloneRepo: (url: string, target: string) => Promise<boolean | void>;
+  rebaseOnto: (base: string) => Promise<boolean | void>;
+  interactiveRebase: (base: string, steps: RebaseStep[]) => Promise<boolean | void>;
+  abortRebase: () => Promise<boolean | void>;
+  revertCommit: (oid: string) => Promise<boolean | void>;
+  cherryPick: (oid: string) => Promise<boolean | void>;
+  mergeBranch: (branch: string, strategy?: string) => Promise<boolean>;
+  mergeAbort: () => Promise<boolean | void>;
+  stashApply: (index: number) => Promise<boolean | void>;
+  stashPop: (index: number) => Promise<boolean | void>;
+  stashDrop: (index: number) => Promise<boolean | void>;
+  createTag: (name: string) => Promise<boolean | void>;
+  deleteTag: (name: string) => Promise<boolean | void>;
+  createBranch: (name: string, checkout: boolean) => Promise<boolean | void>;
+  checkoutBranch: (name: string) => Promise<boolean | void>;
+  deleteBranch: (name: string) => Promise<boolean | void>;
   fetchRemote: () => Promise<boolean>;
   pullRemote: () => Promise<boolean>;
   pushRemote: () => Promise<boolean>;
@@ -78,6 +80,8 @@ export interface RepositoryContextValue {
 const RepositoryContext = createContext<RepositoryContextValue | null>(null);
 
 export function RepositoryProvider({ children }: { children: ReactNode }) {
+  const stateGate = useRequestGate();
+  const operationInFlight = useRef(false);
   const [mode] = useState<BackendMode>(() =>
     client.isTauri() ? 'tauri' : 'browser',
   );
@@ -98,46 +102,61 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // In a plain browser getAppState resolves with the design demo fixture.
-    client
-      .getAppState()
-      .then(setState)
-      .catch((e: unknown) => setError(String(e)));
-  }, [mode]);
+    const current = stateGate.begin();
+    client.getAppState().then((payload) => { if (current()) setState(payload); })
+      .catch((e: unknown) => { if (current()) setError(String(e)); });
+    return () => stateGate.invalidate();
+  }, [mode, stateGate]);
 
   // Auto-refresh when the file watcher detects external changes.
   useEffect(() => {
     if (mode !== 'tauri') return;
+    let disposed = false;
     let unlisten: (() => void) | null = null;
     listen('repo-changed', () => {
-      client.refresh()
-        .then(setState)
-        .catch(() => {});
-    }).then((off) => { unlisten = off; });
-    return () => { unlisten?.(); };
-  }, [mode]);
+      if (operationInFlight.current) return;
+      const current = stateGate.begin();
+      client.refresh().then((payload) => { if (current()) setState(payload); })
+        .catch((e: unknown) => { if (current()) setError(String(e)); });
+    }).then((off) => { if (disposed) off(); else unlisten = off; })
+      .catch((e: unknown) => { if (!disposed) setError(String(e)); });
+    return () => { disposed = true; unlisten?.(); };
+  }, [mode, stateGate]);
 
   const run = useCallback(
     async <T,>(action: () => Promise<T>, extract: (result: T) => AppStatePayload | null, successMsg?: string) => {
+      if (operationInFlight.current) {
+        notifyAndLog('Another repository operation is still running. Please wait.', 'error');
+        return false;
+      }
+      operationInFlight.current = true;
+      stateGate.invalidate();
       setBusy(true);
       setError(null);
       try {
         const result = await action();
         const payload = extract(result);
         if (payload) setState(payload);
-        if (successMsg) notifyAndLog(successMsg, 'success');
+        if (successMsg && payload) notifyAndLog(successMsg, 'success');
+        return true;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         setError(message);
         notifyAndLog(message, 'error');
+        return false;
       } finally {
+        operationInFlight.current = false;
         setBusy(false);
       }
     },
-    [notifyAndLog],
+    [notifyAndLog, stateGate],
   );
 
   const runNet = useCallback(
     async (action: () => Promise<client.NetResultLike>) => {
+      if (operationInFlight.current) return false;
+      operationInFlight.current = true;
+      stateGate.invalidate();
       setBusy(true);
       setError(null);
       let ok = false;
@@ -153,11 +172,12 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         setError(message);
         notifyAndLog(message, 'error');
       } finally {
+        operationInFlight.current = false;
         setBusy(false);
       }
       return ok;
     },
-    [notifyAndLog],
+    [notifyAndLog, stateGate],
   );
 
   const value = useMemo<RepositoryContextValue>(
@@ -184,7 +204,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
         run(() => client.unstagePaths(paths), (p) => p, `Unstaged ${paths.length} file${paths.length === 1 ? '' : 's'}`),
       discard: (path) => run(() => client.discardFile(path), (p) => p, 'Changes discarded'),
       commit: async (title, body, amend) => {
-        await run(
+        return run(
           () => client.commitChanges(title, body, amend),
           (outcome) => outcome.state,
           amend ? 'Commit amended' : 'Commit created',

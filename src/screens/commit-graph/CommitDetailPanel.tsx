@@ -50,6 +50,8 @@ function ChangeDistribution({ additions, deletions }: { additions: number; delet
 
 export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailPanelProps) {
   const { revertCommit, cherryPick, busy } = useRepository();
+  const [diffRetry, setDiffRetry] = useState(0);
+  const [retry, setRetry] = useState(0);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -68,6 +70,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
   // Load commit metadata once per mount (parent remounts us via key={oid}).
   useEffect(() => {
     let cancelled = false;
+    setLoadFailed(false);
     getCommitDetail(oid)
       .then((result) => {
         if (!cancelled) setDetail(result);
@@ -81,7 +84,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
     return () => {
       cancelled = true;
     };
-  }, [oid]);
+  }, [oid, retry]);
 
   // Load the selected file's diff.
   useEffect(() => {
@@ -97,7 +100,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
     return () => {
       cancelled = true;
     };
-  }, [oid, selectedFile]);
+  }, [oid, selectedFile, diffRetry]);
 
   // ↑/↓ moves between changed files while the Changes tab is open.
   useEffect(() => {
@@ -242,7 +245,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
         <div className="commit-detail__overview">
           <div className="commit-detail__summary">
             {loadFailed ? (
-              <p className="commit-detail__loading">Failed to load commit</p>
+              <div className="commit-detail__loading" role="alert">Failed to load commit<button className="outline-button" onClick={() => setRetry((n) => n + 1)}>Try again</button></div>
             ) : !detail ? (
               <p className="commit-detail__loading">Loading…</p>
             ) : (
@@ -474,7 +477,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
                   <div className="commit-detail__diffscroll">
                     {!fileDiff || fileDiff.path !== selectedFile.path ? (
                       <div className="commit-detail__diff-notice">Loading diff…</div>
-                    ) : fileDiff.diff?.binary ? (
+                    ) : fileDiff.diff === null ? (<div className="commit-detail__diff-notice" role="alert">Could not load diff.<button className="outline-button" onClick={() => { setFileDiff(null); setDiffRetry((n) => n + 1); }}>Try again</button></div>) : fileDiff.diff?.binary ? (
                       <div className="commit-detail__diff-notice">Binary file</div>
                     ) : fileDiff.diff?.tooLarge ? (
                       <div className="commit-detail__diff-notice">File too large to display</div>

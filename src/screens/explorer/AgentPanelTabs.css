@@ -978,7 +978,7 @@
 }
 
 .apanel-dlg__ctxbar-fill--danger {
-  background: var(--danger, #e79098);
+  background: var(--danger, var(--red));
 }
 
 .apanel-dlg__tiles {

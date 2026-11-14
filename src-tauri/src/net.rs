@@ -7,8 +7,8 @@
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::io::Read;
+use std::time::{Duration, Instant};
 
 /// Generous wall-clock limit: pushing a large pack (hundreds of commits with
 /// binaries) on a slow upload legitimately takes minutes.
@@ -22,49 +22,46 @@ pub struct NetResult {
 
 type Result<T> = std::result::Result<T, String>;
 
-fn run_git(repo_path: &PathBuf, args: &[String]) -> Result<String> {
-    // No credential.interactive=false here: when the stored credential is
-    // expired GCM must be allowed to prompt (browser/terminal UI) — blocking
-    // the prompt turned every push/pull/fetch into
-    // "Cannot prompt because user interactivity has been disabled".
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| format!("failed to start git: {e}. Is git installed and on PATH?"))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !output.status.success() {
-        let detail = if !stderr.is_empty() { stderr } else { stdout };
-        return Err(format!("git {} failed: {detail}", args.join(" ")));
+fn run_git_with_timeout(repo_path: &PathBuf, args: &[&str], timeout: Duration) -> Result<String> {
+    let mut child = Command::new("git").arg("-C").arg(repo_path).args(args)
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
+        .spawn().map_err(|e| format!("failed to start git: {e}. Is git installed and on PATH?"))?;
+    // Drain both pipes concurrently: a large push must not block on a full pipe.
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+    let out = std::thread::spawn(move || { let mut data = Vec::new(); stdout.read_to_end(&mut data).map(|_| data) });
+    let err = std::thread::spawn(move || { let mut data = Vec::new(); stderr.read_to_end(&mut data).map(|_| data) });
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() < timeout => std::thread::sleep(Duration::from_millis(20)),
+            Ok(None) => {
+                // Do not leave a timed-out Git process running after telling the UI it failed.
+                #[cfg(windows)]
+                { let _ = Command::new("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).output(); }
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("git {} timed out after {} seconds; check the remote and authentication before retrying", args.join(" "), timeout.as_secs()));
+            }
+            Err(error) => {
+                let _ = child.kill(); let _ = child.wait();
+                return Err(format!("could not wait for git: {error}"));
+            }
+        }
+    };
+    let stdout = out.join().map_err(|_| "git stdout reader failed".to_string())?.map_err(|e| e.to_string())?;
+    let stderr = err.join().map_err(|_| "git stderr reader failed".to_string())?.map_err(|e| e.to_string())?;
+    let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
+    if !status.success() {
+        return Err(format!("git {} failed: {}", args.join(" "), if stderr.is_empty() { stdout } else { stderr }));
     }
     Ok(if stdout.is_empty() { stderr } else { stdout })
 }
 
-/// Runs a git command on a worker thread with a wall-clock timeout so a
-/// hung network call cannot block the UI forever.
 fn run_git_timed(repo_path: &PathBuf, args: &[&str]) -> Result<String> {
-    let owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-    let path = repo_path.clone();
-    let (tx, rx) = mpsc::channel();
-    let handle = std::thread::spawn(move || {
-        let result = run_git(&path, &owned);
-        let _ = tx.send(result);
-    });
-    match rx.recv_timeout(NETWORK_TIMEOUT) {
-        Ok(result) => {
-            let _ = handle.join();
-            result
-        }
-        Err(_) => Err(format!(
-            "git {} timed out after {} seconds",
-            args.join(" "),
-            NETWORK_TIMEOUT.as_secs()
-        )),
-    }
+    run_git_with_timeout(repo_path, args, NETWORK_TIMEOUT)
 }
 
 pub fn fetch(repo_path: &PathBuf) -> Result<NetResult> {
@@ -106,3 +103,6 @@ pub fn push_delete_remote(repo_path: &PathBuf, remote: &str, name: &str) -> Resu
     let output = run_git_timed(repo_path, &["push", remote, "--delete", name])?;
     Ok(NetResult { summary: output })
 }
+
+#[cfg(test)]
+mod tests;

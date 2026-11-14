@@ -91,6 +91,7 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
     id: string;
     diff: FileDiffContent | null;
     failed: boolean;
+    error?: string;
   } | null>(null);
   const diffEditorRef =
     useRef<import('@monaco-editor/react').MonacoDiffEditor | null>(null);
@@ -108,8 +109,8 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
       .then((diff) => {
         if (!cancelled) setEntry({ id: selectedFileId, diff, failed: false });
       })
-      .catch(() => {
-        if (!cancelled) setEntry({ id: selectedFileId, diff: null, failed: true });
+      .catch((error: unknown) => {
+        if (!cancelled) setEntry({ id: selectedFileId, diff: null, failed: true, error: error instanceof Error ? error.message : String(error) });
       });
     return () => {
       cancelled = true;
@@ -265,7 +266,7 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
       />
 
       <div className="diff-pane__editor">
-        {loading ? (
+        {current?.failed ? (<div className="diff-pane__notice" role="alert">{current.error}<button className="outline-button" onClick={() => setMutatedKey((n) => n + 1)}>Try again</button></div>) : loading ? (
           <div className="diff-pane__notice">Loading diff…</div>
         ) : !diff || diff.binary ? (
           <div className="diff-pane__notice">
@@ -284,7 +285,6 @@ export function DiffPane({ selectedFileId }: DiffPaneProps) {
             original={diff.original ?? ''}
             modified={diff.modified ?? ''}
             language={diff.language}
-            theme="pigry-dark"
             onMount={handleDiffMount}
             options={{
               readOnly: true,

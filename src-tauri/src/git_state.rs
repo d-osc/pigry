@@ -784,7 +784,6 @@ pub fn commit(repo_path: &Path, title: &str, body: &str, amend: bool) -> Result<
     };
 
     let repo = Repository::discover(repo_path).map_err(err)?;
-    let mut index = repo.index().map_err(err)?;
     let staged = repo
         .statuses(None)
         .map_err(err)?
@@ -802,22 +801,16 @@ pub fn commit(repo_path: &Path, title: &str, body: &str, amend: bool) -> Result<
         return Err("no staged files to commit".to_string());
     }
 
-    let signature = repo.signature().map_err(err)?;
-    let tree_oid = index.write_tree().map_err(err)?;
-    let tree = repo.find_tree(tree_oid).map_err(err)?;
-    let head = repo.head().ok().map(|h| h.peel_to_commit()).transpose().map_err(err)?;
+    if amend && repo.head().is_err() {
+        return Err("nothing to amend — HEAD not found".to_string());
+    }
+    // Honor repository hooks, signing settings and merge parents exactly as Git does.
+    drop(repo);
+    let mut args = vec!["commit", "-m", message.as_str()];
+    if amend { args.push("--amend"); }
+    crate::gitcli::run_git(repo_path, &args)?;
+    crate::gitcli::run_git(repo_path, &["rev-parse", "HEAD"])
 
-    let oid = if amend {
-        let head = head.ok_or("nothing to amend — HEAD not found")?;
-        head.amend(Some("HEAD"), Some(&signature), Some(&signature), None, Some(&message), Some(&tree))
-            .map_err(err)?
-    } else {
-        let parents: Vec<&git2::Commit> = head.as_ref().map(|c| vec![c]).unwrap_or_default();
-        repo.commit(Some("HEAD"), &signature, &signature, &message, &tree, &parents)
-            .map_err(err)?
-    };
-
-    Ok(oid.to_string())
 }
 
 pub fn stash(repo_path: &Path, message: Option<&str>) -> Result<()> {

@@ -1,3 +1,4 @@
+import { useRequestGate } from '../../hooks/useRequestGate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Ban,
@@ -243,6 +244,7 @@ function SkeletonDetail() {
 }
 
 export function ActionsScreen() {
+  const listGate = useRequestGate();
   const { repository, notify } = useRepository();
   const [runsWidth, setRunsWidth] = useState(300);
 
@@ -273,6 +275,8 @@ export function ActionsScreen() {
   const [logLoading, setLogLoading] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<GhRunArtifact[]>([]);
+  const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  const [artifactsRetry, setArtifactsRetry] = useState(0);
   const [artifactsLoading, setArtifactsLoading] = useState(false);
   const [downloading, setDownloading] = useState<number | null>(null);
 
@@ -330,11 +334,13 @@ export function ActionsScreen() {
   }, [detail, workflows]);
 
   const loadAll = async (silent = false) => {
+    const isCurrent = listGate.begin();
     if (silent) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
       const [wfs, page] = await Promise.all([ghWorkflowList(), ghRunList(50)]);
+      if (!isCurrent()) return;
       setWorkflows(wfs);
       setRuns(page.runs);
       setTotal(page.total);
@@ -344,10 +350,11 @@ export function ActionsScreen() {
         return page.runs[0]?.id ?? null;
       });
     } catch (err) {
+      if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isCurrent()) setLoading(false);
+      if (isCurrent()) setRefreshing(false);
     }
   };
 
@@ -441,13 +448,13 @@ export function ActionsScreen() {
     }
     let cancelled = false;
     const t2 = window.setTimeout(() => setArtifactsLoading(true), 0);
+    setArtifactsError(null);
     ghRunArtifacts(selected)
       .then((items) => {
         if (!cancelled) setArtifacts(items);
       })
-      .catch(() => {
-        // Artifact listing is best-effort; the tab shows an empty state.
-        if (!cancelled) setArtifacts([]);
+      .catch((error: unknown) => {
+        if (!cancelled) setArtifactsError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
         if (!cancelled) setArtifactsLoading(false);
@@ -456,7 +463,7 @@ export function ActionsScreen() {
       cancelled = true;
       window.clearTimeout(t2);
     };
-  }, [selected, detailNonce]);
+  }, [selected, detailNonce, artifactsRetry]);
 
   // While any run is queued/in-progress, poll the list; the selected run's
   // detail refreshes too so jobs/steps tick over live.
@@ -1112,7 +1119,7 @@ export function ActionsScreen() {
                       Uploaded by this run · downloads land in your temp folder
                     </span>
                   </div>
-                  {artifactsLoading ? (
+                  {artifactsError ? (<div role="alert">{artifactsError}<button className="outline-button" onClick={() => setArtifactsRetry((n) => n + 1)}>Try again</button></div>) : artifactsLoading ? (
                     <div className="pr-skeleton-list" aria-label="Loading artifacts">
                       <div className="pr-skeleton-row">
                         <div className="pr-skeleton pr-skeleton--title" />

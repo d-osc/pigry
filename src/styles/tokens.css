@@ -1,64 +1,70 @@
-/*
- * Pigry design tokens — extracted from Figma file 417miudvyh3Kdz8eN4eILm.
- * See .figma-analysis/DESIGN-SUMMARY.md for provenance.
- */
+/* GitHub Primer-inspired semantic colors for both application themes. */
+
 :root {
+  --nav-indicator: #fd8c73;
+  --button-primary: #238636;
+  --button-primary-hover: #29903b;
+  --button-primary-border: #3fb95066;
+  --button-default: #21262d;
+  --button-default-hover: #30363d;
+  --on-accent: #010409;
   color-scheme: dark;
 
   /* ---- Layered backgrounds (darkest → raised) ---- */
-  --bg-statusbar: #0e1014;
-  --bg-sidebar: #111317;
-  --bg-titlebar: #15171c;
-  --bg-panel: #191c22;
-  --bg-workspace: #1d2129;
-  --bg-card: #20242b;
-  --bg-input: #15171c;
-  --bg-code: #1a1d24;
-  --bg-code-alt: #1b1e28;
+  --bg-statusbar: #010409;
+  --bg-sidebar: #0d1117;
+  --bg-titlebar: #010409;
+  --bg-panel: #161b22;
+  --bg-workspace: #0d1117;
+  --bg-card: #21262d;
+  --bg-input: #0d1117;
+  --bg-code: #0d1117;
+  --bg-code-alt: #161b22;
 
   /* ---- Surfaces ---- */
-  --border: #2a2e37;
-  --border-strong: #343a46;
-  --border-hover: #3d4450;
-  --border-subtle: #20242b; /* faint separators inside raised panels */
+  --border: #30363d;
+  --border-strong: #484f58;
+  --border-hover: #8b949e;
+  --border-subtle: #21262d; /* faint separators inside raised panels */
 
   /* ---- Text ---- */
-  --text-primary: #e9ebf0;
-  --text-secondary: #9299a7;
-  --text-muted: #656d7c;
-  --text-mid: #c9ced8;
+  --text-primary: #e6edf3;
+  --text-secondary: #9198a1;
+  --text-muted: #8b949e;
+  --text-mid: #c9d1d9;
 
   /* ---- Accent (indigo) ---- */
-  --accent: #8b9dff;
-  --accent-tint-1: #252d49; /* selected rows, subtle fills */
-  --accent-tint-2: #38405b; /* hover fills */
-  --accent-tint-3: #43517b; /* borders on tinted surfaces */
+  --accent: #4493f8;
+  --accent-tint-1: #121d2f; /* selected rows, subtle fills */
+  --accent-tint-2: #1f3350; /* hover fills */
+  --accent-tint-3: #316dca; /* borders on tinted surfaces */
 
   /* ---- Semantic ---- */
-  --green: #6dd6ad;
-  --green-tint: #152a24;
-  --red: #e79098;
-  --orange: #edb675;
-  --orange-tint: #453a2c;
-  --cyan: #62cee7;
-  --purple: #b59aff;
-  --purple-bright: #a698ff;
-  --purple-tint: #3b3049;
+  --green: #3fb950;
+  --green-tint: #12261e;
+  --red: #f85149;
+  --red-tint: #2d1519;
+  --orange: #d29922;
+  --orange-tint: #2e2613;
+  --cyan: #39c5cf;
+  --purple: #a371f7;
+  --purple-bright: #bc8cff;
+  --purple-tint: #271b3b;
 
   /* ---- Typography ---- */
-  --font-ui: 'Noto Sans Thai', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-ui: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
 
-  --fs-2xs: 9px;  /* micro labels, badge text */
-  --fs-xs: 10px;  /* dense UI default */
-  --fs-sm: 11px;  /* list rows, controls */
-  --fs-md: 12px;  /* body text */
+  --fs-2xs: 10px;  /* micro labels, badge text */
+  --fs-xs: 11px;  /* dense UI default */
+  --fs-sm: 12px;  /* list rows, controls */
+  --fs-md: 13px;  /* body text */
   --fs-lg: 13px;  /* emphasized body */
   --fs-xl: 15px;  /* screen titles */
 
   /* ---- Radius ---- */
   --radius-xs: 3px;
-  --radius-sm: 4px;
+  --radius-sm: 6px;
   --radius: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
@@ -71,11 +77,11 @@
   --file-list-width: 360px;
 
   /* ---- Sidebar accents (per-branch lane colors, cycled) ---- */
-  --lane-1: #8b9dff; /* accent indigo */
-  --lane-2: #b59aff; /* purple */
-  --lane-3: #62cee7; /* cyan */
-  --lane-4: #edb675; /* orange */
-  --nav-active-bg: #1d242f;
+  --lane-1: #4493f8; /* accent indigo */
+  --lane-2: #a371f7; /* purple */
+  --lane-3: #39c5cf; /* cyan */
+  --lane-4: #d29922; /* orange */
+  --nav-active-bg: #21262d;
 
   /* ---- Motion ---- */
   --transition-fast: 120ms ease;
@@ -87,52 +93,60 @@
  * equivalent to data-theme="dark".
  */
 [data-theme='light'] {
+  --button-primary: #1f883d;
+  --button-primary-hover: #1a7f37;
+  --button-primary-border: #1f232826;
+  --button-default: #f6f8fa;
+  --button-default-hover: #eff2f5;
+  --nav-indicator: #fd8c73;
+  --on-accent: #ffffff;
   color-scheme: light;
 
   /* ---- Layered backgrounds (lightest → raised) ---- */
-  --bg-statusbar: #e9edf2;
-  --bg-sidebar: #f1f3f6;
-  --bg-titlebar: #f4f6f8;
-  --bg-panel: #ffffff;
-  --bg-workspace: #f8f9fb;
-  --bg-card: #ffffff;
-  --bg-input: #f4f6f8;
-  --bg-code: #f4f6f8;
+  --bg-statusbar: #f6f8fa;
+  --bg-sidebar: #ffffff;
+  --bg-titlebar: #f6f8fa;
+  --bg-panel: #f6f8fa;
+  --bg-workspace: #ffffff;
+  --bg-card: #f0f2f4;
+  --bg-input: #ffffff;
+  --bg-code: #ffffff;
   --bg-code-alt: #f6f8fa;
 
   /* ---- Surfaces ---- */
-  --border: #d8dde3;
-  --border-strong: #c3cad2;
-  --border-hover: #adb6c1;
-  --border-subtle: #e6e9ee;
+  --border: #d1d9e0;
+  --border-strong: #b7bfc8;
+  --border-hover: #818b98;
+  --border-subtle: #e6eaef;
 
   /* ---- Text ---- */
-  --text-primary: #1d2530;
-  --text-secondary: #56606c;
-  --text-muted: #8a93a0;
-  --text-mid: #3d4652;
+  --text-primary: #1f2328;
+  --text-secondary: #59636e;
+  --text-muted: #59636e;
+  --text-mid: #3d444d;
 
   /* ---- Accent (indigo, darkened for contrast on light) ---- */
-  --accent: #4f66e0;
-  --accent-tint-1: #e7ebfb;
-  --accent-tint-2: #d6ddf8;
-  --accent-tint-3: #bcc9f3;
+  --accent: #0969da;
+  --accent-tint-1: #ddf4ff;
+  --accent-tint-2: #c8eaff;
+  --accent-tint-3: #54aeff;
 
   /* ---- Semantic (darkened for contrast on light) ---- */
-  --green: #157f56;
-  --green-tint: #e0f3ea;
-  --red: #c5485a;
-  --orange: #a4660e;
-  --orange-tint: #f9ecd9;
-  --cyan: #0e7fa0;
-  --purple: #7451d4;
-  --purple-bright: #6a4fd0;
-  --purple-tint: #ece7fb;
+  --green: #1a7f37;
+  --green-tint: #dafbe1;
+  --red: #d1242f;
+  --red-tint: #ffebe9;
+  --orange: #9a6700;
+  --orange-tint: #fff8c5;
+  --cyan: #0e7c86;
+  --purple: #8250df;
+  --purple-bright: #6639ba;
+  --purple-tint: #fbefff;
 
   /* ---- Sidebar accents ---- */
-  --lane-1: #4f66e0;
-  --lane-2: #7451d4;
-  --lane-3: #0e7fa0;
-  --lane-4: #a4660e;
-  --nav-active-bg: #e7ebfb;
+  --lane-1: #0969da;
+  --lane-2: #8250df;
+  --lane-3: #0e7c86;
+  --lane-4: #9a6700;
+  --nav-active-bg: #f0f2f4;
 }
