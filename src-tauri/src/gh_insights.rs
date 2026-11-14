@@ -4,11 +4,10 @@
 //! surface. Local git statistics live in `insights.rs`.
 
 use serde::Serialize;
-use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
+use crate::CommandNoWindow;
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const DAY: i64 = 86_400;
 
 /// Spawns gh via PATH when available; after a fresh install the parent
@@ -27,12 +26,12 @@ fn gh_command() -> Command {
     for candidate in &candidates {
         if Path::new(candidate).exists() {
             let mut cmd = Command::new(candidate);
-            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.no_window();
             return cmd;
         }
     }
     let mut cmd = Command::new("gh");
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.no_window();
     cmd
 }
 

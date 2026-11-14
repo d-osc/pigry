@@ -5,16 +5,15 @@
 //! the watched worktree.
 
 use std::fs;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
 
 use serde::Serialize;
+use crate::CommandNoWindow;
 
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -67,7 +66,7 @@ fn run_git(dir: &Path, args: &[&str]) -> Result<String> {
         // Headless: GCM still supplies stored credentials, but never prompts.
         .arg("credential.interactive=false")
         .args(args)
-        .creation_flags(CREATE_NO_WINDOW)
+        .no_window()
         .stdin(Stdio::null())
         .output()
         .map_err(|e| format!("failed to start git: {e}. Is git installed and on PATH?"))?;

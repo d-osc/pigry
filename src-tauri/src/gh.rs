@@ -3,8 +3,8 @@
 
 use serde::Serialize;
 use std::path::Path;
-use std::os::windows::process::CommandExt;
 use std::process::Command;
+use crate::CommandNoWindow;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,7 +76,6 @@ pub struct GhIssueDetail {
     pub comments: Vec<GhComment>,
 }
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Spawns gh via PATH when available; after a fresh install the parent
 /// process PATH is stale, so fall back to the known install locations.
@@ -94,12 +93,12 @@ fn gh_command() -> Command {
     for candidate in &candidates {
         if Path::new(candidate).exists() {
             let mut cmd = Command::new(candidate);
-            cmd.creation_flags(CREATE_NO_WINDOW);
+            cmd.no_window();
             return cmd;
         }
     }
     let mut cmd = Command::new("gh");
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.no_window();
     cmd
 }
 
@@ -116,7 +115,7 @@ pub fn install(repo_path: &Path) -> Result<String, String> {
             "--accept-package-agreements",
             "--silent",
         ])
-        .creation_flags(CREATE_NO_WINDOW)
+        .no_window()
         .current_dir(repo_path)
         .output();
     if let Ok(out) = winget {
@@ -126,7 +125,7 @@ pub fn install(repo_path: &Path) -> Result<String, String> {
     }
     let scoop = Command::new("powershell")
         .args(["-NoProfile", "-Command", "scoop install gh"])
-        .creation_flags(CREATE_NO_WINDOW)
+        .no_window()
         .output();
     if let Ok(out) = scoop {
         if out.status.success() {
@@ -738,7 +737,7 @@ pub fn token_scopes(repo_path: &Path) -> Result<GhScopes, String> {
 pub fn open_url(url: &str) -> Result<(), String> {
     let output = Command::new("cmd")
         .args(["/C", "start", "", url])
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .no_window()
         .output()
         .map_err(|e| format!("failed to open URL: {e}"))?;
     if !output.status.success() {
@@ -1985,7 +1984,7 @@ fn curl_form(url: &str, fields: &[String]) -> Result<String, String> {
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = Command::new("curl")
         .args(&arg_refs)
-        .creation_flags(CREATE_NO_WINDOW)
+        .no_window()
         .output()
         .map_err(|e| format!("curl not available: {e}"))?;
     if !output.status.success() {

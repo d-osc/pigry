@@ -8,11 +8,10 @@
 //! model in the agent tool-use loop.
 
 use serde::Serialize;
-use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use crate::CommandNoWindow;
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MAX_RESULTS: usize = 8;
 const MAX_TEXT: usize = 16_000;
 
@@ -44,7 +43,6 @@ fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
-const CREATE_FLAGS: u32 = CREATE_NO_WINDOW;
 
 fn run_curl_output(url: &str, timeout_secs: u64) -> Result<String> {
     let mut cmd = Command::new("curl");
@@ -57,7 +55,7 @@ fn run_curl_output(url: &str, timeout_secs: u64) -> Result<String> {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Pigry/1.0",
         url,
     ]);
-    cmd.creation_flags(CREATE_FLAGS);
+    cmd.no_window();
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let out = cmd.output().map_err(|e| format!("curl not available: {e}"))?;
     if !out.status.success() {
@@ -350,7 +348,7 @@ pub fn browser_page(url: &str, wait_ms: u64) -> Result<BrowserPage> {
         "--dump-dom",
         url,
     ]);
-    cmd.creation_flags(CREATE_FLAGS);
+    cmd.no_window();
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let out = cmd.output().map_err(|e| format!("browser failed to launch: {e}"))?;
     if out.stdout.is_empty() {
@@ -396,7 +394,7 @@ pub fn browser_screenshot_file(url: &str, path: &Path, wait_ms: u64) -> Result<(
         "--window-size=1280,900",
         url,
     ]);
-    cmd.creation_flags(CREATE_FLAGS);
+    cmd.no_window();
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let out = cmd.output().map_err(err)?;
     if !path.exists() {
@@ -429,7 +427,7 @@ pub fn browser_pdf_file(url: &str, path: &Path) -> Result<()> {
         "--no-pdf-header-footer",
         url,
     ]);
-    cmd.creation_flags(CREATE_FLAGS);
+    cmd.no_window();
     cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let out = cmd.output().map_err(err)?;
     if !path.exists() {

@@ -5,11 +5,10 @@
 
 use serde::Serialize;
 use std::io::Write;
-use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use crate::CommandNoWindow;
 
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,7 +51,7 @@ pub fn ai_chat(url: &str, api_key: &str, body_json: &str, auth_mode: Option<&str
     }
     cmd.arg(url);
     cmd.args(["--data-binary", "@-"]);
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.no_window();
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let mut child = cmd
@@ -465,7 +464,7 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
             }
             Command::new("cmd")
                 .args(["/C", "start", "", target])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .spawn()
                 .map_err(|e| format!("launch failed: {e}"))?;
             Ok(format!("launched {target}"))
@@ -474,7 +473,7 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
             // The CLIs are TUI/interactive — open a fresh console running them.
             Command::new("cmd")
                 .args(["/C", "start", "pigry", "cmd", "/K", target])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .spawn()
                 .map_err(|e| format!("launch failed: {e}"))?;
             Ok(format!("opened {target} in a new terminal"))
@@ -486,7 +485,7 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
             );
             let out = Command::new("powershell")
                 .args(["-NoProfile", "-Command", &script])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .output()
                 .map_err(|e| format!("launch failed: {e}"))?;
             let app_id = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -495,7 +494,7 @@ pub fn launch_app(kind: &str, target: &str) -> Result<String, String> {
             }
             Command::new("cmd")
                 .args(["/C", "start", &format!("shell:AppsFolder\\{app_id}")])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .spawn()
                 .map_err(|e| format!("launch failed: {e}"))?;
             Ok(format!("launched {target}"))
@@ -634,7 +633,7 @@ pub fn zcode_plan_subscription(api_key: &str) -> Result<String, String> {
             "Accept: application/json",
             "https://api.z.ai/api/monitor/usage/quota/limit",
         ]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.no_window();
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         let body = match cmd
             .spawn()
@@ -905,7 +904,7 @@ fn cli_usable(binary: &str) -> bool {
         "claude" => {
             let out = Command::new("cmd")
                 .args(["/C", "claude", "config", "get", "model"])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .output();
             match out {
                 Ok(o) => !String::from_utf8_lossy(&o.stdout).contains("Not logged in"),
@@ -915,7 +914,7 @@ fn cli_usable(binary: &str) -> bool {
         "codex" => {
             let out = Command::new("cmd")
                 .args(["/C", "codex", "login", "status"])
-                .creation_flags(CREATE_NO_WINDOW)
+                .no_window()
                 .output();
             match out {
                 Ok(o) => String::from_utf8_lossy(&o.stdout).contains("Logged in"),
@@ -961,7 +960,7 @@ fn parse_gemini_model(text: &str) -> String {
 fn cli_version(exe: &str) -> String {
     let output = Command::new("cmd")
         .args(["/C", exe, "--version"])
-        .creation_flags(CREATE_NO_WINDOW)
+        .no_window()
         .output();
     match output {
         Ok(out) if out.status.success() => {
@@ -1199,7 +1198,7 @@ pub fn cli_agent_run(cli: &str, prompt: &str, cwd: &str, model: Option<&str>) ->
             cmd.args([&flat]);
         }
     }
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd.no_window();
     cmd.current_dir(Path::new(cwd));
     if prompt_via_stdin {
         cmd.stdin(Stdio::piped());
