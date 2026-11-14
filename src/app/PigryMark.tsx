@@ -1,8 +1,8 @@
 /**
- * Orbit brand mark — GitHub-mark style: a dark disc with a white pig
- * silhouette (ears, snout and a curly tail echoing the old orbit ellipse).
+ * Pigry brand mark — GitHub-mark style: a dark disc with a white pig
+ * silhouette (ears, snout and a curly tail echoing the old pigry ellipse).
  */
-export function OrbitMark({ size = 17 }: { size?: number }) {
+export function PigryMark({ size = 17 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       {/* disc */}
