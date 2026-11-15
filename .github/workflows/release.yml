@@ -91,10 +91,12 @@ jobs:
       - name: Upload updater signatures
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           shopt -s nullglob
-          sig_files=(src-tauri/target/release/bundle/*/*.sig)
+          sig_files=(src-tauri/target/*/release/bundle/*/*.sig)
+          echo "Found ${#sig_files[@]} signature file(s):"
+          for f in "${sig_files[@]}"; do echo "  $f"; done
           if [ ${#sig_files[@]} -gt 0 ]; then
             gh release upload "${{ github.ref_name }}" --clobber "${sig_files[@]}"
           fi

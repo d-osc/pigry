@@ -20,7 +20,7 @@ const platforms = {};
 const nsisFiles = fs.readdirSync('updater').filter((f) => f.endsWith('.nsis.zip'));
 for (const nsis of nsisFiles) {
   if (nsis.includes('aarch64-pc-windows-msvc') || nsis.includes('_arm64-setup')) {
-    platforms['windows-arm64'] = {
+    platforms['windows-aarch64'] = {
       signature: readSig(`updater/${nsis}`),
       url: `${base}/${nsis}`,
     };
@@ -36,7 +36,9 @@ for (const nsis of nsisFiles) {
 for (const arch of ['amd64', 'aarch64']) {
   const app = fs.readdirSync('updater').find((f) => f.endsWith(`_${arch}.AppImage`));
   if (app) {
-    platforms[`linux-${arch}`] = {
+    // file suffix (amd64/aarch64) → updater target key (x86_64/aarch64)
+    const key = arch === 'amd64' ? 'linux-x86_64' : 'linux-aarch64';
+    platforms[key] = {
       signature: readSig(`updater/${app}`),
       url: `${base}/${app}`,
     };
