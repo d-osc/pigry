@@ -29,6 +29,7 @@ export async function installBackend(page, { entries } = {}) {
         if (cmd.startsWith('plugin:')) return 1;
         switch (cmd) {
           case 'get_app_state': return opened ? state : { ...state, repository: null, activePath: null };
+          case 'get_launch_folder': return null;
           case 'open_repository': case 'pick_repository': opened = true; return state;
           case 'refresh': return state;
           case 'stage_paths':
