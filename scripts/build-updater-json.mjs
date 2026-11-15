@@ -16,13 +16,20 @@ const readSig = (artifact) => {
 
 const platforms = {};
 
-// Windows — NSIS zip bundle
-const nsis = fs.readdirSync('updater').find((f) => f.endsWith('.nsis.zip'));
-if (nsis) {
-  platforms['windows-x86_64'] = {
-    signature: readSig(`updater/${nsis}`),
-    url: `${base}/${nsis}`,
-  };
+// Windows — NSIS zip bundles (x64 native + arm64 cross-compiled)
+const nsisFiles = fs.readdirSync('updater').filter((f) => f.endsWith('.nsis.zip'));
+for (const nsis of nsisFiles) {
+  if (nsis.includes('aarch64-pc-windows-msvc') || nsis.includes('_arm64-setup')) {
+    platforms['windows-arm64'] = {
+      signature: readSig(`updater/${nsis}`),
+      url: `${base}/${nsis}`,
+    };
+  } else {
+    platforms['windows-x86_64'] = {
+      signature: readSig(`updater/${nsis}`),
+      url: `${base}/${nsis}`,
+    };
+  }
 }
 
 // Linux — AppImage x64 + arm64

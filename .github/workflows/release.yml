@@ -93,9 +93,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sig_files="$(find src-tauri/target/release/bundle -name "*.sig" -type f)"
-          if [ -n "$sig_files" ]; then
-            gh release upload "${{ github.ref_name }}" --clobber $sig_files
+          shopt -s nullglob
+          sig_files=(src-tauri/target/release/bundle/*/*.sig)
+          if [ ${#sig_files[@]} -gt 0 ]; then
+            gh release upload "${{ github.ref_name }}" --clobber "${sig_files[@]}"
           fi
   # Builds latest.json for the in-app updater from the signed bundles
   # (Windows NSIS zip + Linux AppImage) uploaded by the build jobs.

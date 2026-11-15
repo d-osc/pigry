@@ -1,0 +1,1118 @@
+﻿2026-11-15T12:24:17.1033718Z Current runner version: '2.338.2'
+2026-11-15T12:24:17.1072436Z ##[group]Runner Image Provisioner
+2026-11-15T12:24:17.1073651Z Hosted Compute Agent
+2026-11-15T12:24:17.1074571Z Version: 20261103.629
+2026-11-15T12:24:17.1076019Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+2026-11-15T12:24:17.1077414Z Build Date: 2026-11-03T17:26:59Z
+2026-11-15T12:24:17.1078454Z Worker ID: {f0a9fe6f-1bb3-482f-98e4-347af66b8eed}
+2026-11-15T12:24:17.1079567Z Region: eastus2
+2026-11-15T12:24:17.1080379Z Cloud: Azure
+2026-11-15T12:24:17.1081176Z ##[endgroup]
+2026-11-15T12:24:17.1083467Z ##[group]Operating System
+2026-11-15T12:24:17.1084486Z Microsoft Windows Server 2025
+2026-11-15T12:24:17.1085504Z 10.0.26100
+2026-11-15T12:24:17.1086324Z Datacenter
+2026-11-15T12:24:17.1087153Z ##[endgroup]
+2026-11-15T12:24:17.1088006Z ##[group]Runner Image
+2026-11-15T12:24:17.1088923Z Image: windows-2025-vs2026
+2026-11-15T12:24:17.1089830Z Version: 20261103.298.1
+2026-11-15T12:24:17.1092315Z Included Software: https://github.com/actions/runner-images/blob/win25-vs2026/20261103.298/images/windows/Windows2025-VS2026-Readme.md
+2026-11-15T12:24:17.1095717Z Image Release: https://github.com/actions/runner-images/releases/tag/win25-vs2026%2F20261103.298
+2026-11-15T12:24:17.1097393Z ##[endgroup]
+2026-11-15T12:24:17.1099168Z ##[group]GITHUB_TOKEN Permissions
+2026-11-15T12:24:17.1102536Z Contents: write
+2026-11-15T12:24:17.1103455Z Metadata: read
+2026-11-15T12:24:17.1104323Z ##[endgroup]
+2026-11-15T12:24:17.1107277Z Secret source: Actions
+2026-11-15T12:24:17.1108652Z Cache mode: write
+2026-11-15T12:24:17.1109852Z Prepare workflow directory
+2026-11-15T12:24:17.1504116Z Prepare all required actions
+2026-11-15T12:24:17.1574836Z Getting action download info
+2026-11-15T12:24:17.3331119Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-15T12:24:17.4782718Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-11-15T12:24:17.6503373Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:39008827e6b4319a349e9a42dfc90579dd25f1ca)
+2026-11-15T12:24:17.7533491Z Download action repository 'swatinem/rust-cache@v2' (SHA:d1527c8f67ef9af357290475d4af4b0fab8f12e0)
+2026-11-15T12:24:17.9787293Z Download action repository 'tauri-apps/tauri-action@v0' (SHA:84b9d35b5fc46c1e45415bdb6144030364f7ebc5)
+2026-11-15T12:24:18.3997073Z Complete job name: build (windows-latest)
+2026-11-15T12:24:18.5566510Z ##[group]Run actions/checkout@v4
+2026-11-15T12:24:18.5567502Z with:
+2026-11-15T12:24:18.5567918Z   repository: d-osc/pigry
+2026-11-15T12:24:18.5571423Z   token: ***
+2026-11-15T12:24:18.5571819Z   ssh-strict: true
+2026-11-15T12:24:18.5572215Z   ssh-user: git
+2026-11-15T12:24:18.5572628Z   persist-credentials: true
+2026-11-15T12:24:18.5573073Z   clean: true
+2026-11-15T12:24:18.5573466Z   sparse-checkout-cone-mode: true
+2026-11-15T12:24:18.5573960Z   fetch-depth: 1
+2026-11-15T12:24:18.5574354Z   fetch-tags: false
+2026-11-15T12:24:18.5574785Z   show-progress: true
+2026-11-15T12:24:18.5575193Z   lfs: false
+2026-11-15T12:24:18.5575567Z   submodules: false
+2026-11-15T12:24:18.5575970Z   set-safe-directory: true
+2026-11-15T12:24:18.5576435Z   allow-unsafe-pr-checkout: false
+2026-11-15T12:24:18.5577108Z ##[endgroup]
+2026-11-15T12:24:18.7100374Z Syncing repository: d-osc/pigry
+2026-11-15T12:24:18.7102118Z ##[group]Getting Git version info
+2026-11-15T12:24:18.7102787Z Working directory is 'D:\a\pigry\pigry'
+2026-11-15T12:24:18.8069235Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-15T12:24:19.1799450Z git version 2.56.0.windows.4
+2026-11-15T12:24:19.1846906Z ##[endgroup]
+2026-11-15T12:24:19.1866848Z Temporarily overriding HOME='D:\a\_temp\755da214-e4d4-4e28-b51b-8bcd65769c7a' before making global git config changes
+2026-11-15T12:24:19.1868373Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-15T12:24:19.1877385Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pigry\pigry
+2026-11-15T12:24:19.2557881Z Deleting the contents of 'D:\a\pigry\pigry'
+2026-11-15T12:24:19.2563713Z ##[group]Initializing the repository
+2026-11-15T12:24:19.2572388Z [command]"C:\Program Files\Git\bin\git.exe" init D:\a\pigry\pigry
+2026-11-15T12:24:19.3519496Z Initialized empty Git repository in D:/a/pigry/pigry/.git/
+2026-11-15T12:24:19.3568878Z [command]"C:\Program Files\Git\bin\git.exe" remote add origin https://github.com/d-osc/pigry
+2026-11-15T12:24:19.4380517Z ##[endgroup]
+2026-11-15T12:24:19.4381399Z ##[group]Disabling automatic garbage collection
+2026-11-15T12:24:19.4382261Z [command]"C:\Program Files\Git\bin\git.exe" config --local gc.auto 0
+2026-11-15T12:24:19.4818450Z ##[endgroup]
+2026-11-15T12:24:19.4819599Z ##[group]Setting up auth
+2026-11-15T12:24:19.4828457Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-15T12:24:19.5219054Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-15T12:24:21.0430566Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-15T12:24:21.0844445Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-15T12:24:21.6322272Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-15T12:24:21.6710444Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-15T12:24:22.1902965Z [command]"C:\Program Files\Git\bin\git.exe" config --local http.https://github.com/.extraheader "AUTHORIZATION: basic ***"
+2026-11-15T12:24:22.2350780Z ##[endgroup]
+2026-11-15T12:24:22.2351569Z ##[group]Fetching the repository
+2026-11-15T12:24:22.2365592Z [command]"C:\Program Files\Git\bin\git.exe" -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8c774eae1b3b1dd1430eb6094d82615a50ab24b0:refs/tags/v0.3.0
+2026-11-15T12:24:23.5735854Z From https://github.com/d-osc/pigry
+2026-11-15T12:24:23.5739364Z  * [new ref]         8c774eae1b3b1dd1430eb6094d82615a50ab24b0 -> v0.3.0
+2026-11-15T12:24:23.5776065Z ##[endgroup]
+2026-11-15T12:24:23.5776616Z ##[group]Determining the checkout info
+2026-11-15T12:24:23.5779053Z ##[endgroup]
+2026-11-15T12:24:23.5789103Z [command]"C:\Program Files\Git\bin\git.exe" sparse-checkout disable
+2026-11-15T12:24:23.6370520Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all extensions.worktreeConfig
+2026-11-15T12:24:23.6774795Z ##[group]Checking out the ref
+2026-11-15T12:24:23.6775655Z [command]"C:\Program Files\Git\bin\git.exe" checkout --progress --force refs/tags/v0.3.0
+2026-11-15T12:24:23.8999640Z Note: switching to 'refs/tags/v0.3.0'.
+2026-11-15T12:24:23.9000158Z 
+2026-11-15T12:24:23.9000741Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-11-15T12:24:23.9001918Z changes and commit them, and you can discard any commits you make in this
+2026-11-15T12:24:23.9003055Z state without impacting any branches by switching back to a branch.
+2026-11-15T12:24:23.9003704Z 
+2026-11-15T12:24:23.9004064Z If you want to create a new branch to retain commits you create, you may
+2026-11-15T12:24:23.9005007Z do so (now or later) by using -c with the switch command. Example:
+2026-11-15T12:24:23.9005588Z 
+2026-11-15T12:24:23.9005844Z   git switch -c <new-branch-name>
+2026-11-15T12:24:23.9006264Z 
+2026-11-15T12:24:23.9006476Z Or undo this operation with:
+2026-11-15T12:24:23.9006821Z 
+2026-11-15T12:24:23.9007002Z   git switch -
+2026-11-15T12:24:23.9007243Z 
+2026-11-15T12:24:23.9007757Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-11-15T12:24:23.9010099Z 
+2026-11-15T12:24:23.9010785Z HEAD is now at 8c774ea ci: upload updater .sig signatures as release assets for the finalize job
+2026-11-15T12:24:23.9175638Z ##[endgroup]
+2026-11-15T12:24:23.9701776Z [command]"C:\Program Files\Git\bin\git.exe" log -1 --format=%H
+2026-11-15T12:24:24.0067554Z 8c774eae1b3b1dd1430eb6094d82615a50ab24b0
+2026-11-15T12:24:24.0571168Z ##[group]Run actions/setup-node@v4
+2026-11-15T12:24:24.0571508Z with:
+2026-11-15T12:24:24.0571697Z   node-version: 24
+2026-11-15T12:24:24.0571891Z   cache: npm
+2026-11-15T12:24:24.0572079Z   always-auth: false
+2026-11-15T12:24:24.0572282Z   check-latest: false
+2026-11-15T12:24:24.0574502Z   token: ***
+2026-11-15T12:24:24.0574694Z ##[endgroup]
+2026-11-15T12:24:24.2534010Z Found in cache @ C:\hostedtoolcache\windows\node\24.22.2\x64
+2026-11-15T12:24:24.2542590Z (node:3712) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-15T12:24:24.2543438Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-15T12:24:24.2546530Z ##[group]Environment details
+2026-11-15T12:24:29.4908660Z node: v24.22.2
+2026-11-15T12:24:29.4908914Z npm: 11.19.1
+2026-11-15T12:24:29.4909098Z yarn: 1.22.22
+2026-11-15T12:24:29.4909914Z ##[endgroup]
+2026-11-15T12:24:29.5779602Z [command]C:\Windows\system32\cmd.exe /D /S /C "C:\hostedtoolcache\windows\node\24.22.2\x64\npm.cmd config get cache"
+2026-11-15T12:24:30.0974786Z C:\npm\cache
+2026-11-15T12:24:30.3994449Z Cache hit for: node-cache-Windows-x64-npm-a7182bd60ea0c9339ad5c65d5eb568e8b4f29894b3a5fe9fe19162f7bb9c2990
+2026-11-15T12:24:30.4111267Z (node:3712) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-15T12:24:30.9549352Z Received 86188775 of 86188775 (100.0%), 158.1 MBs/sec
+2026-11-15T12:24:30.9550916Z Cache Size: ~82 MB (86188775 B)
+2026-11-15T12:24:30.9579539Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/51179629-1c43-4048-9b4b-119a004af4b8/cache.tzst -P -C D:/a/pigry/pigry --force-local --use-compress-program "zstd -d"
+2026-11-15T12:24:32.2787644Z Cache restored successfully
+2026-11-15T12:24:32.2837852Z Cache restored from key: node-cache-Windows-x64-npm-a7182bd60ea0c9339ad5c65d5eb568e8b4f29894b3a5fe9fe19162f7bb9c2990
+2026-11-15T12:24:33.2530684Z ##[group]Run dtolnay/rust-toolchain@stable
+2026-11-15T12:24:33.2531342Z with:
+2026-11-15T12:24:33.2531601Z   toolchain: stable
+2026-11-15T12:24:33.2531870Z ##[endgroup]
+2026-11-15T12:24:33.2601060Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-11-15T12:24:33.2789535Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-11-15T12:24:33.2789986Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-11-15T12:24:33.2790579Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-11-15T12:24:33.2791231Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-11-15T12:24:33.2791539Z [36;1m  exit 1[0m
+2026-11-15T12:24:33.2791901Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-11-15T12:24:33.2792370Z [36;1m  if [[ Windows == macOS ]]; then[0m
+2026-11-15T12:24:33.2793013Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:33.2793576Z [36;1m  else[0m
+2026-11-15T12:24:33.2794006Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:33.2794513Z [36;1m  fi[0m
+2026-11-15T12:24:33.2794818Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-11-15T12:24:33.2795403Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:33.2796169Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-11-15T12:24:33.2796746Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:33.2797295Z [36;1melse[0m
+2026-11-15T12:24:33.2797482Z [36;1m  delimiter=EOF[0m
+2026-11-15T12:24:33.2797809Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-11-15T12:24:33.2798369Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:33.2798823Z [36;1mfi[0m
+2026-11-15T12:24:33.2822072Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:33.2822509Z env:
+2026-11-15T12:24:33.2822693Z   toolchain: stable
+2026-11-15T12:24:33.2822889Z ##[endgroup]
+2026-11-15T12:24:33.4995665Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=236]
+2026-11-15T12:24:33.5000984Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-11-15T12:24:33.5152155Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV
+2026-11-15T12:24:33.5152675Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$USERPROFILE\.cargo"} >> $GITHUB_ENV[0m
+2026-11-15T12:24:33.5169932Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:33.5170369Z ##[endgroup]
+2026-11-15T12:24:33.5623480Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=62]
+2026-11-15T12:24:33.5626272Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-11-15T12:24:33.5635440Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-15T12:24:33.5637651Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-11-15T12:24:33.5782161Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-11-15T12:24:33.5782556Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-11-15T12:24:33.5783331Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://win.rustup.rs/x86_64 --output 'D:\a\_temp\rustup-init.exe'[0m
+2026-11-15T12:24:33.5784222Z [36;1m  'D:\a\_temp\rustup-init.exe' --default-toolchain none --no-modify-path -y[0m
+2026-11-15T12:24:33.5786523Z [36;1m  echo "$CARGO_HOME\bin" >> $GITHUB_PATH[0m
+2026-11-15T12:24:33.5786861Z [36;1mfi[0m
+2026-11-15T12:24:33.5803847Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:33.5804251Z env:
+2026-11-15T12:24:33.5804459Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:33.5804724Z ##[endgroup]
+2026-11-15T12:24:33.6320517Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=success;conclusion=success;duration_ms=68]
+2026-11-15T12:24:33.6335063Z ##[start-action display=rustup toolchain install stable;id=__dtolnay_rust-toolchain.__run_4]
+2026-11-15T12:24:33.6490073Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-11-15T12:24:33.6490781Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-11-15T12:24:33.6491232Z [36;1mflags=()[0m
+2026-11-15T12:24:33.6491524Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-11-15T12:24:33.6491954Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-11-15T12:24:33.6492457Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-11-15T12:24:33.6492891Z [36;1mlog=$(mktemp)[0m
+2026-11-15T12:24:33.6493119Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-11-15T12:24:33.6493369Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-11-15T12:24:33.6494508Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-11-15T12:24:33.6495316Z [36;1m    break[0m
+2026-11-15T12:24:33.6495605Z [36;1m  else[0m
+2026-11-15T12:24:33.6495970Z [36;1m    status=$?[0m
+2026-11-15T12:24:33.6496321Z [36;1m  fi[0m
+2026-11-15T12:24:33.6496609Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-11-15T12:24:33.6497192Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-11-15T12:24:33.6497649Z [36;1m    exit "$status"[0m
+2026-11-15T12:24:33.6497849Z [36;1m  fi[0m
+2026-11-15T12:24:33.6498188Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-11-15T12:24:33.6498591Z [36;1m  sleep 30[0m
+2026-11-15T12:24:33.6498768Z [36;1mdone[0m
+2026-11-15T12:24:33.6515490Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:33.6515908Z env:
+2026-11-15T12:24:33.6516286Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:33.6516664Z   toolchain: stable
+2026-11-15T12:24:33.6516856Z   targets: 
+2026-11-15T12:24:33.6517032Z   components: 
+2026-11-15T12:24:33.6517222Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-11-15T12:24:33.6517442Z ##[endgroup]
+2026-11-15T12:24:38.1433735Z info: syncing channel updates for stable-x86_64-pc-windows-msvc
+2026-11-15T12:24:38.7447861Z info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-15T12:24:38.7764050Z info: removing previous version of component rustfmt
+2026-11-15T12:24:38.8082665Z info: removing previous version of component clippy
+2026-11-15T12:24:38.8239690Z info: removing previous version of component rust-std for target x86_64-pc-windows-gnu
+2026-11-15T12:24:38.9667318Z info: removing previous version of component rust-std for target i686-pc-windows-msvc
+2026-11-15T12:24:39.0774380Z info: removing previous version of component cargo
+2026-11-15T12:24:39.2042161Z info: removing previous version of component rust-std
+2026-11-15T12:24:39.3315427Z info: removing previous version of component rustc
+2026-11-15T12:24:39.4266432Z info: downloading 7 components
+2026-11-15T12:24:53.9529100Z 
+2026-11-15T12:24:53.9849601Z   stable-x86_64-pc-windows-msvc updated - rustc 1.100.0 (0ef1bc386 2026-11-09) (from rustc 1.99.1 (58cf8f9c3 2026-10-13))
+2026-11-15T12:24:53.9850471Z 
+2026-11-15T12:24:54.0209185Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=20387]
+2026-11-15T12:24:54.0215812Z ##[start-action display=rustup default stable;id=__dtolnay_rust-toolchain.__run_5]
+2026-11-15T12:24:54.0349230Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-11-15T12:24:54.0349617Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-11-15T12:24:54.0365719Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:54.0366117Z env:
+2026-11-15T12:24:54.0366312Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:54.0366602Z   toolchain: stable
+2026-11-15T12:24:54.0366790Z ##[endgroup]
+2026-11-15T12:24:54.1125426Z info: using existing install for stable-x86_64-pc-windows-msvc
+2026-11-15T12:24:54.1214272Z info: default toolchain set to stable-x86_64-pc-windows-msvc
+2026-11-15T12:24:54.1214872Z 
+2026-11-15T12:24:54.1446840Z   stable-x86_64-pc-windows-msvc unchanged - rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-15T12:24:54.1447266Z 
+2026-11-15T12:24:54.1528128Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=131]
+2026-11-15T12:24:54.1531957Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-11-15T12:24:54.1689823Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-11-15T12:24:54.1690695Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-11-15T12:24:54.1692207Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-11-15T12:24:54.1693001Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-11-15T12:24:54.1710026Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:54.1710422Z env:
+2026-11-15T12:24:54.1710617Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:54.1710909Z   toolchain: stable
+2026-11-15T12:24:54.1711102Z ##[endgroup]
+2026-11-15T12:24:55.0699459Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=916]
+2026-11-15T12:24:55.0703359Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-11-15T12:24:55.0901006Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-11-15T12:24:55.0901632Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-11-15T12:24:55.0902202Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-11-15T12:24:55.0902668Z [36;1mfi[0m
+2026-11-15T12:24:55.0929474Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:55.0930162Z env:
+2026-11-15T12:24:55.0930480Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.0930915Z ##[endgroup]
+2026-11-15T12:24:55.1427831Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=72]
+2026-11-15T12:24:55.1430277Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-11-15T12:24:55.1566619Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-11-15T12:24:55.1567007Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-11-15T12:24:55.1567344Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-11-15T12:24:55.1567639Z [36;1mfi[0m
+2026-11-15T12:24:55.1583081Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:55.1584055Z env:
+2026-11-15T12:24:55.1584259Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.1584536Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:24:55.1584753Z ##[endgroup]
+2026-11-15T12:24:55.2006353Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=57]
+2026-11-15T12:24:55.2010284Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-11-15T12:24:55.2141326Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-11-15T12:24:55.2141858Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-11-15T12:24:55.2142530Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-11-15T12:24:55.2143231Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-11-15T12:24:55.2143770Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-15T12:24:55.2144271Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-11-15T12:24:55.2144785Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-11-15T12:24:55.2145326Z [36;1m    touch "D:\a\_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-15T12:24:55.2145797Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-11-15T12:24:55.2146137Z [36;1m  fi[0m
+2026-11-15T12:24:55.2146317Z [36;1mfi[0m
+2026-11-15T12:24:55.2162132Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:55.2162540Z env:
+2026-11-15T12:24:55.2162741Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.2163021Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:24:55.2163236Z   CARGO_TERM_COLOR: always
+2026-11-15T12:24:55.2163451Z   toolchain: stable
+2026-11-15T12:24:55.2163651Z ##[endgroup]
+2026-11-15T12:24:55.4186461Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=217]
+2026-11-15T12:24:55.4192073Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-11-15T12:24:55.4367554Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-11-15T12:24:55.4368324Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-11-15T12:24:55.4368971Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-11-15T12:24:55.4369451Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-11-15T12:24:55.4369756Z [36;1mfi[0m
+2026-11-15T12:24:55.4385792Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:55.4386204Z env:
+2026-11-15T12:24:55.4386400Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.4386687Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:24:55.4386899Z   CARGO_TERM_COLOR: always
+2026-11-15T12:24:55.4387111Z   toolchain: stable
+2026-11-15T12:24:55.4387310Z ##[endgroup]
+2026-11-15T12:24:55.5476756Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=128]
+2026-11-15T12:24:55.5481314Z ##[start-action display=rustc +stable --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-11-15T12:24:55.5636153Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-11-15T12:24:55.5636515Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-11-15T12:24:55.5652447Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:24:55.5652840Z env:
+2026-11-15T12:24:55.5653036Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.5653301Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:24:55.5653510Z   CARGO_TERM_COLOR: always
+2026-11-15T12:24:55.5653723Z   toolchain: stable
+2026-11-15T12:24:55.5653917Z ##[endgroup]
+2026-11-15T12:24:55.6620950Z rustc 1.100.0 (0ef1bc386 2026-11-09)
+2026-11-15T12:24:55.6621623Z binary: rustc
+2026-11-15T12:24:55.6622164Z commit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-15T12:24:55.6622591Z commit-date: 2026-11-09
+2026-11-15T12:24:55.6622905Z host: x86_64-pc-windows-msvc
+2026-11-15T12:24:55.6623194Z release: 1.100.0
+2026-11-15T12:24:55.6625121Z LLVM version: 23.1.5
+2026-11-15T12:24:55.6759873Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=127]
+2026-11-15T12:24:55.6992893Z ##[group]Run swatinem/rust-cache@v2
+2026-11-15T12:24:55.6993233Z with:
+2026-11-15T12:24:55.6993439Z   workspaces: ./src-tauri -> target
+2026-11-15T12:24:55.6993708Z   key: windows-latest-
+2026-11-15T12:24:55.6993923Z   prefix-key: v0-rust
+2026-11-15T12:24:55.6994125Z   add-job-id-key: true
+2026-11-15T12:24:55.6994337Z   add-rust-environment-hash-key: true
+2026-11-15T12:24:55.6994612Z   cache-targets: true
+2026-11-15T12:24:55.6994847Z   cache-all-crates: false
+2026-11-15T12:24:55.6995073Z   cache-workspace-crates: false
+2026-11-15T12:24:55.6995297Z   save-if: true
+2026-11-15T12:24:55.6995490Z   cache-provider: github
+2026-11-15T12:24:55.6995713Z   cache-bin: true
+2026-11-15T12:24:55.6995902Z   lookup-only: false
+2026-11-15T12:24:55.6996107Z   cmd-format: {0}
+2026-11-15T12:24:55.6996288Z env:
+2026-11-15T12:24:55.6996476Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:24:55.6996746Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:24:55.6996994Z   CARGO_TERM_COLOR: always
+2026-11-15T12:24:55.6997201Z ##[endgroup]
+2026-11-15T12:24:57.1002985Z ##[group]Cache Configuration
+2026-11-15T12:24:57.1004260Z Cache Provider:
+2026-11-15T12:24:57.1004820Z     github
+2026-11-15T12:24:57.1008710Z Workspaces:
+2026-11-15T12:24:57.1009315Z     D:\a\pigry\pigry\src-tauri
+2026-11-15T12:24:57.1009891Z Cache Paths:
+2026-11-15T12:24:57.1010416Z     C:\Users\runneradmin\.cargo\bin
+2026-11-15T12:24:57.1011108Z     C:\Users\runneradmin\.cargo\.crates.toml
+2026-11-15T12:24:57.1012284Z     C:\Users\runneradmin\.cargo\.crates2.json
+2026-11-15T12:24:57.1013431Z     C:\Users\runneradmin\.cargo\registry
+2026-11-15T12:24:57.1014037Z     C:\Users\runneradmin\.cargo\git
+2026-11-15T12:24:57.1017796Z     D:\a\pigry\pigry\src-tauri\target
+2026-11-15T12:24:57.1018459Z Restore Key:
+2026-11-15T12:24:57.1019200Z     v0-rust-windows-latest--build-Windows_NT-x64-ea627442
+2026-11-15T12:24:57.1020035Z Cache Key:
+2026-11-15T12:24:57.1020822Z     v0-rust-windows-latest--build-Windows_NT-x64-ea627442-6f04131a
+2026-11-15T12:24:57.1021713Z .. Prefix:
+2026-11-15T12:24:57.1022383Z   - v0-rust-windows-latest--build-Windows_NT-x64
+2026-11-15T12:24:57.1023208Z .. Environment considered:
+2026-11-15T12:24:57.1024829Z   - Rust Versions:
+2026-11-15T12:24:57.1025722Z     - 1.100.0 x86_64-pc-windows-msvc 0ef1bc386059596dada8fb65b50425aab2ea637a
+2026-11-15T12:24:57.1026628Z   - CARGO_HOME
+2026-11-15T12:24:57.1027131Z   - CARGO_INCREMENTAL
+2026-11-15T12:24:57.1028446Z   - CARGO_TERM_COLOR
+2026-11-15T12:24:57.1029092Z .. Lockfiles considered:
+2026-11-15T12:24:57.1030160Z   - D:\a\pigry\pigry\src-tauri\Cargo.lock
+2026-11-15T12:24:57.1031732Z   - D:\a\pigry\pigry\src-tauri\Cargo.toml
+2026-11-15T12:24:57.1033470Z ##[endgroup]
+2026-11-15T12:24:57.1034120Z 
+2026-11-15T12:24:57.1034978Z ... Restoring cache ...
+2026-11-15T12:24:57.2521855Z Cache hit for: v0-rust-windows-latest--build-Windows_NT-x64-ea627442-6f04131a
+2026-11-15T12:24:58.3450106Z Received 184549376 of 635360752 (29.0%), 171.2 MBs/sec
+2026-11-15T12:24:59.4572656Z Received 402653184 of 635360752 (63.4%), 179.5 MBs/sec
+2026-11-15T12:25:00.4653709Z Received 629145600 of 635360752 (99.0%), 190.6 MBs/sec
+2026-11-15T12:25:00.6073787Z Received 635360752 of 635360752 (100.0%), 184.2 MBs/sec
+2026-11-15T12:25:00.6077142Z Cache Size: ~606 MB (635360752 B)
+2026-11-15T12:25:00.6139822Z [command]"C:\Program Files\Git\usr\bin\tar.exe" -xf D:/a/_temp/9417a1eb-3426-41ea-8993-c0d05596fc57/cache.tzst -P -C D:/a/pigry/pigry --force-local --use-compress-program "zstd -d"
+2026-11-15T12:25:19.3190612Z Cache restored successfully
+2026-11-15T12:25:19.3581409Z Restored from cache key "v0-rust-windows-latest--build-Windows_NT-x64-ea627442-6f04131a" full match: true.
+2026-11-15T12:25:19.3896787Z ##[group]Run npm ci
+2026-11-15T12:25:19.3897099Z [36;1mnpm ci[0m
+2026-11-15T12:25:19.4638834Z shell: C:\Program Files\PowerShell\7\pwsh.EXE -command ". '{0}'"
+2026-11-15T12:25:19.4639354Z env:
+2026-11-15T12:25:19.4639628Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:25:19.4639984Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:25:19.4640266Z   CARGO_TERM_COLOR: always
+2026-11-15T12:25:19.4640553Z   CACHE_ON_FAILURE: false
+2026-11-15T12:25:19.4640840Z ##[endgroup]
+2026-11-15T12:25:39.0884179Z 
+2026-11-15T12:25:39.0884767Z added 207 packages, and audited 208 packages in 19s
+2026-11-15T12:25:39.0885204Z 
+2026-11-15T12:25:39.0886809Z 45 packages are looking for funding
+2026-11-15T12:25:39.0887644Z   run `npm fund` for details
+2026-11-15T12:25:39.3135287Z 
+2026-11-15T12:25:39.3136311Z 12 vulnerabilities (1 low, 9 moderate, 1 high, 1 critical)
+2026-11-15T12:25:39.3136707Z 
+2026-11-15T12:25:39.3136974Z To address issues that do not require attention, run:
+2026-11-15T12:25:39.3137468Z   npm audit fix
+2026-11-15T12:25:39.3137638Z 
+2026-11-15T12:25:39.3137967Z To address all issues possible (including breaking changes), run:
+2026-11-15T12:25:39.3138462Z   npm audit fix --force
+2026-11-15T12:25:39.3138648Z 
+2026-11-15T12:25:39.3138876Z Some issues need review, and may require choosing
+2026-11-15T12:25:39.3139299Z a different dependency.
+2026-11-15T12:25:39.3139471Z 
+2026-11-15T12:25:39.3139611Z Run `npm audit` for details.
+2026-11-15T12:25:40.6252920Z ##[group]Run tauri-apps/tauri-action@v0
+2026-11-15T12:25:40.6253261Z with:
+2026-11-15T12:25:40.6253448Z   tagName: v0.3.0
+2026-11-15T12:25:40.6253661Z   releaseName: PIGRY v0.3.0
+2026-11-15T12:25:40.6254271Z   releaseBody: Installers for Windows, Linux and macOS (x86_64 + arm64).
+
+**Windows** — .msi / .exe (NSIS)
+**Linux** — .deb / .rpm / .AppImage
+
+2026-11-15T12:25:40.6255106Z   releaseDraft: true
+2026-11-15T12:25:40.6255315Z   prerelease: false
+2026-11-15T12:25:40.6255509Z   projectPath: .
+2026-11-15T12:25:40.6255693Z   includeDebug: false
+2026-11-15T12:25:40.6255895Z   includeRelease: true
+2026-11-15T12:25:40.6256104Z   includeUpdaterJson: true
+2026-11-15T12:25:40.6256351Z   updaterJsonKeepUniversal: false
+2026-11-15T12:25:40.6256591Z   isGitea: false
+2026-11-15T12:25:40.6256791Z   uploadPlainBinary: false
+2026-11-15T12:25:40.6257017Z   generateReleaseNotes: false
+2026-11-15T12:25:40.6257240Z env:
+2026-11-15T12:25:40.6257459Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:25:40.6257721Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:25:40.6257929Z   CARGO_TERM_COLOR: always
+2026-11-15T12:25:40.6258141Z   CACHE_ON_FAILURE: false
+2026-11-15T12:25:40.6261213Z   GITHUB_TOKEN: ***
+2026-11-15T12:25:40.6263553Z   TAURI_SIGNING_PRIVATE_KEY: ***
+2026-11-15T12:25:40.6263821Z   TAURI_SIGNING_PRIVATE_KEY_PASSWORD: 
+2026-11-15T12:25:40.6264089Z ##[endgroup]
+2026-11-15T12:25:40.7984170Z running npm [ 'run', 'tauri', 'build' ]
+2026-11-15T12:25:41.1494529Z 
+2026-11-15T12:25:41.1495183Z > pigry@0.3.0 tauri
+2026-11-15T12:25:41.1495707Z > tauri build
+2026-11-15T12:25:41.1495940Z 
+2026-11-15T12:25:41.3321263Z         Info Looking up installed tauri packages to check mismatched versions...
+2026-11-15T12:25:42.0756303Z         Warn The bundle identifier "com.pigry.app" set in `"tauri.conf.json" identifier` ends with `.app`. This is not recommended because it conflicts with the application bundle extension on macOS.
+2026-11-15T12:25:42.0758160Z      Running beforeBuildCommand `npm run build`
+2026-11-15T12:25:42.3421557Z 
+2026-11-15T12:25:42.3422318Z > pigry@0.3.0 build
+2026-11-15T12:25:42.3422849Z > tsc && vite build
+2026-11-15T12:25:42.3423101Z 
+2026-11-15T12:25:52.5911727Z [36mvite v8.3.6 [32mbuilding client environment for production...[36m[39m
+2026-11-15T12:25:52.6033650Z transforming...
+2026-11-15T12:25:55.5103454Z ✓ 3727 modules transformed.
+2026-11-15T12:25:55.7994427Z rendering chunks...
+2026-11-15T12:25:56.3885664Z computing gzip size...
+2026-11-15T12:25:56.4211183Z dist/index.html                                                     0.70 kB │ gzip:   0.37 kB
+2026-11-15T12:25:56.4213977Z dist/assets/jetbrains-mono-greek-400-normal-C190GLew.woff2          4.22 kB
+2026-11-15T12:25:56.4215562Z dist/assets/jetbrains-mono-greek-600-normal-H7WoG9Et.woff2          4.30 kB
+2026-11-15T12:25:56.4216579Z dist/assets/inter-vietnamese-400-normal-DMkecbls.woff2              4.97 kB
+2026-11-15T12:25:56.4217663Z dist/assets/inter-vietnamese-600-normal-Cc8MFFhd.woff2              5.10 kB
+2026-11-15T12:25:56.4218687Z dist/assets/inter-vietnamese-500-normal-DOriooB6.woff2              5.11 kB
+2026-11-15T12:25:56.4220107Z dist/assets/inter-greek-ext-400-normal-DGGRlc-M.woff2               5.26 kB
+2026-11-15T12:25:56.4221171Z dist/assets/jetbrains-mono-cyrillic-400-normal-BEIGL1Tu.woff2       5.32 kB
+2026-11-15T12:25:56.4222284Z dist/assets/jetbrains-mono-vietnamese-400-normal-CqNFfHCs.woff      5.37 kB
+2026-11-15T12:25:56.4223405Z dist/assets/jetbrains-mono-cyrillic-600-normal-EVf6-Yzo.woff2       5.38 kB
+2026-11-15T12:25:56.4224539Z dist/assets/inter-greek-ext-500-normal-C4iEst2y.woff2               5.42 kB
+2026-11-15T12:25:56.4225175Z dist/assets/inter-greek-ext-600-normal-DRtmH8MT.woff2               5.43 kB
+2026-11-15T12:25:56.4226201Z dist/assets/jetbrains-mono-vietnamese-600-normal-OWROknRo.woff      5.47 kB
+2026-11-15T12:25:56.4227019Z dist/assets/jetbrains-mono-greek-400-normal-B9oWc5Lo.woff           5.66 kB
+2026-11-15T12:25:56.4231063Z dist/assets/jetbrains-mono-greek-600-normal-mc2nkWzM.woff           5.70 kB
+2026-11-15T12:25:56.4232270Z dist/assets/inter-vietnamese-400-normal-Bbgyi5SW.woff               6.50 kB
+2026-11-15T12:25:56.4233373Z dist/assets/inter-vietnamese-500-normal-mJboJaSs.woff               6.59 kB
+2026-11-15T12:25:56.4234470Z dist/assets/inter-vietnamese-600-normal-BuLX-rYi.woff               6.64 kB
+2026-11-15T12:25:56.4236586Z dist/assets/jetbrains-mono-cyrillic-400-normal-ugxPyKxw.woff        6.97 kB
+2026-11-15T12:25:56.4237720Z dist/assets/jetbrains-mono-cyrillic-600-normal-8K4wrrwR.woff        7.02 kB
+2026-11-15T12:25:56.4238790Z dist/assets/inter-greek-ext-400-normal-KugGGMne.woff                7.06 kB
+2026-11-15T12:25:56.4240154Z dist/assets/inter-greek-ext-500-normal-2j5mBUwD.woff                7.19 kB
+2026-11-15T12:25:56.4241198Z dist/assets/inter-greek-ext-600-normal-B8X0CLgF.woff                7.21 kB
+2026-11-15T12:25:56.4242251Z dist/assets/jetbrains-mono-latin-ext-400-normal-Bc8Ftmh3.woff2      7.33 kB
+2026-11-15T12:25:56.4243349Z dist/assets/jetbrains-mono-latin-ext-600-normal-BfB_LPfz.woff2      7.51 kB
+2026-11-15T12:25:56.4244418Z dist/assets/inter-cyrillic-400-normal-obahsSVq.woff2                7.71 kB
+2026-11-15T12:25:56.4245461Z dist/assets/inter-greek-400-normal-B4URO6DV.woff2                   7.77 kB
+2026-11-15T12:25:56.4246486Z dist/assets/inter-cyrillic-500-normal-BasfLYem.woff2                7.90 kB
+2026-11-15T12:25:56.4247536Z dist/assets/inter-greek-500-normal-BIZE56-Y.woff2                   7.92 kB
+2026-11-15T12:25:56.4248578Z dist/assets/inter-greek-600-normal-plRanbMR.woff2                   7.94 kB
+2026-11-15T12:25:56.4249636Z dist/assets/inter-cyrillic-600-normal-CWCymEST.woff2                7.97 kB
+2026-11-15T12:25:56.4250702Z dist/assets/inter-cyrillic-400-normal-HOLc17fK.woff                 9.78 kB
+2026-11-15T12:25:56.4251766Z dist/assets/inter-greek-400-normal-q2sYcFCs.woff                    9.92 kB
+2026-11-15T12:25:56.4252798Z dist/assets/inter-cyrillic-600-normal-4D_pXhcN.woff                 9.93 kB
+2026-11-15T12:25:56.4253870Z dist/assets/inter-cyrillic-500-normal-CxZf_p3X.woff                 9.94 kB
+2026-11-15T12:25:56.4254927Z dist/assets/inter-greek-500-normal-Xzm54t5V.woff                    9.98 kB
+2026-11-15T12:25:56.4255956Z dist/assets/inter-greek-600-normal-BZpKdvQh.woff                   10.03 kB
+2026-11-15T12:25:56.4257036Z dist/assets/jetbrains-mono-latin-ext-400-normal-fXTG6kC5.woff      10.12 kB
+2026-11-15T12:25:56.4258110Z dist/assets/inter-cyrillic-ext-400-normal-BQZuk6qB.woff2           10.23 kB
+2026-11-15T12:25:56.4259181Z dist/assets/jetbrains-mono-latin-ext-600-normal-DObL3zCW.woff      10.31 kB
+2026-11-15T12:25:56.4260631Z dist/assets/inter-cyrillic-ext-500-normal-B0yAr1jD.woff2           10.43 kB
+2026-11-15T12:25:56.4261702Z dist/assets/inter-cyrillic-ext-600-normal-Dfes3d0z.woff2           10.48 kB
+2026-11-15T12:25:56.4262741Z dist/assets/inter-cyrillic-ext-400-normal-DQukG94-.woff            13.33 kB
+2026-11-15T12:25:56.4263777Z dist/assets/inter-cyrillic-ext-500-normal-BmqWE9Dz.woff            13.45 kB
+2026-11-15T12:25:56.4264862Z dist/assets/inter-cyrillic-ext-600-normal-Bcila6Z-.woff            13.46 kB
+2026-11-15T12:25:56.4265927Z dist/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2         21.16 kB
+2026-11-15T12:25:56.4266976Z dist/assets/jetbrains-mono-latin-600-normal-C8RAYTDA.woff2         21.86 kB
+2026-11-15T12:25:56.4268063Z dist/assets/inter-latin-400-normal-C38fXH4l.woff2                  23.66 kB
+2026-11-15T12:25:56.4269887Z dist/assets/inter-latin-500-normal-Cerq10X2.woff2                  24.27 kB
+2026-11-15T12:25:56.4271212Z dist/assets/inter-latin-600-normal-LgqL8muc.woff2                  24.45 kB
+2026-11-15T12:25:56.4272333Z dist/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff          27.49 kB
+2026-11-15T12:25:56.4273395Z dist/assets/jetbrains-mono-latin-600-normal-BfsvjouI.woff          28.18 kB
+2026-11-15T12:25:56.4274328Z dist/assets/inter-latin-400-normal-CyCys3Eg.woff                   30.69 kB
+2026-11-15T12:25:56.4276160Z dist/assets/inter-latin-600-normal-CiBQ2DWP.woff                   31.26 kB
+2026-11-15T12:25:56.4278360Z dist/assets/inter-latin-500-normal-BL9OpVg8.woff                   31.28 kB
+2026-11-15T12:25:56.4279429Z dist/assets/inter-latin-ext-400-normal-C1nco2VV.woff2              35.00 kB
+2026-11-15T12:25:56.4280828Z dist/assets/inter-latin-ext-500-normal-CV4jyFjo.woff2              36.02 kB
+2026-11-15T12:25:56.4281671Z dist/assets/inter-latin-ext-600-normal-D2bJ5OIk.woff2              36.26 kB
+2026-11-15T12:25:56.4282566Z dist/assets/inter-latin-ext-400-normal-77YHD8bZ.woff               47.56 kB
+2026-11-15T12:25:56.4283171Z dist/assets/inter-latin-ext-500-normal-BxGbmqWO.woff               48.49 kB
+2026-11-15T12:25:56.4283764Z dist/assets/inter-latin-ext-600-normal-CIVaiw4L.woff               48.66 kB
+2026-11-15T12:25:56.4284332Z dist/assets/codicon-DF1abBS2.ttf                                  153.22 kB
+2026-11-15T12:25:56.4284900Z dist/assets/editor.worker-CRz__AKW.js                             303.77 kB
+2026-11-15T12:25:56.4285445Z dist/assets/json.worker-CV9fqkUp.js                               433.12 kB
+2026-11-15T12:25:56.4286052Z dist/assets/html.worker-D9ugpX4y.js                               743.37 kB
+2026-11-15T12:25:56.4286577Z dist/assets/css.worker-DwfUZ3fB.js                              1,078.23 kB
+2026-11-15T12:25:56.4287115Z dist/assets/ts.worker-DvEKW8Yk.js                               6,927.78 kB
+2026-11-15T12:25:56.4287934Z dist/assets/ExplorerScreen-D2QZ_Tzq.css                             4.17 kB │ gzip:   1.00 kB
+2026-11-15T12:25:56.4288705Z dist/assets/ThemedEditors-n7clI0si.css                             86.92 kB │ gzip:  13.74 kB
+2026-11-15T12:25:56.4289439Z dist/assets/editor-DjpsE8to.css                                    99.09 kB │ gzip:  14.20 kB
+2026-11-15T12:25:56.4290116Z dist/assets/index-CegXTLM5.css                                    386.89 kB │ gzip:  65.01 kB
+2026-11-15T12:25:56.4290805Z dist/assets/chatBridge-DPIg2LmW.js                                  0.19 kB │ gzip:   0.13 kB
+2026-11-15T12:25:56.4291513Z dist/assets/arrow-left-D6YTgn1P.js                                  0.20 kB │ gzip:   0.17 kB
+2026-11-15T12:25:56.4292191Z dist/assets/clock-B89ymDeE.js                                       0.20 kB │ gzip:   0.18 kB
+2026-11-15T12:25:56.4292865Z dist/assets/user-round-B7sTrzg0.js                                  0.23 kB │ gzip:   0.20 kB
+2026-11-15T12:25:56.4293542Z dist/assets/download-DpH2wg6C.js                                    0.26 kB │ gzip:   0.21 kB
+2026-11-15T12:25:56.4294208Z dist/assets/copy-4ZnMnwau.js                                        0.27 kB │ gzip:   0.22 kB
+2026-11-15T12:25:56.4294870Z dist/assets/maximize-2-CNQPkzqD.js                                  0.27 kB │ gzip:   0.20 kB
+2026-11-15T12:25:56.4295560Z dist/assets/external-link-9tgwu97H.js                               0.28 kB │ gzip:   0.22 kB
+2026-11-15T12:25:56.4296251Z dist/assets/ellipsis-bOD-JmWR.js                                    0.28 kB │ gzip:   0.20 kB
+2026-11-15T12:25:56.4296990Z dist/assets/circle-exclamation-point-B3J6z3k8.js                    0.33 kB │ gzip:   0.23 kB
+2026-11-15T12:25:56.4297778Z dist/assets/triangle-exclamation-point-CJAZd9em.js                  0.35 kB │ gzip:   0.25 kB
+2026-11-15T12:25:56.4298541Z dist/assets/useScopedState-CWg8BjZ1.js                              0.36 kB │ gzip:   0.24 kB
+2026-11-15T12:25:56.4299273Z dist/assets/file-code-corner-CbdL5Der.js                            0.41 kB │ gzip:   0.28 kB
+2026-11-15T12:25:56.4300201Z dist/assets/calendar-range-BX7osNH1.js                              0.44 kB │ gzip:   0.27 kB
+2026-11-15T12:25:56.4301182Z dist/assets/sliders-horizontal-CYimnPuN.js                          0.45 kB │ gzip:   0.25 kB
+2026-11-15T12:25:56.4302177Z dist/assets/ChatAwareDiffEditor-DRfmnbXO.js                         0.52 kB │ gzip:   0.34 kB
+2026-11-15T12:25:56.4302976Z dist/assets/useCommitHistory-C_Re1Jg7.js                            0.56 kB │ gzip:   0.35 kB
+2026-11-15T12:25:56.4303869Z dist/assets/javascript-Bqqj4d7m.js                                  0.68 kB │ gzip:   0.41 kB
+2026-11-15T12:25:56.4304583Z dist/assets/azcli-Bc_sGQ0U.js                                       0.70 kB │ gzip:   0.28 kB
+2026-11-15T12:25:56.4305233Z dist/assets/ini-sBoK_t0W.js                                         0.96 kB │ gzip:   0.49 kB
+2026-11-15T12:25:56.4305989Z dist/assets/workers-BV_ycMx8.js                                     1.25 kB │ gzip:   0.59 kB
+2026-11-15T12:25:56.4306683Z dist/assets/AiAgentScreen-ORoOPrFW.js                               1.27 kB │ gzip:   0.56 kB
+2026-11-15T12:25:56.4307356Z dist/assets/csp-bTuwJoIa.js                                         1.27 kB │ gzip:   0.48 kB
+2026-11-15T12:25:56.4308038Z dist/assets/rolldown-runtime-BCiCTKAo.js                            1.30 kB │ gzip:   0.71 kB
+2026-11-15T12:25:56.4308718Z dist/assets/pla-CopQ2nXW.js                                         1.54 kB │ gzip:   0.60 kB
+2026-11-15T12:25:56.4309396Z dist/assets/scheme-BeGwcela.js                                      1.62 kB │ gzip:   0.77 kB
+2026-11-15T12:25:56.4310051Z dist/assets/flow9-C5_-GSwl.js                                       1.66 kB │ gzip:   0.80 kB
+2026-11-15T12:25:56.4310691Z dist/assets/sb-CcwsVR0C.js                                          1.68 kB │ gzip:   0.78 kB
+2026-11-15T12:25:56.4311331Z dist/assets/bat-i0X4ZdIN.js                                         1.69 kB │ gzip:   0.82 kB
+2026-11-15T12:25:56.4311986Z dist/assets/dockerfile-DZFCIeNp.js                                  1.72 kB │ gzip:   0.63 kB
+2026-11-15T12:25:56.4312684Z dist/assets/pascaligo-D-ptJ9y-.js                                   1.85 kB │ gzip:   0.86 kB
+2026-11-15T12:25:56.4313350Z dist/assets/xml-XiRrlCco.js                                         1.92 kB │ gzip:   0.72 kB
+2026-11-15T12:25:56.4314010Z dist/assets/cameligo-DMUM7wLl.js                                    1.97 kB │ gzip:   0.91 kB
+2026-11-15T12:25:56.4314666Z dist/assets/lua-CsQS60Ue.js                                         1.98 kB │ gzip:   0.88 kB
+2026-11-15T12:25:56.4315302Z dist/assets/core-5A5Ti_Rw.js                                        2.04 kB │ gzip:   0.87 kB
+2026-11-15T12:25:56.4315970Z dist/assets/AuthorAvatar-y3u08bCD.js                                2.06 kB │ gzip:   1.11 kB
+2026-11-15T12:25:56.4316662Z dist/assets/objective-c-FvmIjYaQ.js                                 2.10 kB │ gzip:   1.01 kB
+2026-11-15T12:25:56.4317341Z dist/assets/graphql-fmXr3nnJ.js                                     2.11 kB │ gzip:   0.99 kB
+2026-11-15T12:25:56.4317996Z dist/assets/sparql-D_Lu-MrJ.js                                      2.21 kB │ gzip:   1.10 kB
+2026-11-15T12:25:56.4318653Z dist/assets/lexon-CfSJPG6W.js                                       2.28 kB │ gzip:   0.88 kB
+2026-11-15T12:25:56.4319297Z dist/assets/mips-CIPQ_RoX.js                                        2.32 kB │ gzip:   1.02 kB
+2026-11-15T12:25:56.4319957Z dist/assets/go-C-y9NEjX.js                                          2.35 kB │ gzip:   1.11 kB
+2026-11-15T12:25:56.4320858Z dist/assets/ghData-OcQnttPv.js                                      2.35 kB │ gzip:   1.11 kB
+2026-11-15T12:25:56.4321523Z dist/assets/bicep-B5-_aFwp.js                                       2.36 kB │ gzip:   0.91 kB
+2026-11-15T12:25:56.4322400Z dist/assets/sophia-CRfGWb83.js                                      2.48 kB │ gzip:   1.15 kB
+2026-11-15T12:25:56.4323080Z dist/assets/m3-D-oSqn_W.js                                          2.52 kB │ gzip:   1.29 kB
+2026-11-15T12:25:56.4323736Z dist/assets/typespec-B8J7ngcE.js                                    2.62 kB │ gzip:   1.01 kB
+2026-11-15T12:25:56.4324397Z dist/assets/pascal-DrH0SRf2.js                                      2.63 kB │ gzip:   1.35 kB
+2026-11-15T12:25:56.4325064Z dist/assets/fsharp-C8Ef5oNN.js                                      2.65 kB │ gzip:   1.27 kB
+2026-11-15T12:25:56.4325712Z dist/assets/qsharp-DkqhCAOL.js                                      2.72 kB │ gzip:   1.37 kB
+2026-11-15T12:25:56.4326496Z dist/assets/shell-CC2rA5mh.js                                       2.81 kB │ gzip:   1.16 kB
+2026-11-15T12:25:56.4327165Z dist/assets/r-BwWrilGY.js                                           2.83 kB │ gzip:   1.25 kB
+2026-11-15T12:25:56.4327799Z dist/assets/java-BEtHBSE6.js                                        2.90 kB │ gzip:   1.34 kB
+2026-11-15T12:25:56.4328558Z dist/assets/cssMode-D-xkfNWw.js                                     2.94 kB │ gzip:   1.12 kB
+2026-11-15T12:25:56.4329213Z dist/assets/redis-ClamHrr6.js                                       3.03 kB │ gzip:   1.41 kB
+2026-11-15T12:25:56.4330077Z dist/assets/kotlin-BOotOW0E.js                                      3.04 kB │ gzip:   1.41 kB
+2026-11-15T12:25:56.4330900Z dist/assets/cypher-CVaqCwHa.js                                      3.04 kB │ gzip:   1.40 kB
+2026-11-15T12:25:56.4331588Z dist/assets/powershell-DmHpPYUd.js                                  3.05 kB │ gzip:   1.33 kB
+2026-11-15T12:25:56.4332267Z dist/assets/tcl-DISqw1ZD.js                                         3.27 kB │ gzip:   1.32 kB
+2026-11-15T12:25:56.4332913Z dist/assets/liquid-CgCWD5iy.js                                      3.34 kB │ gzip:   1.42 kB
+2026-11-15T12:25:56.4333568Z dist/assets/coffee-Ba7i2nA0.js                                      3.36 kB │ gzip:   1.24 kB
+2026-11-15T12:25:56.4334229Z dist/assets/htmlMode-D1XkH_ir.js                                    3.39 kB │ gzip:   1.23 kB
+2026-11-15T12:25:56.4334878Z dist/assets/hcl-CpzslTdj.js                                         3.44 kB │ gzip:   1.45 kB
+2026-11-15T12:25:56.4335521Z dist/assets/python-4Xf87410.js                                      3.45 kB │ gzip:   1.42 kB
+2026-11-15T12:25:56.4336175Z dist/assets/apex-BWPQTe0t.js                                        3.46 kB │ gzip:   1.70 kB
+2026-11-15T12:25:56.4336809Z dist/assets/yaml-B_Pxf312.js                                        3.54 kB │ gzip:   1.29 kB
+2026-11-15T12:25:56.4337468Z dist/assets/markdown-Cimd5fb3.js                                    3.63 kB │ gzip:   1.34 kB
+2026-11-15T12:25:56.4338128Z dist/assets/rust-DdL9SqIa.js                                        3.66 kB │ gzip:   1.80 kB
+2026-11-15T12:25:56.4338815Z dist/assets/restructuredtext-BYgofb2h.js                            3.74 kB │ gzip:   1.32 kB
+2026-11-15T12:25:56.4339500Z dist/assets/less-B9JPFI3C.js                                        3.74 kB │ gzip:   1.36 kB
+2026-11-15T12:25:56.4340141Z dist/assets/dart-onAF5SnQ.js                                        3.93 kB │ gzip:   1.60 kB
+2026-11-15T12:25:56.4341029Z dist/assets/csharp-BKxtCVv1.js                                      4.11 kB │ gzip:   1.66 kB
+2026-11-15T12:25:56.4341696Z dist/assets/msdax-DauUninz.js                                       4.27 kB │ gzip:   1.87 kB
+2026-11-15T12:25:56.4342556Z dist/assets/mdx-o6rWp7sB.js                                         4.31 kB │ gzip:   1.21 kB
+2026-11-15T12:25:56.4343225Z dist/assets/css-DIMkf-bt.js                                         4.36 kB │ gzip:   1.33 kB
+2026-11-15T12:25:56.4343858Z dist/assets/pug-Z5eAx3Zn.js                                         4.46 kB │ gzip:   1.60 kB
+2026-11-15T12:25:56.4344525Z dist/assets/HomeScreen-DxOl3psX.js                                  4.47 kB │ gzip:   1.55 kB
+2026-11-15T12:25:56.4345190Z dist/assets/swift-Bxkupp3x.js                                       4.48 kB │ gzip:   1.99 kB
+2026-11-15T12:25:56.4345852Z dist/assets/ecl-94qehhXe.js                                         4.50 kB │ gzip:   2.17 kB
+2026-11-15T12:25:56.4346488Z dist/assets/html-C6ORMjHx.js                                        4.51 kB │ gzip:   1.15 kB
+2026-11-15T12:25:56.4347168Z dist/assets/typescript-DBw4pk82.js                                  4.67 kB │ gzip:   1.94 kB
+2026-11-15T12:25:56.4347830Z dist/assets/cpp-C7h46wYY.js                                         4.74 kB │ gzip:   2.02 kB
+2026-11-15T12:25:56.4348506Z dist/assets/conflictMarkers-HPA1em-j.js                             5.11 kB │ gzip:   1.81 kB
+2026-11-15T12:25:56.4349889Z dist/assets/vb-DV3o63ZY.js                                          5.30 kB │ gzip:   2.01 kB
+2026-11-15T12:25:56.4350900Z dist/assets/twig-De2hgUGE.js                                        5.78 kB │ gzip:   1.48 kB
+2026-11-15T12:25:56.4351616Z dist/assets/ComparePanel-B020B_8V.js                                5.94 kB │ gzip:   1.93 kB
+2026-11-15T12:25:56.4352900Z dist/assets/scss-gp-XZpBa.js                                        6.26 kB │ gzip:   1.70 kB
+2026-11-15T12:25:56.4354158Z dist/assets/handlebars-lNL9IxiD.js                                  6.28 kB │ gzip:   1.37 kB
+2026-11-15T12:25:56.4355033Z dist/assets/julia-Bri6UV-V.js                                       6.50 kB │ gzip:   2.64 kB
+2026-11-15T12:25:56.4355972Z dist/assets/StashesScreen-E8xatyLv.js                               6.56 kB │ gzip:   2.18 kB
+2026-11-15T12:25:56.4360150Z dist/assets/systemverilog-Bz4Y3fRF.js                               6.85 kB │ gzip:   2.72 kB
+2026-11-15T12:25:56.4361022Z dist/assets/st-DbInun42.js                                          6.94 kB │ gzip:   2.24 kB
+2026-11-15T12:25:56.4361741Z dist/assets/scala-DHpiXF5c.js                                       7.11 kB │ gzip:   2.07 kB
+2026-11-15T12:25:56.4362438Z dist/assets/wgsl-DpFanUEy.js                                        7.18 kB │ gzip:   2.73 kB
+2026-11-15T12:25:56.4363101Z dist/assets/perl-oz_6vUea.js                                        7.35 kB │ gzip:   3.10 kB
+2026-11-15T12:25:56.4363754Z dist/assets/postiats-43DmfD33.js                                    7.36 kB │ gzip:   2.39 kB
+2026-11-15T12:25:56.4364435Z dist/assets/php-nr791fC2.js                                         7.74 kB │ gzip:   2.03 kB
+2026-11-15T12:25:56.4365132Z dist/assets/PushCommitsScreen-Ct65UAuS.js                           7.83 kB │ gzip:   2.88 kB
+2026-11-15T12:25:56.4365832Z dist/assets/razor-ipn2CbsR.js                                       8.11 kB │ gzip:   2.05 kB
+2026-11-15T12:25:56.4382320Z dist/assets/clojure-Cm7r79vr.js                                     8.21 kB │ gzip:   3.49 kB
+2026-11-15T12:25:56.4383841Z dist/assets/ruby-DezsRK8O.js                                        8.21 kB │ gzip:   2.55 kB
+2026-11-15T12:25:56.4384971Z dist/assets/CherryPickScreen-gX6GsDUa.js                            8.29 kB │ gzip:   2.77 kB
+2026-11-15T12:25:56.4386153Z dist/assets/sql-NEE52Syq.js                                         8.84 kB │ gzip:   3.73 kB
+2026-11-15T12:25:56.4387433Z dist/assets/protobuf-C531GsRP.js                                    8.89 kB │ gzip:   2.04 kB
+2026-11-15T12:25:56.4388686Z dist/assets/mysql-SOo6toE5.js                                       9.65 kB │ gzip:   3.98 kB
+2026-11-15T12:25:56.4389980Z dist/assets/RebaseBranchScreen-litZJj8a.js                         10.11 kB │ gzip:   3.56 kB
+2026-11-15T12:25:56.4391266Z dist/assets/elixir-6RTg0lbw.js                                     10.11 kB │ gzip:   2.50 kB
+2026-11-15T12:25:56.4392138Z dist/assets/redshift-DT7zqm-g.js                                   10.33 kB │ gzip:   4.24 kB
+2026-11-15T12:25:56.4392860Z dist/assets/abap-08VXUWAP.js                                       11.69 kB │ gzip:   5.15 kB
+2026-11-15T12:25:56.4393556Z dist/assets/pgsql-DTj74zXo.js                                      11.91 kB │ gzip:   4.42 kB
+2026-11-15T12:25:56.4394231Z dist/assets/jsonMode-Cjo9B7d5.js                                   12.16 kB │ gzip:   4.44 kB
+2026-11-15T12:25:56.4394917Z dist/assets/WikiScreen-DJ0-TDTX.js                                 12.85 kB │ gzip:   4.04 kB
+2026-11-15T12:25:56.4395576Z dist/assets/window-DcwcBt_-.js                                     13.21 kB │ gzip:   3.15 kB
+2026-11-15T12:25:56.4396276Z dist/assets/BranchesScreen-Bi9tDY05.js                             14.62 kB │ gzip:   4.27 kB
+2026-11-15T12:25:56.4397471Z dist/assets/powerquery-D3hlyOfw.js                                 15.34 kB │ gzip:   4.73 kB
+2026-11-15T12:25:56.4398184Z dist/assets/freemarker2-B6yty7Xx.js                                15.54 kB │ gzip:   3.97 kB
+2026-11-15T12:25:56.4399079Z dist/assets/solidity-BEEn4gHE.js                                   15.99 kB │ gzip:   4.39 kB
+2026-11-15T12:25:56.4399818Z dist/assets/MergeBranchScreen-DWjrMijR.js                          16.20 kB │ gzip:   4.33 kB
+2026-11-15T12:25:56.4400560Z dist/assets/IssuesScreen-CkeETX3F.js                               20.19 kB │ gzip:   5.26 kB
+2026-11-15T12:25:56.4401397Z dist/assets/ReleasesScreen-IIhUJgbz.js                             20.27 kB │ gzip:   5.55 kB
+2026-11-15T12:25:56.4402140Z dist/assets/WorkingChangesScreen-DA4xosZO.js                       21.00 kB │ gzip:   6.88 kB
+2026-11-15T12:25:56.4402858Z dist/assets/tsMode-BQr2WvC3.js                                     21.85 kB │ gzip:   6.15 kB
+2026-11-15T12:25:56.4403541Z dist/assets/InsightsScreen-l2203bLp.js                             23.78 kB │ gzip:   5.39 kB
+2026-11-15T12:25:56.4404242Z dist/assets/ActionsScreen-CpKWtyeb.js                              25.59 kB │ gzip:   6.84 kB
+2026-11-15T12:25:56.4404953Z dist/assets/SecurityScreen-CCJ0Mryv.js                             26.78 kB │ gzip:   6.76 kB
+2026-11-15T12:25:56.4405664Z dist/assets/lspLanguageFeatures-C8cE5_k2.js                        28.22 kB │ gzip:   7.17 kB
+2026-11-15T12:25:56.4406395Z dist/assets/CommitGraphScreen-CeKbYmJU.js                          34.49 kB │ gzip:   9.92 kB
+2026-11-15T12:25:56.4407110Z dist/assets/ProjectsScreen-gaQMsdLk.js                             34.96 kB │ gzip:   8.99 kB
+2026-11-15T12:25:56.4407822Z dist/assets/PullRequestsScreen-BL_NNqz3.js                         35.94 kB │ gzip:   9.07 kB
+2026-11-15T12:25:56.4408520Z dist/assets/jsx-runtime-spc2sBGc.js                                36.05 kB │ gzip:  11.68 kB
+2026-11-15T12:25:56.4409229Z dist/assets/AppSettingsScreen-B651TVMH.js                          57.84 kB │ gzip:  15.04 kB
+2026-11-15T12:25:56.4409953Z dist/assets/ExplorerScreen-CfMoocJ2.js                             60.61 kB │ gzip:  18.39 kB
+2026-11-15T12:25:56.4410631Z dist/assets/lib-Hn3F9zJl.js                                       308.10 kB │ gzip:  95.12 kB
+2026-11-15T12:25:56.4411263Z dist/assets/xlsx-zHa97828.js                                      423.63 kB │ gzip: 141.18 kB
+2026-11-15T12:25:56.4411897Z dist/assets/index-CmRsvyLr.js                                     492.77 kB │ gzip: 143.95 kB
+2026-11-15T12:25:56.4412576Z dist/assets/ThemedEditors-DBJI1FOj.js                           1,312.73 kB │ gzip: 332.06 kB
+2026-11-15T12:25:56.4413266Z dist/assets/editor.api-CYnhmlLD.js                              2,735.62 kB │ gzip: 705.02 kB
+2026-11-15T12:25:56.4413595Z 
+2026-11-15T12:25:56.4413825Z [33m[plugin builtin:vite-reporter] 
+2026-11-15T12:25:56.4414268Z (!) Some chunks are larger than 500 kB after minification. Consider:
+2026-11-15T12:25:56.4414742Z - Using dynamic import() to code-split the application
+2026-11-15T12:25:56.4415549Z - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+2026-11-15T12:25:56.4416449Z - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+2026-11-15T12:25:56.4417916Z [32m✓ built in 3.83s[39m
+2026-11-15T12:25:57.0494060Z [1m[92m    Updating[0m crates.io index
+2026-11-15T12:26:16.9368172Z [1m[92m   Compiling[0m pigry v0.3.0 (D:\a\pigry\pigry\src-tauri)
+2026-11-15T12:26:29.6442024Z [1m[93mwarning[0m[1m[97m: unused import: `chromiumoxide::handler::viewport::Viewport`[0m
+2026-11-15T12:26:29.6443541Z  [1m[96m--> [0msrc\devtools.rs:7:5
+2026-11-15T12:26:29.6444383Z   [1m[96m|[0m
+2026-11-15T12:26:29.6445249Z [1m[96m7[0m [1m[96m|[0m use chromiumoxide::handler::viewport::Viewport;
+2026-11-15T12:26:29.6445877Z   [1m[96m|[0m     [1m[93m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+2026-11-15T12:26:29.6446283Z   [1m[96m|[0m
+2026-11-15T12:26:29.6446829Z   [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:29.6447227Z 
+2026-11-15T12:26:29.6458807Z [1m[93mwarning[0m[1m[97m: unnecessary trailing semicolon[0m
+2026-11-15T12:26:29.6459564Z     [1m[96m--> [0msrc\git_state.rs:2107:38
+2026-11-15T12:26:29.6460619Z      [1m[96m|[0m
+2026-11-15T12:26:29.6461757Z [1m[96m2107[0m [1m[96m|[0m     reference.delete().map_err(err)?;;
+2026-11-15T12:26:29.6462752Z      [1m[96m|[0m                                      [1m[93m^[0m [1m[93mhelp: remove this semicolon[0m
+2026-11-15T12:26:29.6463719Z      [1m[96m|[0m
+2026-11-15T12:26:29.6464600Z      [1m[96m= [0m[1m[97mnote[0m: `#[warn(redundant_semicolons)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:29.6465241Z 
+2026-11-15T12:26:30.3963834Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:30.3964589Z    [1m[96m--> [0msrc\devtools.rs:284:9
+2026-11-15T12:26:30.3965010Z     [1m[96m|[0m
+2026-11-15T12:26:30.3965565Z [1m[96m284[0m [1m[96m|[0m     let mut guard = DEV.lock().await;
+2026-11-15T12:26:30.3966239Z     [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^[0m
+2026-11-15T12:26:30.3966752Z     [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:30.3967326Z     [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:30.3967796Z     [1m[96m|[0m
+2026-11-15T12:26:30.3968395Z     [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:30.3968860Z 
+2026-11-15T12:26:30.4001440Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:30.4002508Z    [1m[96m--> [0msrc\devtools.rs:295:9
+2026-11-15T12:26:30.4002948Z     [1m[96m|[0m
+2026-11-15T12:26:30.4003479Z [1m[96m295[0m [1m[96m|[0m     let mut guard = DEV.lock().await;
+2026-11-15T12:26:30.4004076Z     [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^[0m
+2026-11-15T12:26:30.4004557Z     [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:30.4005054Z     [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:30.4005367Z 
+2026-11-15T12:26:31.7722340Z [1m[93mwarning[0m[1m[97m: value assigned to `sessions` is never read[0m
+2026-11-15T12:26:31.7723074Z    [1m[96m--> [0msrc\ai.rs:528:24
+2026-11-15T12:26:31.7723499Z     [1m[96m|[0m
+2026-11-15T12:26:31.7724017Z [1m[96m528[0m [1m[96m|[0m     let mut sessions = 0usize;
+2026-11-15T12:26:31.7724905Z     [1m[96m|[0m                        [1m[93m^^^^^^[0m [1m[93mthis value is reassigned later and never used[0m
+2026-11-15T12:26:31.7725492Z [1m[96m...[0m
+2026-11-15T12:26:31.7725975Z [1m[96m546[0m [1m[96m|[0m     sessions = jsonl_files.len();
+2026-11-15T12:26:31.7726938Z     [1m[96m|[0m     [1m[96m----------------------------[0m [1m[96m`sessions` is overwritten here before the previous value is read[0m
+2026-11-15T12:26:31.7727644Z     [1m[96m|[0m
+2026-11-15T12:26:31.7728319Z     [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:31.7728821Z 
+2026-11-15T12:26:31.8000671Z [1m[93mwarning[0m[1m[97m: unused variable: `other`[0m
+2026-11-15T12:26:31.8001323Z     [1m[96m--> [0msrc\ai.rs:1195:9
+2026-11-15T12:26:31.8002353Z      [1m[96m|[0m
+2026-11-15T12:26:31.8002950Z [1m[96m1195[0m [1m[96m|[0m         other => {
+2026-11-15T12:26:31.8003826Z      [1m[96m|[0m         [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_other`[0m
+2026-11-15T12:26:31.8004501Z      [1m[96m|[0m
+2026-11-15T12:26:31.8005132Z      [1m[96m= [0m[1m[97mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:31.8005577Z 
+2026-11-15T12:26:31.8169089Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:31.8170139Z   [1m[96m--> [0msrc\busybox.rs:59:13
+2026-11-15T12:26:31.8171172Z    [1m[96m|[0m
+2026-11-15T12:26:31.8171986Z [1m[96m59[0m [1m[96m|[0m         let mut depth_ok = true;
+2026-11-15T12:26:31.8173653Z    [1m[96m|[0m             [1m[96m----[0m[1m[93m^^^^^^^^[0m
+2026-11-15T12:26:31.8174410Z    [1m[96m|[0m             [1m[96m|[0m
+2026-11-15T12:26:31.8175175Z    [1m[96m|[0m             [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:31.8175587Z 
+2026-11-15T12:26:31.8175941Z [1m[93mwarning[0m[1m[97m: unused variable: `root_str`[0m
+2026-11-15T12:26:31.8176683Z   [1m[96m--> [0msrc\busybox.rs:68:13
+2026-11-15T12:26:31.8177029Z    [1m[96m|[0m
+2026-11-15T12:26:31.8177535Z [1m[96m68[0m [1m[96m|[0m         let root_str = self.root.to_string_lossy();
+2026-11-15T12:26:31.8178426Z    [1m[96m|[0m             [1m[93m^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_root_str`[0m
+2026-11-15T12:26:31.8178931Z 
+2026-11-15T12:26:31.8721535Z [1m[93mwarning[0m[1m[97m: unused variable: `y`[0m
+2026-11-15T12:26:31.8722201Z    [1m[96m--> [0msrc\busybox.rs:760:9
+2026-11-15T12:26:31.8722563Z     [1m[96m|[0m
+2026-11-15T12:26:31.8723094Z [1m[96m760[0m [1m[96m|[0m     let y = if m <= 2 { y + 1 } else { y };
+2026-11-15T12:26:31.8723963Z     [1m[96m|[0m         [1m[93m^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_y`[0m
+2026-11-15T12:26:31.8724426Z 
+2026-11-15T12:26:32.0035189Z [1m[93mwarning[0m[1m[97m: unused variable: `repo_path`[0m
+2026-11-15T12:26:32.0035870Z     [1m[96m--> [0msrc\gh.rs:2015:26
+2026-11-15T12:26:32.0036225Z      [1m[96m|[0m
+2026-11-15T12:26:32.0037055Z [1m[96m2015[0m [1m[96m|[0m pub fn device_flow_start(repo_path: &Path, scopes: &[String]) -> Result<GhDeviceStart, String> {
+2026-11-15T12:26:32.0038579Z      [1m[96m|[0m                          [1m[93m^^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_repo_path`[0m
+2026-11-15T12:26:32.0039170Z 
+2026-11-15T12:26:32.1105730Z [1m[93mwarning[0m[1m[97m: unused variable: `y`[0m
+2026-11-15T12:26:32.1106538Z    [1m[96m--> [0msrc\busybox_extra.rs:679:9
+2026-11-15T12:26:32.1107098Z     [1m[96m|[0m
+2026-11-15T12:26:32.1107838Z [1m[96m679[0m [1m[96m|[0m     let y = if m <= 2 { y + 1 } else { y };
+2026-11-15T12:26:32.1108978Z     [1m[96m|[0m         [1m[93m^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_y`[0m
+2026-11-15T12:26:32.1110058Z 
+2026-11-15T12:26:32.1671909Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1672593Z     [1m[96m--> [0msrc\commands.rs:1401:5
+2026-11-15T12:26:32.1672956Z      [1m[96m|[0m
+2026-11-15T12:26:32.1673548Z [1m[96m1401[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1674331Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1674804Z 
+2026-11-15T12:26:32.1681862Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1682963Z     [1m[96m--> [0msrc\commands.rs:1421:5
+2026-11-15T12:26:32.1683504Z      [1m[96m|[0m
+2026-11-15T12:26:32.1684266Z [1m[96m1421[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1685428Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1686129Z 
+2026-11-15T12:26:32.1693162Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1693808Z     [1m[96m--> [0msrc\commands.rs:1437:5
+2026-11-15T12:26:32.1694160Z      [1m[96m|[0m
+2026-11-15T12:26:32.1694645Z [1m[96m1437[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1695369Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1695806Z 
+2026-11-15T12:26:32.1703325Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1703805Z     [1m[96m--> [0msrc\commands.rs:1453:5
+2026-11-15T12:26:32.1704370Z      [1m[96m|[0m
+2026-11-15T12:26:32.1704924Z [1m[96m1453[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1706948Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1707444Z 
+2026-11-15T12:26:32.1713595Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1714308Z     [1m[96m--> [0msrc\commands.rs:1469:5
+2026-11-15T12:26:32.1715966Z      [1m[96m|[0m
+2026-11-15T12:26:32.1716744Z [1m[96m1469[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1717909Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1718598Z 
+2026-11-15T12:26:32.1723614Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1724853Z     [1m[96m--> [0msrc\commands.rs:1484:5
+2026-11-15T12:26:32.1725196Z      [1m[96m|[0m
+2026-11-15T12:26:32.1725640Z [1m[96m1484[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1726318Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1726894Z 
+2026-11-15T12:26:32.1733485Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1734066Z     [1m[96m--> [0msrc\commands.rs:1499:5
+2026-11-15T12:26:32.1734375Z      [1m[96m|[0m
+2026-11-15T12:26:32.1734834Z [1m[96m1499[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1735496Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1735876Z 
+2026-11-15T12:26:32.1742421Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1743235Z     [1m[96m--> [0msrc\commands.rs:1514:5
+2026-11-15T12:26:32.1743596Z      [1m[96m|[0m
+2026-11-15T12:26:32.1744045Z [1m[96m1514[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1744965Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1745375Z 
+2026-11-15T12:26:32.1752516Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1753089Z     [1m[96m--> [0msrc\commands.rs:1529:5
+2026-11-15T12:26:32.1753401Z      [1m[96m|[0m
+2026-11-15T12:26:32.1753844Z [1m[96m1529[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1754504Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1754899Z 
+2026-11-15T12:26:32.1761425Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1762119Z     [1m[96m--> [0msrc\commands.rs:1544:5
+2026-11-15T12:26:32.1762537Z      [1m[96m|[0m
+2026-11-15T12:26:32.1762979Z [1m[96m1544[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1763647Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1764050Z 
+2026-11-15T12:26:32.1771072Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1771744Z     [1m[96m--> [0msrc\commands.rs:1559:5
+2026-11-15T12:26:32.1772071Z      [1m[96m|[0m
+2026-11-15T12:26:32.1772511Z [1m[96m1559[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1773170Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1773565Z 
+2026-11-15T12:26:32.1785684Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1786409Z     [1m[96m--> [0msrc\commands.rs:1587:5
+2026-11-15T12:26:32.1786941Z      [1m[96m|[0m
+2026-11-15T12:26:32.1787681Z [1m[96m1587[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1788845Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1789534Z 
+2026-11-15T12:26:32.1797384Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1798078Z     [1m[96m--> [0msrc\commands.rs:1603:5
+2026-11-15T12:26:32.1798411Z      [1m[96m|[0m
+2026-11-15T12:26:32.1798858Z [1m[96m1603[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1799529Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1800093Z 
+2026-11-15T12:26:32.1807238Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1807922Z     [1m[96m--> [0msrc\commands.rs:1619:5
+2026-11-15T12:26:32.1808247Z      [1m[96m|[0m
+2026-11-15T12:26:32.1808678Z [1m[96m1619[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1809340Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1809742Z 
+2026-11-15T12:26:32.1830055Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1830633Z     [1m[96m--> [0msrc\commands.rs:1665:5
+2026-11-15T12:26:32.1830958Z      [1m[96m|[0m
+2026-11-15T12:26:32.1831389Z [1m[96m1665[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1832062Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1832447Z 
+2026-11-15T12:26:32.1841169Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1842049Z     [1m[96m--> [0msrc\commands.rs:1680:5
+2026-11-15T12:26:32.1842599Z      [1m[96m|[0m
+2026-11-15T12:26:32.1843352Z [1m[96m1680[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1844901Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1845635Z 
+2026-11-15T12:26:32.1852524Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.1853277Z     [1m[96m--> [0msrc\commands.rs:1695:5
+2026-11-15T12:26:32.1853807Z      [1m[96m|[0m
+2026-11-15T12:26:32.1854554Z [1m[96m1695[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.1855698Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.1856375Z 
+2026-11-15T12:26:32.2129952Z [1m[93mwarning[0m[1m[97m: unused variable: `contains`[0m
+2026-11-15T12:26:32.2130917Z     [1m[96m--> [0msrc\commands.rs:1816:5
+2026-11-15T12:26:32.2131599Z      [1m[96m|[0m
+2026-11-15T12:26:32.2132292Z [1m[96m1816[0m [1m[96m|[0m     contains: Option<String>,
+2026-11-15T12:26:32.2133626Z      [1m[96m|[0m     [1m[93m^^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_contains`[0m
+2026-11-15T12:26:32.2134526Z 
+2026-11-15T12:26:32.2316810Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.2317377Z     [1m[96m--> [0msrc\commands.rs:1919:5
+2026-11-15T12:26:32.2317716Z      [1m[96m|[0m
+2026-11-15T12:26:32.2318297Z [1m[96m1919[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.2319032Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.2319467Z 
+2026-11-15T12:26:32.2341417Z [1m[93mwarning[0m[1m[97m: unused variable: `app`[0m
+2026-11-15T12:26:32.2342538Z     [1m[96m--> [0msrc\commands.rs:1971:5
+2026-11-15T12:26:32.2343080Z      [1m[96m|[0m
+2026-11-15T12:26:32.2343821Z [1m[96m1971[0m [1m[96m|[0m     app: tauri::AppHandle,
+2026-11-15T12:26:32.2344976Z      [1m[96m|[0m     [1m[93m^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_app`[0m
+2026-11-15T12:26:32.2345676Z 
+2026-11-15T12:26:32.2977936Z [1m[93mwarning[0m[1m[97m: unused variable: `scope`[0m
+2026-11-15T12:26:32.2978630Z    [1m[96m--> [0msrc\memory_vector.rs:359:40
+2026-11-15T12:26:32.2979092Z     [1m[96m|[0m
+2026-11-15T12:26:32.2980311Z [1m[96m359[0m [1m[96m|[0m pub fn memory_remove(repo_path: &Path, scope: Option<&str>, id: &str) -> Result<()> {
+2026-11-15T12:26:32.2981963Z     [1m[96m|[0m                                        [1m[93m^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_scope`[0m
+2026-11-15T12:26:32.2982768Z 
+2026-11-15T12:26:32.4889354Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.4890685Z     [1m[96m--> [0msrc\git_state.rs:2258:9
+2026-11-15T12:26:32.4891225Z      [1m[96m|[0m
+2026-11-15T12:26:32.4892109Z [1m[96m2258[0m [1m[96m|[0m     let mut old_lines: Vec<String> = if old_text.is_empty() {
+2026-11-15T12:26:32.4893071Z      [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^^[0m
+2026-11-15T12:26:32.4893721Z      [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:32.4894399Z      [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.4894808Z 
+2026-11-15T12:26:32.5006912Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.5007802Z     [1m[96m--> [0msrc\git_state.rs:2484:9
+2026-11-15T12:26:32.5008350Z      [1m[96m|[0m
+2026-11-15T12:26:32.5009015Z [1m[96m2484[0m [1m[96m|[0m     let mut diff = if reverse {
+2026-11-15T12:26:32.5009765Z      [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^[0m
+2026-11-15T12:26:32.5010436Z      [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:32.5011223Z      [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.5011612Z 
+2026-11-15T12:26:32.5296151Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.5296783Z     [1m[96m--> [0msrc\git_state.rs:2879:9
+2026-11-15T12:26:32.5297146Z      [1m[96m|[0m
+2026-11-15T12:26:32.5297766Z [1m[96m2879[0m [1m[96m|[0m     let mut index_lines: Vec<String> = if index_text.is_empty() {
+2026-11-15T12:26:32.5298442Z      [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^^^^[0m
+2026-11-15T12:26:32.5298923Z      [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:32.5299383Z      [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.5299656Z 
+2026-11-15T12:26:32.5354441Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.5355225Z     [1m[96m--> [0msrc\git_state.rs:2999:9
+2026-11-15T12:26:32.5355936Z      [1m[96m|[0m
+2026-11-15T12:26:32.5356506Z [1m[96m2999[0m [1m[96m|[0m     let mut wt_lines: Vec<String> = if wt_text.is_empty() {
+2026-11-15T12:26:32.5357068Z      [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^^^^^[0m
+2026-11-15T12:26:32.5357451Z      [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:32.5357845Z      [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.5358076Z 
+2026-11-15T12:26:32.5445746Z [1m[93mwarning[0m[1m[97m: unused variable: `content`[0m
+2026-11-15T12:26:32.5446327Z     [1m[96m--> [0msrc\git_state.rs:3186:21
+2026-11-15T12:26:32.5446732Z      [1m[96m|[0m
+2026-11-15T12:26:32.5447334Z [1m[96m3186[0m [1m[96m|[0m         if let Some(content) = line.strip_prefix('\t') {
+2026-11-15T12:26:32.5448367Z      [1m[96m|[0m                     [1m[93m^^^^^^^[0m [1m[93mhelp: if this is intentional, prefix it with an underscore: `_content`[0m
+2026-11-15T12:26:32.5448903Z 
+2026-11-15T12:26:32.5766721Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.5767394Z    [1m[96m--> [0msrc\ops\mod.rs:168:9
+2026-11-15T12:26:32.5767811Z     [1m[96m|[0m
+2026-11-15T12:26:32.5768633Z [1m[96m168[0m [1m[96m|[0m     let mut diff = repo.diff_tree_to_tree(old, Some(new), None).map_err(err)?;
+2026-11-15T12:26:32.5769452Z     [1m[96m|[0m         [1m[96m----[0m[1m[93m^^^^[0m
+2026-11-15T12:26:32.5769971Z     [1m[96m|[0m         [1m[96m|[0m
+2026-11-15T12:26:32.5770513Z     [1m[96m|[0m         [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.5770850Z 
+2026-11-15T12:26:32.6020514Z [1m[93mwarning[0m[1m[97m: variable does not need to be mutable[0m
+2026-11-15T12:26:32.6021507Z    [1m[96m--> [0msrc\ops\mod.rs:479:13
+2026-11-15T12:26:32.6022050Z     [1m[96m|[0m
+2026-11-15T12:26:32.6022952Z [1m[96m479[0m [1m[96m|[0m         let mut index = repo.index().map_err(|e| e.to_string())?;
+2026-11-15T12:26:32.6024307Z     [1m[96m|[0m             [1m[96m----[0m[1m[93m^^^^^[0m
+2026-11-15T12:26:32.6025010Z     [1m[96m|[0m             [1m[96m|[0m
+2026-11-15T12:26:32.6025799Z     [1m[96m|[0m             [1m[96mhelp: remove this `mut`[0m
+2026-11-15T12:26:32.6026202Z 
+2026-11-15T12:26:33.6978144Z [1m[93mwarning[0m[1m[97m: field `new_cwd` is never read[0m
+2026-11-15T12:26:33.6978987Z   [1m[96m--> [0msrc\busybox.rs:24:9
+2026-11-15T12:26:33.6981807Z    [1m[96m|[0m
+2026-11-15T12:26:33.6982624Z [1m[96m19[0m [1m[96m|[0m pub struct BusyResult {
+2026-11-15T12:26:33.6983744Z    [1m[96m|[0m            [1m[96m----------[0m [1m[96mfield in this struct[0m
+2026-11-15T12:26:33.6984485Z [1m[96m...[0m
+2026-11-15T12:26:33.6985196Z [1m[96m24[0m [1m[96m|[0m     pub new_cwd: Option<PathBuf>,
+2026-11-15T12:26:33.6986110Z    [1m[96m|[0m         [1m[93m^^^^^^^[0m
+2026-11-15T12:26:33.6987018Z    [1m[96m|[0m
+2026-11-15T12:26:33.6987868Z    [1m[96m= [0m[1m[97mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+2026-11-15T12:26:33.6988504Z 
+2026-11-15T12:26:33.6988966Z [1m[93mwarning[0m[1m[97m: field `root` is never read[0m
+2026-11-15T12:26:33.6989629Z   [1m[96m--> [0msrc\busybox3.rs:16:5
+2026-11-15T12:26:33.6990130Z    [1m[96m|[0m
+2026-11-15T12:26:33.6990639Z [1m[96m14[0m [1m[96m|[0m struct Ctx<'a> {
+2026-11-15T12:26:33.6991360Z    [1m[96m|[0m        [1m[96m---[0m [1m[96mfield in this struct[0m
+2026-11-15T12:26:33.6992064Z [1m[96m15[0m [1m[96m|[0m     cwd: &'a Path,
+2026-11-15T12:26:33.6992679Z [1m[96m16[0m [1m[96m|[0m     root: &'a Path,
+2026-11-15T12:26:33.6993222Z    [1m[96m|[0m     [1m[93m^^^^[0m
+2026-11-15T12:26:33.6993494Z 
+2026-11-15T12:26:33.6993894Z [1m[93mwarning[0m[1m[97m: field `root` is never read[0m
+2026-11-15T12:26:33.6994523Z   [1m[96m--> [0msrc\busybox_extra.rs:17:5
+2026-11-15T12:26:33.6994986Z    [1m[96m|[0m
+2026-11-15T12:26:33.6995447Z [1m[96m15[0m [1m[96m|[0m struct Ctx<'a> {
+2026-11-15T12:26:33.6996127Z    [1m[96m|[0m        [1m[96m---[0m [1m[96mfield in this struct[0m
+2026-11-15T12:26:33.6996821Z [1m[96m16[0m [1m[96m|[0m     cwd: &'a Path,
+2026-11-15T12:26:33.6997416Z [1m[96m17[0m [1m[96m|[0m     root: &'a Path,
+2026-11-15T12:26:33.6997939Z    [1m[96m|[0m     [1m[93m^^^^[0m
+2026-11-15T12:26:33.6998198Z 
+2026-11-15T12:26:33.6998656Z [1m[93mwarning[0m[1m[97m: function `search_texts` is never used[0m
+2026-11-15T12:26:33.6999362Z    [1m[96m--> [0msrc\memory_vector.rs:406:8
+2026-11-15T12:26:33.6999839Z     [1m[96m|[0m
+2026-11-15T12:26:33.7000798Z [1m[96m406[0m [1m[96m|[0m pub fn search_texts(query: &str, texts: &[String], limit: usize) -> Vec<(usize, f32)> {
+2026-11-15T12:26:33.7001707Z     [1m[96m|[0m        [1m[93m^^^^^^^^^^^^[0m
+2026-11-15T12:26:33.7002023Z 
+2026-11-15T12:26:33.7002482Z [1m[93mwarning[0m[1m[97m: function `with_session` is never used[0m
+2026-11-15T12:26:33.7003159Z   [1m[96m--> [0msrc\devtools.rs:43:10
+2026-11-15T12:26:33.7004026Z    [1m[96m|[0m
+2026-11-15T12:26:33.7004964Z [1m[96m43[0m [1m[96m|[0m async fn with_session<T>(f: impl FnOnce(&mut DevSession) -> Result<T>) -> Result<T> {
+2026-11-15T12:26:33.7005853Z    [1m[96m|[0m          [1m[93m^^^^^^^^^^^^[0m
+2026-11-15T12:26:33.7006164Z 
+2026-11-15T12:26:33.7006604Z [1m[93mwarning[0m[1m[97m: function `attr_after` is never used[0m
+2026-11-15T12:26:33.7007254Z    [1m[96m--> [0msrc\web.rs:221:4
+2026-11-15T12:26:33.7007679Z     [1m[96m|[0m
+2026-11-15T12:26:33.7008972Z [1m[96m221[0m [1m[96m|[0m fn attr_after(html: &str, marker: &str, attr: &str) -> Option<(String, usize)> {
+2026-11-15T12:26:33.7009855Z     [1m[96m|[0m    [1m[93m^^^^^^^^^^[0m
+2026-11-15T12:26:33.7010149Z 
+2026-11-15T12:26:33.7010601Z [1m[93mwarning[0m[1m[97m: function `is_ancestor` is never used[0m
+2026-11-15T12:26:33.7011279Z     [1m[96m--> [0msrc\git_state.rs:1952:4
+2026-11-15T12:26:33.7011959Z      [1m[96m|[0m
+2026-11-15T12:26:33.7013191Z [1m[96m1952[0m [1m[96m|[0m fn is_ancestor(repo: &Repository, ancestor_oid: git2::Oid, head_oid: git2::Oid) -> Result<bool> {
+2026-11-15T12:26:33.7014160Z      [1m[96m|[0m    [1m[93m^^^^^^^^^^^[0m
+2026-11-15T12:26:33.7014468Z 
+2026-11-15T12:26:33.7136551Z [1m[93mwarning[0m[1m[97m: variable `refName` should have a snake case name[0m
+2026-11-15T12:26:33.7137460Z    [1m[96m--> [0msrc\commands.rs:431:5
+2026-11-15T12:26:33.7137842Z     [1m[96m|[0m
+2026-11-15T12:26:33.7138271Z [1m[96m431[0m [1m[96m|[0m     refName: String,
+2026-11-15T12:26:33.7139029Z     [1m[96m|[0m     [1m[93m^^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `ref_name`[0m
+2026-11-15T12:26:33.7139629Z     [1m[96m|[0m
+2026-11-15T12:26:33.7140314Z     [1m[96m= [0m[1m[97mnote[0m: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+2026-11-15T12:26:33.7140786Z 
+2026-11-15T12:26:33.7155788Z [1m[93mwarning[0m[1m[97m: variable `oldPath` should have a snake case name[0m
+2026-11-15T12:26:33.7156894Z     [1m[96m--> [0msrc\commands.rs:1226:5
+2026-11-15T12:26:33.7157464Z      [1m[96m|[0m
+2026-11-15T12:26:33.7159120Z [1m[96m1226[0m [1m[96m|[0m     oldPath: String,
+2026-11-15T12:26:33.7160468Z      [1m[96m|[0m     [1m[93m^^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `old_path`[0m
+2026-11-15T12:26:33.7161131Z 
+2026-11-15T12:26:33.7161620Z [1m[93mwarning[0m[1m[97m: variable `newPath` should have a snake case name[0m
+2026-11-15T12:26:33.7162202Z     [1m[96m--> [0msrc\commands.rs:1227:5
+2026-11-15T12:26:33.7162562Z      [1m[96m|[0m
+2026-11-15T12:26:33.7162964Z [1m[96m1227[0m [1m[96m|[0m     newPath: String,
+2026-11-15T12:26:33.7163667Z      [1m[96m|[0m     [1m[93m^^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `new_path`[0m
+2026-11-15T12:26:33.7164095Z 
+2026-11-15T12:26:33.7164509Z [1m[93mwarning[0m[1m[97m: variable `oldPath` should have a snake case name[0m
+2026-11-15T12:26:33.7165071Z     [1m[96m--> [0msrc\commands.rs:1239:5
+2026-11-15T12:26:33.7165411Z      [1m[96m|[0m
+2026-11-15T12:26:33.7165791Z [1m[96m1239[0m [1m[96m|[0m     oldPath: String,
+2026-11-15T12:26:33.7166464Z      [1m[96m|[0m     [1m[93m^^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `old_path`[0m
+2026-11-15T12:26:33.7166886Z 
+2026-11-15T12:26:33.7167278Z [1m[93mwarning[0m[1m[97m: variable `newPath` should have a snake case name[0m
+2026-11-15T12:26:33.7167824Z     [1m[96m--> [0msrc\commands.rs:1240:5
+2026-11-15T12:26:33.7168166Z      [1m[96m|[0m
+2026-11-15T12:26:33.7168537Z [1m[96m1240[0m [1m[96m|[0m     newPath: String,
+2026-11-15T12:26:33.7169214Z      [1m[96m|[0m     [1m[93m^^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `new_path`[0m
+2026-11-15T12:26:33.7169636Z 
+2026-11-15T12:26:33.7175974Z [1m[93mwarning[0m[1m[97m: variable `waitMs` should have a snake case name[0m
+2026-11-15T12:26:33.7176773Z     [1m[96m--> [0msrc\commands.rs:1755:5
+2026-11-15T12:26:33.7177102Z      [1m[96m|[0m
+2026-11-15T12:26:33.7177465Z [1m[96m1755[0m [1m[96m|[0m     waitMs: Option<u64>,
+2026-11-15T12:26:33.7178067Z      [1m[96m|[0m     [1m[93m^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `wait_ms`[0m
+2026-11-15T12:26:33.7178557Z 
+2026-11-15T12:26:33.7180285Z [1m[93mwarning[0m[1m[97m: variable `waitMs` should have a snake case name[0m
+2026-11-15T12:26:33.7180825Z     [1m[96m--> [0msrc\commands.rs:1900:5
+2026-11-15T12:26:33.7181139Z      [1m[96m|[0m
+2026-11-15T12:26:33.7181721Z [1m[96m1900[0m [1m[96m|[0m     waitMs: Option<u64>,
+2026-11-15T12:26:33.7182345Z      [1m[96m|[0m     [1m[93m^^^^^^[0m [1m[93mhelp: convert the identifier to snake case: `wait_ms`[0m
+2026-11-15T12:26:33.7182702Z 
+2026-11-15T12:29:25.9320014Z [1m[93mwarning[0m: `pigry` (lib) generated 53 warnings (run `cargo fix --lib -p pigry` to apply 37 suggestions)
+2026-11-15T12:32:18.8740723Z [1m[92m    Finished[0m `release` profile [optimized] target(s) in 6m 21s
+2026-11-15T12:32:18.9374499Z        Built application at: D:\a\pigry\pigry\src-tauri\target\release\pigry.exe
+2026-11-15T12:32:18.9629083Z         Info Patching D:\a\pigry\pigry\src-tauri\target\release\pigry.exe with bundle type information: msi
+2026-11-15T12:32:19.0048590Z         Info Verifying wix package
+2026-11-15T12:32:19.0049582Z  Downloading https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
+2026-11-15T12:32:19.2962328Z         Info validating hash
+2026-11-15T12:32:19.3226565Z         Info extracting WIX
+2026-11-15T12:32:20.2760634Z         Info Target: x64
+2026-11-15T12:32:20.2876345Z      Running candle for "D:\\a\\pigry\\pigry\\src-tauri\\target\\release\\wix\\x64\\main.wxs"
+2026-11-15T12:32:24.0090186Z      Running light to produce D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi
+2026-11-15T12:32:32.9098874Z         Info Patching D:\a\pigry\pigry\src-tauri\target\release\pigry.exe with bundle type information: nsis
+2026-11-15T12:32:32.9506662Z         Info Verifying NSIS package
+2026-11-15T12:32:32.9512393Z  Downloading https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.13/nsis-3.13.zip
+2026-11-15T12:32:33.0284345Z         Info validating hash
+2026-11-15T12:32:33.0298119Z         Info extracting NSIS
+2026-11-15T12:32:33.2846317Z  Downloading https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll
+2026-11-15T12:32:33.3267376Z         Info validating hash
+2026-11-15T12:32:33.3276381Z         Info Target: x64
+2026-11-15T12:32:33.3376154Z      Running makensis to produce D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.exe
+2026-11-15T12:32:42.6533099Z     Finished 2 bundles at:
+2026-11-15T12:32:42.6534061Z         D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi (11.06 MiB)
+2026-11-15T12:32:42.6535282Z         D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.exe (9.22 MiB)
+2026-11-15T12:32:42.6535930Z 
+2026-11-15T12:32:42.6933852Z Looking for artifacts in:
+2026-11-15T12:32:42.6934522Z D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi
+2026-11-15T12:32:42.6935267Z D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi.sig
+2026-11-15T12:32:42.6936023Z D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi.zip
+2026-11-15T12:32:42.6937302Z D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi.zip.sig
+2026-11-15T12:32:42.6938071Z D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.exe
+2026-11-15T12:32:42.6938749Z D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.exe.sig
+2026-11-15T12:32:42.6939453Z D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.nsis.zip
+2026-11-15T12:32:42.6940166Z D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.nsis.zip.sig
+2026-11-15T12:32:42.6940700Z Found artifacts:
+2026-11-15T12:32:42.6941410Z D:\a\pigry\pigry\src-tauri\target\release\bundle\msi\pigry_0.3.0_x64_en-US.msi
+2026-11-15T12:32:42.6943073Z D:\a\pigry\pigry\src-tauri\target\release\bundle\nsis\pigry_0.3.0_x64-setup.exe
+2026-11-15T12:32:42.7130923Z Looking for a draft release with tag v0.3.0...
+2026-11-15T12:32:43.0794131Z Found draft release with tag v0.3.0 on the release list.
+2026-11-15T12:32:43.2678625Z Deleting existing pigry_0.3.0_x64_en-US.msi...
+2026-11-15T12:32:43.6053383Z Uploading pigry_0.3.0_x64_en-US.msi...
+2026-11-15T12:32:44.7273238Z Deleting existing pigry_0.3.0_x64-setup.exe...
+2026-11-15T12:32:45.0621879Z Uploading pigry_0.3.0_x64-setup.exe...
+2026-11-15T12:32:46.4073122Z Signature not found for the updater JSON. Skipping upload...
+2026-11-15T12:32:46.4418411Z ##[group]Run sig_files="$(find src-tauri/target/release/bundle -name "*.sig" -type f)"
+2026-11-15T12:32:46.4419489Z [36;1msig_files="$(find src-tauri/target/release/bundle -name "*.sig" -type f)"[0m
+2026-11-15T12:32:46.4420437Z [36;1mif [ -n "$sig_files" ]; then[0m
+2026-11-15T12:32:46.4420863Z [36;1m  gh release upload "v0.3.0" --clobber $sig_files[0m
+2026-11-15T12:32:46.4421248Z [36;1mfi[0m
+2026-11-15T12:32:46.4437535Z shell: C:\Program Files\Git\bin\bash.EXE --noprofile --norc -e -o pipefail {0}
+2026-11-15T12:32:46.4438035Z env:
+2026-11-15T12:32:46.4438305Z   CARGO_HOME: C:\Users\runneradmin\.cargo
+2026-11-15T12:32:46.4438667Z   CARGO_INCREMENTAL: 0
+2026-11-15T12:32:46.4438948Z   CARGO_TERM_COLOR: always
+2026-11-15T12:32:46.4439238Z   CACHE_ON_FAILURE: false
+2026-11-15T12:32:46.4442529Z   GITHUB_TOKEN: ***
+2026-11-15T12:32:46.4442851Z ##[endgroup]
+2026-11-15T12:32:46.5798076Z Post job cleanup.
+2026-11-15T12:32:46.7446376Z Cache up-to-date.
+2026-11-15T12:32:46.7742360Z Post job cleanup.
+2026-11-15T12:32:46.9229190Z (node:9060) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-15T12:32:46.9230192Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-15T12:32:46.9233733Z Cache hit occurred on the primary key node-cache-Windows-x64-npm-a7182bd60ea0c9339ad5c65d5eb568e8b4f29894b3a5fe9fe19162f7bb9c2990, not saving cache.
+2026-11-15T12:32:46.9532709Z Post job cleanup.
+2026-11-15T12:32:47.1750568Z [command]"C:\Program Files\Git\bin\git.exe" version
+2026-11-15T12:32:47.2125240Z git version 2.56.0.windows.4
+2026-11-15T12:32:47.2195275Z Temporarily overriding HOME='D:\a\_temp\e37a8c5a-b986-4c23-81d8-3e8888572937' before making global git config changes
+2026-11-15T12:32:47.2196833Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-15T12:32:47.2205864Z [command]"C:\Program Files\Git\bin\git.exe" config --global --add safe.directory D:\a\pigry\pigry
+2026-11-15T12:32:47.2588891Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp core\.sshCommand
+2026-11-15T12:32:47.2960780Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :\""
+2026-11-15T12:32:47.8991918Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-15T12:32:47.9354685Z http.https://github.com/.extraheader
+2026-11-15T12:32:47.9405851Z [command]"C:\Program Files\Git\bin\git.exe" config --local --unset-all http.https://github.com/.extraheader
+2026-11-15T12:32:47.9778216Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "sh -c \"git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :\""
+2026-11-15T12:32:48.5173991Z [command]"C:\Program Files\Git\bin\git.exe" config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-15T12:32:48.5546903Z [command]"C:\Program Files\Git\bin\git.exe" submodule foreach --recursive "git config --local --show-origin --name-only --get-regexp remote.origin.url"
+2026-11-15T12:32:49.1343946Z Cleaning up orphan processes
+2026-11-15T12:32:49.1629704Z Terminate orphan process: pid (6060) (vctip)
+2026-11-15T12:32:49.2091808Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
