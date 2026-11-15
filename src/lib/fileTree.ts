@@ -10,15 +10,17 @@ export interface TreeNode {
 /** Sorts folders before files, both alphabetically (case-insensitive). */
 export function buildTree(paths: string[]): TreeNode[] {
   const root: TreeNode = { name: '', path: '', kind: 'folder', children: [] };
+  const indexes = new WeakMap<TreeNode, Map<string, TreeNode>>();
 
   for (const path of paths) {
     const segments = path.split('/');
     let node = root;
     segments.forEach((segment, index) => {
       const isFile = index === segments.length - 1;
-      let child = node.children.find(
-        (candidate) => candidate.name === segment && candidate.kind === (isFile ? 'file' : 'folder'),
-      );
+      let childIndex = indexes.get(node);
+      if (!childIndex) { childIndex = new Map(); indexes.set(node, childIndex); }
+      const key = `${isFile ? 'file' : 'folder'}:${segment}`;
+      let child = childIndex.get(key);
       if (!child) {
         child = {
           name: segment,
@@ -27,6 +29,7 @@ export function buildTree(paths: string[]): TreeNode[] {
           children: [],
         };
         node.children.push(child);
+        childIndex.set(key, child);
       }
       node = child;
     });
@@ -34,6 +37,18 @@ export function buildTree(paths: string[]): TreeNode[] {
 
   sortTree(root);
   return root.children.map((child) => compactChains(child));
+}
+
+export function flattenVisibleTree(nodes: TreeNode[], expanded: Set<string>): { node: TreeNode; depth: number }[] {
+  const rows: { node: TreeNode; depth: number }[] = [];
+  const visit = (nodes: TreeNode[], depth: number) => {
+    for (const node of nodes) {
+      rows.push({ node, depth });
+      if (node.kind === 'folder' && expanded.has(node.path)) visit(node.children, depth + 1);
+    }
+  };
+  visit(nodes, 0);
+  return rows;
 }
 
 /**

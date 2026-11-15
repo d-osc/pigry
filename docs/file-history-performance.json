@@ -1,0 +1,7 @@
+{
+  "beforeMs": 46149,
+  "afterMs": 200,
+  "fix": "Skip identical parent trees before decoding; execute file history in the blocking task pool",
+  "scanWindow": 2000,
+  "scope": "Same disposable 10000-commit/20000-file fixture; one observed debug call each, not a statistical release benchmark"
+}

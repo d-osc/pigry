@@ -1,5 +1,7 @@
 # Pigry validation — 2026-11-15
 
+For the subsequent release/installer, live GitHub, large repository and automated UI checks, see [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md).
+
 ## Completed changes
 
 - Deferred screen JavaScript and Word/Excel parsers until needed. All screen CSS loads in a stable order to prevent navigation-dependent styling regressions.
@@ -14,12 +16,13 @@
 
 ## Automated verification
 
-- `npm test`: **9 passed** (request ordering/unmount, dirty-buffer preservation/save snapshots, publish eligibility, sort persistence and error text).
-- `npm run test:git`: **71 passed**: Git state 47, operations 15, network 5, settings 3, watcher 1.
+- `npm test`: **13 passed** (request ordering/unmount, dirty-buffer preservation/save snapshots, publish eligibility, sort persistence, error text, scoped-state resets, editor-action cleanup, large file trees and bounded-heap AI-panel lint).
+- `npm run test:git`: **72 passed**: Git state 48, operations 15, network 5, settings 3, watcher 1, including the large unchanged-tree file-history regression budget.
 - Tests use disposable repositories and local bare remotes. They cover publishing/upstream creation, push/fetch/pull, divergent history, rejected pushes and recovery, missing remotes, timeout, hook rejection preserving HEAD/index, conflicts/abort, partial staging, stash and local settings.
 - `npm run build`: passed, including TypeScript. Deferred Monaco chunks remain large; this change reduces startup loading rather than eliminating Monaco's total size.
-- Targeted ESLint of new utilities, themed editor wrappers and frontend tests: passed.
-- Full `npm run lint` exhausted Node's approximately 4 GB heap after about 52 seconds. It is **not** reported as passing. The all-tests Rust invocation also stalled in the unrelated AI CLI-detection suite; it was stopped and the complete Git-specific suite above ran successfully instead.
+- Full `npm run lint`: **passed with zero errors and zero warnings**, with `NODE_OPTIONS=--max-old-space-size=1024`, in **23.58 seconds**. All configured rules remain enabled. Project-context gathering, turn execution and memory summarization now run through helpers outside the large AI panel's render analysis; the previous run exhausted approximately 4 GB. A regression test also lints that panel with a 768 MiB heap limit and a 40-second timeout.
+- Corrected effect dependencies, moved editor-ref updates to the layout effect, and reset request-scoped results/errors without synchronous state updates inside effects.
+- The earlier all-tests Rust invocation stalled in the unrelated AI CLI-detection suite; it was stopped. The subsequent complete Git-specific suite above passed, including the new file-history regression. That unrelated AI suite is not certified by the Git-specific run.
 
 ## Native Tauri verification
 
@@ -49,7 +52,8 @@ At Home readiness, the complete sampled process tree (Tauri + descendant WebView
 1. `npm test`
 2. `npm run test:git` (PowerShell 7, Rust toolchain, Git installed).
 3. `npm run build`
-4. `cargo build --manifest-path src-tauri/Cargo.toml --bin pigry`
-5. Start `npm run dev`, then `npm run test:desktop` in another terminal. It creates a disposable repository/profile, records three native Home startup/memory samples, and stops only its own app process trees. Temporary fixtures remain available for inspection. Debug-only `PIGRY_TEST_CONFIG_DIR` isolation is ignored by release builds.
+4. `npm run lint` (zero warnings required).
+5. `cargo build --manifest-path src-tauri/Cargo.toml --bin pigry`
+6. Start `npm run dev`, then `npm run test:desktop` in another terminal. It creates a disposable repository/profile, records three native Home startup/memory samples, and stops only its own app process trees. Temporary fixtures remain available for inspection. Debug-only `PIGRY_TEST_CONFIG_DIR` isolation is ignored by release builds.
 
-No release, remote push to GitHub, issue/comment creation, or credential changes were performed.
+No release was published, repository changes were pushed to GitHub, or issues/comments created. Stored credentials were not changed.

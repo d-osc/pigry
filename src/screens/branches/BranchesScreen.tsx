@@ -92,7 +92,7 @@ export function BranchesScreen() {
   const [total, setTotal] = useState(0);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [rowsAttempt, setRowsAttempt] = useState(0);
-  const [loadingRows, setLoadingRows] = useState(true);
+  const [loadedRowsScope, setLoadedRowsScope] = useState('');
   const [commitQuery, setCommitQuery] = useState('');
   const [selectedCommit, setSelectedCommit] = useState<CommitRow | null>(null);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
@@ -211,34 +211,35 @@ export function BranchesScreen() {
 
   // Load the selected branch's commits (and reload on repo changes).
   const headOid = repository?.headOid ?? '';
+  const rowsScope = `${effectiveRef}:${headOid}:${rowsAttempt}`;
+  const loadingRows = loadedRowsScope !== rowsScope;
   useEffect(() => {
     if (!effectiveRef) return;
     let cancelled = false;
-    setLoadingRows(true);
-    setRowsError(null);
     detailGate.invalidate();
     fileGate.invalidate();
     getBranchCommits(effectiveRef)
       .then((history) => {
         if (cancelled) return;
+        setRowsError(null);
         setRows(history.commits);
         setTotal(history.total);
         setSelectedCommit(null);
         setDetail(null);
         setOpenFile(null);
         setFileContent(null);
-        setLoadingRows(false);
+        setLoadedRowsScope(rowsScope);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
         setRowsError(error instanceof Error ? error.message : String(error));
         setRows([]);
-        setLoadingRows(false);
+        setLoadedRowsScope(rowsScope);
       });
     return () => {
       cancelled = true;
     };
-  }, [effectiveRef, headOid, rowsAttempt, detailGate, fileGate]);
+  }, [effectiveRef, rowsScope, detailGate, fileGate]);
 
   const selectCommit = async (row: CommitRow) => {
     const isCurrent = detailGate.begin();
@@ -530,7 +531,7 @@ export function BranchesScreen() {
             }}
         />
         <ul className="branches__rows">
-          {rowsError && <li className="branches__empty" role="alert">{rowsError}<button className="outline-button" onClick={() => setRowsAttempt((n) => n + 1)}>Try again</button></li>}
+          {!loadingRows && rowsError && <li className="branches__empty" role="alert">{rowsError}<button className="outline-button" onClick={() => setRowsAttempt((n) => n + 1)}>Try again</button></li>}
           {loadingRows && <li className="branches__empty">Loading commits…</li>}
           {!loadingRows && filteredRows.map((row) => {
             const isSelected = selectedCommit?.oid === row.oid;

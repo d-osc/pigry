@@ -1,3 +1,4 @@
+import { useScopedState } from '../../hooks/useScopedState';
 import { useRequestGate } from '../../hooks/useRequestGate';
 /** Push Commits screen — the local commits waiting for the upstream, each
  * expandable with its message and files, files open as before/after compares,
@@ -42,10 +43,11 @@ export function PushCommitsScreen() {
   const fileGate = useRequestGate();
   const { repository, pushRemote, busy, notify } = useRepository();
   const headOid = repository?.headOid ?? '';
-  const [preview, setPreview] = useState<PushPreview | null>(null);
-  const [pushing, setPushing] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const previewScope = `${headOid}:${repository?.localPath}:${repository?.currentBranch}:${reload}`;
+  const [preview, setPreview] = useScopedState<PushPreview | null>(previewScope, null);
+  const [pushing, setPushing] = useState(false);
+  const [previewError, setPreviewError] = useScopedState<string | null>(previewScope, null);
   const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [versions, setVersions] = useState<FileVersions | null>(null);
@@ -69,8 +71,6 @@ export function PushCommitsScreen() {
   // Reload whenever HEAD moves or the screen remounts.
   useEffect(() => {
     let cancelled = false;
-    setPreview(null);
-    setPreviewError(null);
     pushPreview()
       .then((result) => {
         if (!cancelled) setPreview(result);
@@ -81,7 +81,7 @@ export function PushCommitsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [headOid, repository?.localPath, repository?.currentBranch, reload]);
+  }, [headOid, repository?.localPath, repository?.currentBranch, reload, setPreview, setPreviewError]);
 
   const openCompare = async (commit: PushPreviewCommit, file: PushPreviewCommitFile) => {
     const isCurrent = fileGate.begin();

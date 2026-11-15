@@ -1,3 +1,4 @@
+import { useScopedState } from '../../hooks/useScopedState';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
@@ -54,7 +55,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
   const [retry, setRetry] = useState(0);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [signature, setSignature] = useState<string | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadFailed, setLoadFailed] = useScopedState(`${oid}:${retry}`, false);
   const [tab, setTab] = useState<'overview' | 'changes'>('overview');
   const [selectedFile, setSelectedFile] = useState<CommitFileEntry | null>(null);
   const [fileFilter, setFileFilter] = useState('');
@@ -70,7 +71,6 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
   // Load commit metadata once per mount (parent remounts us via key={oid}).
   useEffect(() => {
     let cancelled = false;
-    setLoadFailed(false);
     getCommitDetail(oid)
       .then((result) => {
         if (!cancelled) setDetail(result);
@@ -84,7 +84,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
     return () => {
       cancelled = true;
     };
-  }, [oid, retry]);
+  }, [oid, retry, setLoadFailed]);
 
   // Load the selected file's diff.
   useEffect(() => {

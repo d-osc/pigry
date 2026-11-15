@@ -1,0 +1,35 @@
+{
+  "mode": "Read-only real backend calls; private repository names and contents omitted",
+  "checkedAt": "2026-11-15T07:24:44.4243602Z",
+  "results": [
+    {
+      "backend": {
+        "prDetail": true,
+        "prs": 1,
+        "runDetail": true,
+        "runs": 5,
+        "workflows": 2
+      },
+      "scope": "public"
+    },
+    {
+      "backend": {
+        "prDetail": true,
+        "prs": 1,
+        "runDetail": false,
+        "runs": 0,
+        "workflows": 0
+      },
+      "scope": "private"
+    },
+    {
+      "scope": "invalid-token",
+      "expectedFailure": "401",
+      "passed": true
+    },
+    {
+      "passed": true,
+      "scope": "restored-credentials"
+    }
+  ]
+}

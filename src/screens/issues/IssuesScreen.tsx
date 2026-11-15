@@ -1,5 +1,5 @@
 import { useRequestGate } from '../../hooks/useRequestGate';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   CircleCheck,
@@ -122,7 +122,7 @@ export function IssuesScreen() {
     [displayIssues],
   );
 
-  const loadList = async () => {
+  const loadList = useCallback(async () => {
     const isCurrent = listGate.begin();
     setRefreshing(true);
     setListLoading(true);
@@ -144,12 +144,12 @@ export function IssuesScreen() {
       if (isCurrent()) setRefreshing(false);
       if (isCurrent()) setListLoading(false);
     }
-  };
+  }, [listGate]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadList(), 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [loadList]);
 
   // Clicking anywhere outside the ⋯ menu closes it (capture phase).
   useEffect(() => {
@@ -178,7 +178,7 @@ export function IssuesScreen() {
     }, 0);
     ghIssueView(selected)
       .then((result) => {
-        if (!cancelled) setDetail(result);
+        if (!cancelled) { setDetailError(null); setDetail(result); }
       })
       .catch((error) => {
         if (!cancelled) {
@@ -187,6 +187,7 @@ export function IssuesScreen() {
         }
       })
       .finally(() => {
+        window.clearTimeout(t2);
         if (!cancelled) setDetailLoading(false);
       });
     return () => {

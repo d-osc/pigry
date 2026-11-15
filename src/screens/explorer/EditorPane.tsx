@@ -1,5 +1,5 @@
 import { mayReloadBuffer, savedBufferIsDirty } from '../../lib/editorBuffer';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Monaco } from '@monaco-editor/react';
 import { Editor } from '../../editor/ThemedEditors';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
@@ -161,9 +161,11 @@ export function EditorPane({
   const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
   const draftRef = useRef(draft);
   const currentPath = useRef(path);
-  currentPath.current = path;
   const bufferSnapshot = useRef({ path: entry?.path, draft, saved: entry?.content.content });
-  bufferSnapshot.current = { path: entry?.path, draft, saved: entry?.content.content };
+  useLayoutEffect(() => {
+    currentPath.current = path;
+    bufferSnapshot.current = { path: entry?.path, draft, saved: entry?.content.content };
+  }, [path, entry, draft]);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const jumpRef = useRef(onJumpToCommit);
   useEffect(() => {
@@ -335,7 +337,7 @@ export function EditorPane({
         setLoadError(error instanceof Error ? error.message : String(error));
       }
     },
-    [path, entry, busy, refresh],
+    [path, entry, busy, refresh, onBufferChange],
   );
 
   const save = useCallback(async () => {
@@ -434,22 +436,18 @@ export function EditorPane({
     decorationsRef.current = editorInstance.createDecorationsCollection(decorations);
   }, [blameOn, blameLines, editorInstance, path]);
 
-  // Jump-to-commit command used by the blame hover popup links. Commands die
-  // with their editor instance, so no dispose is needed here.
+  // Monaco commands live in a global registry; explicitly unregister editor actions.
   useEffect(() => {
     if (!editorInstance) return;
-    editorInstance.addCommand(
-      0,
-      (_ctx, oid: string) => jumpRef.current(oid),
-      'pigry.jumpToCommit',
-    );
-    editorInstance.addCommand(
-      0,
-      (_ctx, sha: string) => {
-        void navigator.clipboard?.writeText(sha);
-      },
-      'pigry.copySha',
-    );
+    const jump = editorInstance.addAction({
+      id: 'pigry.jumpToCommit', label: 'View commit in graph',
+      run: (_editor, oid: string) => jumpRef.current(oid),
+    });
+    const copy = editorInstance.addAction({
+      id: 'pigry.copySha', label: 'Copy full SHA',
+      run: (_editor, sha: string) => { void navigator.clipboard?.writeText(sha); },
+    });
+    return () => { jump.dispose(); copy.dispose(); };
   }, [editorInstance]);
 
   // Blame hover popup: rich GitLens-style card (summary, body, author with
@@ -518,8 +516,8 @@ export function EditorPane({
             { value: `📄 \`${path}\` · line ${info.line}` },
             {
               value: [
-                `[View commit in graph](command:pigry.jumpToCommit "${info.oid}")`,
-                `[Copy full sha](command:pigry.copySha "${info.oid}")`,
+                `[View commit in graph](command:${editorInstance.getId()}:pigry.jumpToCommit?${encodeURIComponent(JSON.stringify([info.oid]))})`,
+                `[Copy full sha](command:${editorInstance.getId()}:pigry.copySha?${encodeURIComponent(JSON.stringify([info.oid]))})`,
               ].join(' · '),
               isTrusted: true,
             },

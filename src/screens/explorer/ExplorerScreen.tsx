@@ -199,10 +199,9 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
 
   useEffect(() => {
     let cancelled = false;
-    setTreeError(null);
     getFileTree()
       .then((result) => {
-        if (!cancelled) setTree(result);
+        if (!cancelled) { setTreeError(null); setTree(result); }
       })
       .catch((error: unknown) => {
         if (!cancelled) { setTreeError(error instanceof Error ? error.message : String(error)); setTree(null); }
@@ -556,7 +555,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
         notify(error instanceof Error ? error.message : String(error), 'error');
       }
     },
-    [tree],
+    [tree, notify],
   );
 
   // Remember the FILES panel fold state.

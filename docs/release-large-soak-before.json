@@ -1,0 +1,112 @@
+{
+  "exe": "C:\\Users\\ondev\\AppData\\Local\\Temp\\pigry-installer-f985c1fa8cc74faba60596f54998df31\\app\\pigry-validation.exe",
+  "scope": "Optimized release, real 10000-commit/20000-file repository, isolated WebView profile; temporary recent-repository config restored afterward",
+  "homeReadyMs": 709,
+  "durationSeconds": 313,
+  "cycles": 194,
+  "errors": [],
+  "samples": [
+    {
+      "seconds": 3,
+      "cycle": 1,
+      "workingSetMiB": 490.9,
+      "processes": 7,
+      "privateMiB": 307.7,
+      "jsHeapMiB": 15.6,
+      "domNodes": 8309,
+      "jsEventListeners": 1057
+    },
+    {
+      "seconds": 36,
+      "cycle": 26,
+      "processes": 7,
+      "privateMiB": 631.4,
+      "workingSetMiB": 807.4,
+      "jsHeapMiB": 35.8,
+      "domNodes": 110091,
+      "jsEventListeners": 61682
+    },
+    {
+      "seconds": 68,
+      "cycle": 50,
+      "privateMiB": 855.8,
+      "workingSetMiB": 1057.1,
+      "processes": 7,
+      "jsHeapMiB": 52.4,
+      "domNodes": 211865,
+      "jsEventListeners": 122307
+    },
+    {
+      "seconds": 100,
+      "cycle": 73,
+      "workingSetMiB": 1177.5,
+      "processes": 7,
+      "privateMiB": 973.6,
+      "jsHeapMiB": 67.9,
+      "domNodes": 313644,
+      "jsEventListeners": 182932
+    },
+    {
+      "seconds": 133,
+      "cycle": 98,
+      "workingSetMiB": 1300.1,
+      "privateMiB": 1101.4,
+      "processes": 7,
+      "jsHeapMiB": 83.1,
+      "domNodes": 415423,
+      "jsEventListeners": 243557
+    },
+    {
+      "seconds": 166,
+      "cycle": 123,
+      "processes": 7,
+      "workingSetMiB": 1404,
+      "privateMiB": 1203.2,
+      "jsHeapMiB": 98.3,
+      "domNodes": 517202,
+      "jsEventListeners": 304182
+    },
+    {
+      "seconds": 199,
+      "cycle": 148,
+      "workingSetMiB": 1532.6,
+      "processes": 7,
+      "privateMiB": 1332.8,
+      "jsHeapMiB": 113.6,
+      "domNodes": 618981,
+      "jsEventListeners": 364807
+    },
+    {
+      "seconds": 248,
+      "cycle": 158,
+      "processes": 7,
+      "workingSetMiB": 1611.3,
+      "privateMiB": 1446.4,
+      "jsHeapMiB": 128.8,
+      "domNodes": 720760,
+      "jsEventListeners": 425432
+    },
+    {
+      "seconds": 282,
+      "cycle": 182,
+      "workingSetMiB": 1736.5,
+      "privateMiB": 1569.2,
+      "processes": 7,
+      "jsHeapMiB": 144.1,
+      "domNodes": 822539,
+      "jsEventListeners": 486057
+    },
+    {
+      "seconds": 305,
+      "cycle": 194,
+      "workingSetMiB": 1825.5,
+      "privateMiB": 1649.5,
+      "processes": 7,
+      "jsHeapMiB": 159.2,
+      "domNodes": 924318,
+      "jsEventListeners": 546682
+    }
+  ],
+  "fixtureRoot": "C:\\Users\\ondev\\AppData\\Local\\Temp\\pigry-release-soak-5a4289712f2e4d2c90e7b53656dd2bbb\\profile",
+  "configRestoredExactly": true
+}

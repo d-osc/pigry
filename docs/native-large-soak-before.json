@@ -1,0 +1,67 @@
+{
+  "exe": "C:\\Users\\ondev\\Projects\\orbit\\src-tauri\\target\\debug\\pigry.exe",
+  "scope": "Native debug, real 10000-commit/20000-file repository; navigation plus live Rust calls",
+  "homeReadyMs": 2983,
+  "durationSeconds": 326,
+  "cycles": 50,
+  "errors": [],
+  "samples": [
+    {
+      "seconds": 8,
+      "cycle": 1,
+      "processes": 8,
+      "workingSetMiB": 714.5,
+      "privateMiB": 517,
+      "jsHeapMiB": 222.4
+    },
+    {
+      "seconds": 58,
+      "cycle": 6,
+      "workingSetMiB": 1805.6,
+      "processes": 8,
+      "privateMiB": 1608.5,
+      "jsHeapMiB": 260.8
+    },
+    {
+      "seconds": 112,
+      "cycle": 17,
+      "privateMiB": 1962.8,
+      "workingSetMiB": 2171.9,
+      "processes": 8,
+      "jsHeapMiB": 247.6
+    },
+    {
+      "seconds": 164,
+      "cycle": 25,
+      "privateMiB": 1886.4,
+      "processes": 8,
+      "workingSetMiB": 2099.4,
+      "jsHeapMiB": 257.5
+    },
+    {
+      "seconds": 216,
+      "cycle": 35,
+      "privateMiB": 2090.3,
+      "processes": 8,
+      "workingSetMiB": 2305.3,
+      "jsHeapMiB": 286.4
+    },
+    {
+      "seconds": 274,
+      "cycle": 45,
+      "workingSetMiB": 2410.9,
+      "processes": 8,
+      "privateMiB": 2202.9,
+      "jsHeapMiB": 299.2
+    },
+    {
+      "seconds": 305,
+      "cycle": 50,
+      "privateMiB": 2081.3,
+      "processes": 8,
+      "workingSetMiB": 2291.2,
+      "jsHeapMiB": 306.7
+    }
+  ],
+  "fixtureRoot": "C:\\Users\\ondev\\AppData\\Local\\Temp\\pigry-native-ezPQuA"
+}

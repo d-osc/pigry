@@ -27,12 +27,6 @@ jobs:
           # Linux — arm64 native
           - platform: ubuntu-24.04-arm
             cross: ''
-          # macOS — arm64 native (Apple Silicon runner)
-          - platform: macos-14
-            cross: ''
-          # macOS — x86_64 native (Intel runner)
-          - platform: macos-13
-            cross: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -42,7 +36,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install Rust stable
@@ -76,6 +70,27 @@ jobs:
 
       - name: Frontend tests
         run: npm test
+
+      - name: Lint (zero warnings)
+        run: npm run lint
+
+      - name: Install UI test browser
+        if: matrix.platform == 'windows-latest'
+        run: npx playwright install chromium
+
+      - name: UI and visual regression tests
+        if: matrix.platform == 'windows-latest'
+        run: npm run test:ui
+
+      - name: Upload UI failure traces
+        if: failure() && matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
 
       - name: Rust check (backend, native)
         working-directory: src-tauri

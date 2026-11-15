@@ -776,9 +776,14 @@ function ConflictEditor({ path, branch }: { path: string; branch: string }) {
             };
             controller.update();
             // Ctrl+S saves + stages the resolution, like the Save button.
-            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-              saveRef.current();
+            const saveAction = editor.addAction({
+              id: 'pigry.saveConflictResolution',
+              label: 'Save conflict resolution',
+              keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+              precondition: 'editorTextFocus',
+              run: () => { saveRef.current(); },
             });
+            editor.onDidDispose(() => saveAction.dispose());
           }}
           options={{
             fontSize: 11,

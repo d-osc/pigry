@@ -1,0 +1,31 @@
+{
+  "exe": "C:\\Users\\ondev\\Projects\\orbit\\src-tauri\\target\\debug\\pigry.exe",
+  "scope": "Native debug, real 10000-commit/20000-file repository; navigation plus live Rust calls",
+  "homeReadyMs": 702,
+  "durationSeconds": 6,
+  "cycles": 1,
+  "errors": [],
+  "samples": [
+    {
+      "seconds": 4,
+      "cycle": 1,
+      "privateMiB": 362.1,
+      "processes": 8,
+      "workingSetMiB": 543.5,
+      "jsHeapMiB": 20.5,
+      "domNodes": 965,
+      "jsEventListeners": 478
+    },
+    {
+      "seconds": 5,
+      "cycle": 1,
+      "workingSetMiB": 543.5,
+      "privateMiB": 361.3,
+      "processes": 8,
+      "jsHeapMiB": 20.6,
+      "domNodes": 1008,
+      "jsEventListeners": 580
+    }
+  ],
+  "fixtureRoot": "C:\\Users\\ondev\\AppData\\Local\\Temp\\pigry-native-3tQlth"
+}

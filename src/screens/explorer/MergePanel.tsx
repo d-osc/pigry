@@ -45,7 +45,7 @@ export function MergePanel({
   const [mode, setMode] = useState<MergeMode>('branch');
 
   /* ---------------- Branch mode ---------------- */
-  const branches = repository?.branches ?? [];
+  const branches = useMemo(() => repository?.branches ?? [], [repository?.branches]);
   const currentBranch = repository?.currentBranch ?? '';
   const [sourceBranch, setSourceBranch] = useState('');
   const [strategy, setStrategy] = useState<MergeStrategy>('ff');

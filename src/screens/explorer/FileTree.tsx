@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { buildTree, type TreeNode } from '../../lib/fileTree';
+import { buildTree, flattenVisibleTree, type TreeNode } from '../../lib/fileTree';
 import type { FileTree as FileTreeData } from '../../types/repository';
 import './FileTree.css';
 
@@ -118,6 +118,7 @@ function TreeRow({
   onRenameCancel,
   onMove,
   revealPath,
+  flat = false,
 }: {
   node: TreeNode;
   depth: number;
@@ -136,6 +137,7 @@ function TreeRow({
   onRenameCancel?: () => void;
   onMove?: (sourcePath: string, targetFolder: string) => void;
   revealPath?: string | null;
+  flat?: boolean;
 }) {
   // Drag state for DnD move (VS Code style: file/folder onto a folder row).
   const [dropTarget, setDropTarget] = useState(false);
@@ -184,6 +186,7 @@ function TreeRow({
       <>
         <div
           className={`tree-row tree-row--renaming${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}`}
+          data-path={node.path}
           style={{ paddingLeft: 4 + depth * 12 }}
         >
           {rowIcons}
@@ -205,7 +208,7 @@ function TreeRow({
             }}
           />
         </div>
-        {isFolder && isOpen && (
+        {!flat && isFolder && isOpen && (
           <>
             {node.children.map((child) => (
               <TreeRow
@@ -233,6 +236,7 @@ function TreeRow({
     <>
       <button
         ref={rowRef}
+        data-path={node.path}
         type="button"
         className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}${dropTarget ? ' tree-row--droptarget' : ''}`}
         style={{ paddingLeft: 4 + depth * 12 }}
@@ -278,7 +282,7 @@ function TreeRow({
           <span className="tree-row__unpushed" title="In commits that have not been pushed">↑</span>
         )}
       </button>
-      {isFolder && isOpen && (
+      {!flat && isFolder && isOpen && (
         <>
           {node.children.map((child) => (
             <TreeRow
@@ -322,6 +326,15 @@ export function FileTree({
   onMove?: (sourcePath: string, targetFolder: string) => void;
 }) {
   const treeRef = useRef<HTMLDivElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(800);
+  useEffect(() => {
+    const host = treeRef.current;
+    if (!host) return;
+    const observer = new ResizeObserver(([entry]) => setViewportHeight(entry.contentRect.height));
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
 
   // VS Code-style reveal: scroll the active row into view when it changes.
   useEffect(() => {
@@ -342,6 +355,20 @@ export function FileTree({
   }, [tree, filter]);
 
   const nodes = useMemo(() => buildTree(visibleEntries), [visibleEntries]);
+  const rows = useMemo(() => flattenVisibleTree(nodes, expanded), [nodes, expanded]);
+  const virtual = rows.length > 500;
+  const rootOffset = (repoName || branch) && !filter ? 26 : 0;
+  const count = Math.ceil(viewportHeight / 26) + 16;
+  const start = Math.min(Math.max(0, rows.length - count), Math.max(0, Math.floor((scrollTop - rootOffset) / 26) - 8));
+  useEffect(() => {
+    const host = treeRef.current;
+    if (!virtual || !host) return;
+    const index = rows.findIndex(({ node }) => node.path === (renamingPath ?? selectedPath));
+    if (index < 0) return;
+    const top = rootOffset + index * 26;
+    if (top < host.scrollTop) host.scrollTop = top;
+    else if (top + 24 > host.scrollTop + host.clientHeight) host.scrollTop = top + 24 - host.clientHeight;
+  }, [virtual, rows, selectedPath, renamingPath, rootOffset]);
   const statusMap = useMemo(
     () => new Map((tree?.changed ?? []).map((file) => [file.path, file.status])),
     [tree],
@@ -355,6 +382,7 @@ export function FileTree({
     <div
       className="file-tree"
       ref={treeRef}
+      onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
       onDragOver={(event) => {
         // Root drop target: dropping on empty area moves to the repo root.
         if (!onMove) return;
@@ -383,7 +411,19 @@ export function FileTree({
       {tree && tree.entries.length > 0 && visibleEntries.length === 0 && (
         <div className="file-tree__empty">No files match this filter</div>
       )}
-      {visibleEntries.length > 0 &&
+      {virtual ? (
+        <div style={{ position: 'relative', height: rows.length * 26, flexShrink: 0 }}>
+          {rows.slice(start, start + count).map(({ node, depth }, index) => (
+            <div key={node.path} className="file-tree__virtual-row" style={{ position: 'absolute', top: (start + index) * 26, width: '100%', height: 24 }}>
+              <TreeRow node={node} depth={depth} flat selectedPath={selectedPath}
+                statusMap={statusMap} unpushedSet={unpushedSet} expanded={expanded}
+                onToggle={onToggleFolder} onSelect={onSelect} onContextMenu={onItemContextMenu}
+                renaming={node.path === renamingPath} onRenameSubmit={onRenameSubmit}
+                onRenameCancel={onRenameCancel} onMove={onMove} />
+            </div>
+          ))}
+        </div>
+      ) : visibleEntries.length > 0 &&
         nodes.map((node) => (
           <TreeRow
             key={node.path}

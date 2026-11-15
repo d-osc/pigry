@@ -97,7 +97,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     setNotifications((prev) =>
       [{ id: ++notificationSeq, message, type, time: Date.now() }, ...prev].slice(0, 20),
     );
-  }, []);
+  }, [push]);
   const clearNotifications = useCallback(() => setNotifications([]), []);
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       pullRemote: () => runNet(() => client.gitPull()),
       pushRemote: () => runNet(() => client.gitPush()),
     }),
-    [mode, state, busy, error, netSummary, toasts, push, run, runNet, notifyAndLog, notifications, clearNotifications],
+    [mode, state, busy, error, netSummary, toasts, run, runNet, notifyAndLog, notifications, clearNotifications],
   );
 
   return <RepositoryContext.Provider value={value}>{children}</RepositoryContext.Provider>;

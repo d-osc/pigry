@@ -1,5 +1,5 @@
 import { useRequestGate } from '../../hooks/useRequestGate';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   BookMarked,
   BookOpen,
@@ -77,7 +77,7 @@ export function WikiScreen() {
   const [saving, setSaving] = useState(false);
 
   // Full load: probe → clone/fetch → list pages.
-  const loadWiki = async () => {
+  const loadWiki = useCallback(async () => {
     const isCurrent = listGate.begin();
     setPhase('loading');
     setLoadError('');
@@ -114,13 +114,13 @@ export function WikiScreen() {
     } finally {
       if (isCurrent()) setPagesLoading(false);
     }
-  };
+  }, [listGate]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadWiki(), 0);
     return () => window.clearTimeout(timer);
      
-  }, []);
+  }, [loadWiki]);
 
   // The selected page always reads through the local wiki clone.
   useEffect(() => {

@@ -1,6 +1,8 @@
 # Dependencies & build output
 node_modules/
 dist/
+playwright-report/
+test-results/
 
 # Local tooling / scratch files
 .serena/

@@ -51,7 +51,6 @@ export function CommandPalette({
   filesLoading,
   onOpenFile,
   onSwitchToFiles,
-  onSwitchToCommands,
   recentlyOpened,
   onSearchText,
   activeEditorPath,
@@ -360,7 +359,7 @@ export function CommandPalette({
       });
     }
     return commandRows;
-  }, [mode, query, commands, files, onOpenFile, onSwitchToFiles, onSwitchToCommands, recentlyOpened, onClose, onSearchText, activeEditorPath, editorSymbols, workspaceSymbols, offsetInfo, effectiveMode]);
+  }, [query, commands, files, onOpenFile, onSwitchToFiles, recentlyOpened, onClose, onSearchText, activeEditorPath, editorSymbols, workspaceSymbols, offsetInfo, effectiveMode]);
 
   const selectable = ranked.filter(({ row }) => row.enabled);
   const clampedIndex = Math.min(activeIndex, Math.max(0, selectable.length - 1));

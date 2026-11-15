@@ -31,12 +31,6 @@ jobs:
           # Linux — arm64 (native GitHub arm runner)
           - platform: ubuntu-24.04-arm
             args: ''
-          # macOS — Apple Silicon (dmg + app)
-          - platform: macos-14
-            args: '--target aarch64-apple-darwin'
-          # macOS — Intel (dmg + app)
-          - platform: macos-13
-            args: '--target x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -46,13 +40,13 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.cross || (matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '') }}
+          targets: ${{ matrix.cross || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -90,7 +84,6 @@ jobs:
 
             **Windows** — .msi / .exe (NSIS)
             **Linux** — .deb / .rpm / .AppImage
-            **macOS** — .dmg (Apple Silicon + Intel)
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

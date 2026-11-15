@@ -1,0 +1,63 @@
+import { test, expect } from '@playwright/test';
+import { installBackend, openFixture } from './backend.mjs';
+const errors = new WeakMap();
+
+test.beforeEach(async ({ page }) => {
+  errors.set(page, []);
+  page.on('pageerror', error => errors.get(page).push(error.message));
+  await installBackend(page);
+  await openFixture(page);
+});
+
+test.afterEach(async ({ page }) => {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(errors.get(page)).toEqual([]);
+  await expect(page.locator('.error-boundary')).toHaveCount(0);
+});
+
+test('populated private PR and workflow details render', async ({ page }) => {
+  await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
+  await page.getByText('Private repository pull request', { exact: true }).first().click();
+  await expect(page.getByText('Reviewable private PR body')).toBeVisible();
+  await page.locator('.nav-item').filter({ hasText: 'Actions' }).click();
+  await expect(page.getByText('Successful CI run', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('CI completed successfully')).toBeVisible();
+});
+
+for (const message of ['HTTP 401: Bad credentials', 'HTTP 403: Resource protected by organization SAML enforcement. Authorize SSO.', 'HTTP 404: Not Found. Check repository access.']) {
+  test(`GitHub failure is visible and retry recovers: ${message.slice(0, 8)}`, async ({ page }) => {
+    await page.evaluate(message => { window.testBackend.failures.gh_pr_list = message; }, message);
+    await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
+    await expect(page.getByText(message, { exact: false }).first()).toBeVisible();
+    await page.evaluate(() => { delete window.testBackend.failures.gh_pr_list; });
+    await page.getByRole('button', { name: /try again|retry/i }).first().click();
+    await expect(page.getByText('Private repository pull request', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(message, { exact: false })).toHaveCount(0);
+  });
+}
+
+test('workflow artifact error survives a fast response and retry succeeds', async ({ page }) => {
+  await page.evaluate(() => { window.testBackend.failures.gh_run_artifacts = 'Artifact access denied'; });
+  await page.locator('.nav-item').filter({ hasText: 'Actions' }).click();
+  await page.getByRole('button', { name: /Artifacts/ }).click();
+  await expect(page.getByText('Artifact access denied')).toBeVisible();
+  await page.evaluate(() => { delete window.testBackend.failures.gh_run_artifacts; });
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByText('This run did not upload any artifacts.')).toBeVisible();
+});
+
+test('staging and a rejected commit preserve the draft until a successful retry', async ({ page }) => {
+  await page.locator('.nav-item').filter({ hasText: 'Working changes' }).click();
+  await page.getByRole('button', { name: 'Stage all', exact: true }).click();
+  const message = page.getByRole('textbox', { name: 'Commit message' });
+  const draft = 'Validation commit\n\nKeep this description after failure.';
+  await message.fill(draft);
+  await page.evaluate(() => { window.testBackend.commitFails = true; });
+  await page.getByRole('button', { name: /Commit 1 staged file/ }).click();
+  await expect(page.getByText('Pre-commit hook rejected the commit').first()).toBeVisible();
+  await expect(message).toHaveValue(draft);
+  await page.evaluate(() => { window.testBackend.commitFails = false; });
+  await page.getByRole('button', { name: /Commit 1 staged file/ }).click();
+  await expect(page.getByText('Everything is committed. Edit files to see them here.')).toBeVisible();
+  await expect(message).toHaveCount(0);
+});

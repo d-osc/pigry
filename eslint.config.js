@@ -3,7 +3,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'src-tauri/target', 'src-tauri/gen', '.figma-analysis'],
+    ignores: ['dist', 'src-tauri/target', 'src-tauri/gen', '.figma-analysis', 'playwright-report', 'test-results'],
   },
   ...tseslint.configs.recommended,
   {

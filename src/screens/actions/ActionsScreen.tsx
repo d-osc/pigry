@@ -1,5 +1,5 @@
 import { useRequestGate } from '../../hooks/useRequestGate';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Ban,
   Check,
@@ -333,7 +333,7 @@ export function ActionsScreen() {
     return match?.path ?? '';
   }, [detail, workflows]);
 
-  const loadAll = async (silent = false) => {
+  const loadAll = useCallback(async (silent = false) => {
     const isCurrent = listGate.begin();
     if (silent) setRefreshing(true);
     else setLoading(true);
@@ -356,13 +356,13 @@ export function ActionsScreen() {
       if (isCurrent()) setLoading(false);
       if (isCurrent()) setRefreshing(false);
     }
-  };
+  }, [listGate]);
 
   useEffect(() => {
     // Deferred like the other screens — gh shells out synchronously here.
     const timer = window.setTimeout(() => void loadAll(), 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [loadAll]);
 
   useEffect(() => {
     if (!runMenuOpen) return;
@@ -387,7 +387,9 @@ export function ActionsScreen() {
     const t2 = window.setTimeout(() => setDetailError(null), 0);
     ghRunView(selected)
       .then((result) => {
+        window.clearTimeout(t2);
         if (!cancelled) {
+          setDetailError(null);
           setDetail(result);
           // A re-run replaces job ids — fall back to the combined log.
           if (logJobRef.current !== null && !result?.jobs.some((job) => job.id === logJobRef.current)) {
@@ -396,6 +398,7 @@ export function ActionsScreen() {
         }
       })
       .catch((err) => {
+        window.clearTimeout(t2);
         if (!cancelled) {
           setDetail(null);
           setDetailError(err instanceof Error ? err.message : String(err));
@@ -423,7 +426,7 @@ export function ActionsScreen() {
     }, 0);
     ghRunLogs(selected, logJob ?? undefined)
       .then((text) => {
-        if (!cancelled) setLogText(text);
+        if (!cancelled) { setLogError(null); setLogText(text); }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -432,6 +435,7 @@ export function ActionsScreen() {
         }
       })
       .finally(() => {
+        window.clearTimeout(t2);
         if (!cancelled) setLogLoading(false);
       });
     return () => {
@@ -447,16 +451,16 @@ export function ActionsScreen() {
       return () => window.clearTimeout(t);
     }
     let cancelled = false;
-    const t2 = window.setTimeout(() => setArtifactsLoading(true), 0);
-    setArtifactsError(null);
+    const t2 = window.setTimeout(() => { setArtifactsLoading(true); setArtifactsError(null); }, 0);
     ghRunArtifacts(selected)
       .then((items) => {
-        if (!cancelled) setArtifacts(items);
+        if (!cancelled) { setArtifactsError(null); setArtifacts(items); }
       })
       .catch((error: unknown) => {
         if (!cancelled) setArtifactsError(error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
+        window.clearTimeout(t2);
         if (!cancelled) setArtifactsLoading(false);
       });
     return () => {

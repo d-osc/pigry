@@ -39,7 +39,7 @@ export function parseSkillMeta(id: string, markdown: string): SkillEntry {
   }
   if (!description) {
     let pastTitle = false;
-    let collecting: string[] = [];
+    const collecting: string[] = [];
     for (const line of lines) {
       if (!pastTitle) {
         if (line.startsWith('# ')) pastTitle = true;

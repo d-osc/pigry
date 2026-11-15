@@ -1323,7 +1323,9 @@ pub async fn get_file_history(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::build_file_history(&repo_path, &path, ref_name.as_deref()).map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        git_state::build_file_history(&repo_path, &path, ref_name.as_deref())
+    }).await.map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

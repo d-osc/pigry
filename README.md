@@ -18,6 +18,8 @@ npm run tauri dev
 ```sh
 npm test
 npm run test:git
+npm run test:ui
+npm run lint
 npm run build
 ```
 
@@ -33,4 +35,6 @@ npm run test:desktop
 
 The desktop smoke script uses an isolated debug config and WebView profile, measures three Home loads, and stops only app process trees that it started. Temporary repositories remain available for inspection. Release builds ignore the debug-only `PIGRY_TEST_CONFIG_DIR` setting.
 
-See [the validation report](docs/VALIDATION.md) for completed checks, measurements and remaining verification limits, including full-repository lint and GitHub account-specific scenarios.
+UI tests use Playwright Chromium (`npx playwright install chromium` once). They cover both themes, navigation, keyboard controls, populated GitHub views, access failures/retry, commit-draft recovery and Windows visual snapshots. GitHub failure scenarios use a test-only IPC fixture; live read-only backend checks are separate.
+
+See [the validation report](docs/VALIDATION.md) and [release and scale validation](docs/RELEASE_VALIDATION.md) for measurements, reproduction commands and remaining verification limits.

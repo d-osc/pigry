@@ -81,6 +81,8 @@ export class ConflictController {
   private diffEditors: MonacoEditorNS.editor.IStandaloneDiffEditor[] = [];
   private models: MonacoEditorNS.editor.ITextModel[] = [];
   private compareZone: string | null = null;
+  private actions: MonacoEditorNS.IDisposable[] = [];
+  private disposed = false;
   onChange: ((text: string) => void) | null = null;
 
   constructor(
@@ -90,13 +92,24 @@ export class ConflictController {
     // Keyboard fallback for the accept actions (works without the
     // view-zone widget): Ctrl+Alt+1 current / 2 incoming / 3 both.
     const bind = (key: number, kind: ApplyKind) => {
-      this.editor.addCommand(this.monaco.KeyMod.CtrlCmd | this.monaco.KeyMod.Alt | key, () => {
-        this.accept(kind);
-      });
+      this.actions.push(this.editor.addAction({
+        id: `pigry.accept.${kind}`,
+        label: `Accept ${kind} change`,
+        keybindings: [this.monaco.KeyMod.CtrlCmd | this.monaco.KeyMod.Alt | key],
+        precondition: 'editorTextFocus',
+        run: () => this.accept(kind),
+      }));
     };
     bind(this.monaco.KeyCode.Digit1, 'current');
     bind(this.monaco.KeyCode.Digit2, 'incoming');
     bind(this.monaco.KeyCode.Digit3, 'both');
+    this.editor.onDidDispose(() => {
+      // The editor already owns removal of its decorations/view zones.
+      this.decorations = [];
+      this.zones = [];
+      this.compareZone = null;
+      this.dispose();
+    });
   }
 
   /** True when the buffer contains conflict markers. */
@@ -130,11 +143,17 @@ export class ConflictController {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.clear();
+    for (const action of this.actions) action.dispose();
+    this.actions = [];
+    this.onChange = null;
   }
 
   /** Rebuilds decorations + action widgets for the current buffer. */
   update(): void {
+    if (this.disposed) return;
     this.clear();
     const model = this.editor.getModel();
     if (!model) return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffectEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bold,
@@ -289,7 +289,7 @@ const FILE_TOOLS: ToolSpec[] = [
 
 /** Images the read_image tool captured this tool round — flushed into the
  * conversation as visible image blocks after the tool result. */
-let pendingImages: string[] = [];
+const pendingImages: string[] = [];
 
 /** Whether the CURRENT turn's model accepts image input. Set per turn from
  * the active AiModelEntry — explicit inputTypes govern; entries without them
@@ -1221,673 +1221,21 @@ const SUGGESTIONS: Array<{ label: string; prompt: string }> = [
   { label: 'Write tests', prompt: 'Suggest focused tests for this file.' },
 ];
 
-export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection }: AiAgentPanelProps) {
-  const { repository, notify } = useRepository();
-  // Chats and memories live under this team's .pigry/teams/<team>/ store.
-  const team = defaultTeam ?? 'Copilot';
-  const [providers, setProviders] = useState<AiProviderEntry[]>([]);
-  const [activeId, setActiveId] = useState<string>(() => activeProviderId());
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  /** Which project-knowledge dialog is open (memory / skills). */
-  const [knowDialog, setKnowDialog] = useState<'memory' | 'skills' | null>(null);
-  // Message being edited (index) + its draft (Copilot-style edit & resubmit).
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState('');
-  // Dismissed selection key — reset during render when a different
-  // selection arrives (adjust-state-on-change, no effect needed).
-  const selectionKey = selection ? `${selection.path}:${selection.startLine}:${selection.endLine}` : '';
-  const [dismissedKey, setDismissedKey] = useState('');
-  const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
-  if (prevSelectionKey !== selectionKey) {
-    setPrevSelectionKey(selectionKey);
-    setDismissedKey('');
-  }
-  const activeSelection =
-    selection && selectionKey !== dismissedKey ? selection : null;
+interface MessageContextOptions {
+  text: string;
+  team: string;
+  target: AgentEntry | null;
+  repositoryPath: string;
+  activeSelection: AiAgentPanelProps['selection'];
+  activeHistory: AiAgentPanelProps['historySelection'];
+  activeRailCommit: { oid: string; summary: string } | null;
+  activeRailSelection: { text: string; source: string; path?: string } | null;
+  attachedFiles: AttachedFile[];
+}
 
-  // File-history selection — same dismiss-and-reset pattern as the
-  // editor selection so a newly picked commit re-arms the chip.
-  const historyKey = historySelection
-    ? `${historySelection.path}@${historySelection.oid}`
-    : '';
-  const [dismissedHistory, setDismissedHistory] = useState('');
-  const [prevHistoryKey, setPrevHistoryKey] = useState(historyKey);
-  if (prevHistoryKey !== historyKey) {
-    setPrevHistoryKey(historyKey);
-    setDismissedHistory('');
-  }
-  const activeHistory =
-    historySelection && historyKey !== dismissedHistory ? historySelection : null;
-
-  // Commit shared from a workspace screen (Commit graph / Branches / Cherry
-  // Pick / Rebase Branch / Push Commits / Merge preview) — attachable chip.
-  const [railCommit, setRailCommit] = useState<{ oid: string; summary: string } | null>(null);
-  const [dismissedRailCommit, setDismissedRailCommit] = useState('');
-  const [prevRailCommitOid, setPrevRailCommitOid] = useState('');
-  if (prevRailCommitOid !== (railCommit?.oid ?? '')) {
-    setPrevRailCommitOid(railCommit?.oid ?? '');
-    setDismissedRailCommit('');
-  }
-  const activeRailCommit =
-    railCommit && railCommit.oid !== dismissedRailCommit ? railCommit : null;
-
-  // Code highlighted (คลุมดำ) anywhere in the workspace — either captured
-  // from the DOM selection or reported by a Monaco diff editor via the
-  // bridge; `source` names the workspace menu, `path` the file when known.
-  const [railSelection, setRailSelection] = useState<{
-    text: string;
-    source: string;
-    path?: string;
-  } | null>(null);
-  const railSelKey = railSelection?.text ?? '';
-  const [dismissedRailSel, setDismissedRailSel] = useState('');
-  const [prevRailSelKey, setPrevRailSelKey] = useState(railSelKey);
-  if (prevRailSelKey !== railSelKey) {
-    setPrevRailSelKey(railSelKey);
-    setDismissedRailSel('');
-  }
-  const activeRailSelection =
-    railSelection && railSelKey !== dismissedRailSel ? railSelection : null;
-
-  // Context is scoped to the menu's own chat (each menu has a separate
-  // conversation) — switching menus drops the shared commit/selection so one
-  // menu's context never rides into another menu's chat.
-  const [prevTeamScope, setPrevTeamScope] = useState(team);
-  if (prevTeamScope !== team) {
-    setPrevTeamScope(team);
-    setRailCommit(null);
-    setRailSelection(null);
-  }
-
-  // Workspace → chat bridge: screens announce the commit the user opened.
-  useEffect(() => {
-    const onShareCommit = (event: Event) => {
-      const detail = (event as CustomEvent<{ oid?: string; summary?: string }>).detail;
-      if (!detail?.oid) return;
-      setRailCommit({ oid: detail.oid, summary: detail.summary ?? '' });
-    };
-    window.addEventListener('pigry:chat-commit', onShareCommit);
-    return () => window.removeEventListener('pigry:chat-commit', onShareCommit);
-  }, []);
-
-  // Monaco diff editors announce their selections through the bridge
-  // (Monaco doesn't fire DOM selection events).
-  useEffect(() => {
-    const onShareSelection = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: string; path?: string; source?: string }>)
-        .detail;
-      const text = detail?.text ?? '';
-      if (!text.trim()) return;
-      setRailSelection({ text: text.slice(0, 8000), source: detail?.source ?? team, path: detail?.path });
-    };
-    window.addEventListener('pigry:chat-selection', onShareSelection);
-    return () => window.removeEventListener('pigry:chat-selection', onShareSelection);
-  }, [team]);
-
-  // Capture highlighted text anywhere in the app (debounced) — except inside
-  // this panel (chat text isn't context) and inside Monaco editors (they
-  // report through the bridge above, their DOM selection is not visible).
-  const panelRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    let timer = 0;
-    const onSelectionChange = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        const sel = window.getSelection();
-        const text = sel?.toString() ?? '';
-        if (!sel || sel.isCollapsed || text.trim().length === 0) return;
-        const node = sel.anchorNode;
-        const el = node instanceof Element ? node : (node?.parentElement ?? null);
-        if (el && panelRef.current?.contains(el)) return;
-        if (el?.closest?.('.monaco-editor')) return;
-        setRailSelection({ text: text.slice(0, 8000), source: team });
-      }, 350);
-    };
-    document.addEventListener('selectionchange', onSelectionChange);
-    return () => {
-      document.removeEventListener('selectionchange', onSelectionChange);
-      window.clearTimeout(timer);
-    };
-  }, [team]);
-
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  /** Username of the agent currently generating a reply (typing indicator). */
-  const [replyingAs, setReplyingAs] = useState('');
-  /** Live phase of the replying agent — drives the activity animation. */
-  const [activity, setActivity] = useState<ActivityState | null>(null);
-  /** Which section of the panel is visible — chat body or one of the tool tabs. */
-  const [panelTab, setPanelTab] = useState<
-    'chat' | 'tools' | 'mcp' | 'plugins' | 'agents' | 'hooks' | 'instructions'
-  >('chat');
-  /** Active group-chat name; custom=true once the user renames the group. */
-  const [groupTitle, setGroupTitle] = useState<{ name: string; custom: boolean }>({
-    name: '',
-    custom: false,
-  });
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-  /** Inline rename of the group name shown in the header. */
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
-  /** The signed-in GitHub account — real name + avatar on user messages. */
-  const [ghUser, setGhUser] = useState<{ name: string; login: string; avatarUrl: string } | null>(null);
-  // Attribution stamped into every message: agent username + repo owner.
-  const actingAgent = allAgents().find((agent) => agent.enabled);
-  const agentUsername = actingAgent?.username || 'ai-agent';
-  // Tier 1: the hard-coded default agent of this menu's team — answers
-  // every turn that carries no @mention, with its own private memory.
-  const defaultAgent = builtinAgents().find(
-    (agent) => agent.enabled && agent.tier === 'default' && agent.team === team,
-  );
-  /** The agent identity this menu's chat belongs to: its own default agent
-   * (not shared with other menus' agents), falling back to the first
-   * enabled agent when the team has no default-tier one. */
-  const scopeAgent = defaultAgent?.username ?? agentUsername;
-  // Sessions are scoped by that agent — the same default agent continues one
-  // conversation across menus; a different menu agent gets its own thread.
-  const chatScope = useMemo(() => ({ agent: scopeAgent }), [scopeAgent]);
-  const ownerName = ghUser?.name || repository?.account.name || 'local-user';
-  const [images, setImages] = useState<ChatImage[]>([]);
-  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [attachError, setAttachError] = useState('');
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // @mention autocomplete — typing `@` opens the agent picker; the picked
-  // @username directs the message at that agent (its provider/model reply).
-  const [mention, setMention] = useState<MentionState | null>(null);
-  // Clicking an agent avatar/name in the chat opens its full profile.
-  const [viewingAgent, setViewingAgent] = useState<AgentEntry | null>(null);
-  const [mentionIdx, setMentionIdx] = useState(0);
-  // The @ picker lists only THIS menu's agents (team members + the menu's
-  // default agent) plus pigry's base agents — other teams stay out of the way.
-  const teamAgents = useMemo(
-    () =>
-      allAgents().filter(
-        (agent) =>
-          agent.enabled && agent.username && agent.team === team,
-      ),
-    [team, repository?.headOid],
-  );
-  const mentionList = useMemo(
-    () => (mention ? mentionCandidates(teamAgents, mention.query) : []),
-    [mention, teamAgents],
-  );
-  const mentionPos = Math.min(mentionIdx, Math.max(0, mentionList.length - 1));
-
-  // #skill autocomplete — typing `#` opens the skill picker; the picked
-  // #name tag attaches that skill's content to the turn.
-  const [skills, setSkills] = useState<SkillEntry[]>([]);
-  const [skillTok, setSkillTok] = useState<SkillTokenState | null>(null);
-  const [skillIdx, setSkillIdx] = useState(0);
-  const skillList = useMemo(
-    () => (skillTok ? skillCandidates(skills, skillTok.query) : []),
-    [skillTok, skills],
-  );
-  const skillPos = Math.min(skillIdx, Math.max(0, skillList.length - 1));
-
-  const closeSkill = () => {
-    setSkillTok(null);
-    setSkillIdx(0);
-  };
-
-  /** Commits the picked skill into the composer text. */
-  const pickSkill = (skill: SkillEntry) => {
-    if (!skillTok) return;
-    const caret = textareaRef.current?.selectionStart ?? input.length;
-    const next = applySkillToken(input, skillTok, caret, skill.name || skill.id);
-    setInput(next.value);
-    closeSkill();
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(next.caret, next.caret);
-    });
-  };
-
-  // Load skill metadata once for the picker.
-  useEffect(() => {
-    let cancelled = false;
-    listSkills()
-      .then((list) => {
-        if (!cancelled) setSkills(list);
-      })
-      .catch(() => {
-        // skill listing unavailable
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const closeMention = () => {
-    setMention(null);
-    setMentionIdx(0);
-  };
-
-  /** Commits the picked agent into the composer text. */
-  const pickMention = (agent: AgentEntry) => {
-    if (!mention) return;
-    const caret = textareaRef.current?.selectionStart ?? input.length;
-    const next = applyMention(input, mention, caret, agent.username);
-    setInput(next.value);
-    closeMention();
-    requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(next.caret, next.caret);
-    });
-  };
-
-  // ZCode Cloud (GLM) — detected automatically when ZCode desktop is installed.
-  const [zcodeProvider, setZcodeProvider] = useState<AiProviderEntry | null>(null);
-  // CLI coding agents — detected via --version on mount.
-  const [cliProviders, setCliProviders] = useState<AiProviderEntry[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    detectZcodeGlm()
-      .then((provider) => {
-        if (!cancelled && provider) {
-          setZcodeProvider({
-            ...cliEntry('zcode-cloud', provider.name, 'claude-code', provider.model),
-            type: 'zcode',
-            baseUrl: provider.baseUrl,
-            apiKey: provider.apiKey,
-          });
-        }
-      })
-      .catch(() => {});
-    cliDetect()
-      .then((result) => {
-        if (cancelled) return;
-        const found: AiProviderEntry[] = [];
-        if (result.claude) {
-          found.push(
-            cliEntry(
-              'cli-claude',
-              'Claude Code' + (result.claudeVersion ? ' · ' + result.claudeVersion : ''),
-              'claude-code',
-              'claude CLI (own subscription)',
-            ),
-          );
-        }
-        if (result.codex) {
-          found.push(
-            cliEntry(
-              'cli-codex',
-              'Codex' + (result.codexVersion ? ' · ' + result.codexVersion : ''),
-              'codex',
-              'codex CLI (own subscription)',
-            ),
-          );
-        }
-        setCliProviders(found);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const allProviders = useMemo(
-    () => [...cliProviders, ...(zcodeProvider ? [zcodeProvider] : []), ...providers],
-    [cliProviders, zcodeProvider, providers],
-  );
-  const active =
-    allProviders.find((provider) => provider.id === activeId) ?? allProviders[0] ?? null;
-
-  // Mirror the Settings → AI Provider manager (localStorage-driven).
-  useEffect(() => {
-    const sync = () => {
-      setProviders(loadProviderStore());
-      const id = activeProviderId();
-      if (id) setActiveId(id);
-    };
-    sync();
-    window.addEventListener('focus', sync);
-    return () => window.removeEventListener('focus', sync);
-  }, []);
-
-  // Chat sessions (Copilot-style) stored IN the repo under .pigry/chat/:
-  // migrate legacy localStorage sessions, restore the active one on mount,
-  // and save the file on every change. Sessions with no messages are not kept.
-  const [sessionId, setSessionId] = useState(() => activeSessionId(chatScope));
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  /** Context-usage dropdown beside the model pill (click the ctx ring). */
-  const [ctxDropOpen, setCtxDropOpen] = useState(false);
-  const ctxDropRef = useRef<HTMLDivElement | null>(null);
-  const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
-  const sessionsRef = useRef<HTMLDivElement | null>(null);
-  /** Creation time of the current session (preserved across saves). */
-  const createdAtRef = useRef(now());
-
-  // One-shot restore: active session, else the newest, else a fresh id.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await migrateLocalSessions();
-      const sessions = await listSessions(chatScope);
-      if (cancelled) return;
-      let id = activeSessionId(chatScope);
-      let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
-      if (!restored && sessions.length > 0) {
-        restored = sessions[0];
-        id = restored.id;
-        setActiveSessionId(id, chatScope);
-      }
-      if (!id) {
-        id = `chat-${now().toString(36)}`;
-        setActiveSessionId(id, chatScope);
-      }
-      setSessionId(id);
-      if (restored) {
-        createdAtRef.current = restored.createdAt;
-        setMessages(restored.messages);
-      }
-      setSessionList(sessions);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Restore runs once per mount — the team does not change on this screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (messages.length === 0 || !sessionId) return;
-    let cancelled = false;
-    (async () => {
-      await saveSession({
-        id: sessionId,
-        title: groupTitle.custom ? groupTitle.name : titleFromMessages(messages),
-        titleCustom: groupTitle.custom,
-        createdAt: createdAtRef.current,
-        updatedAt: now(),
-        messages,
-        team,
-        // Tagged with the scope agent so the agent-scoped session list
-        // (the same identity on every menu this agent serves) finds it.
-        agentUsername: scopeAgent,
-        owner: ownerName,
-      });
-      if (!cancelled) setSessionList(await listSessions(chatScope));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [messages, sessionId, groupTitle, chatScope, team, scopeAgent, ownerName]);
-
-  // Auto-scroll to the newest message.
-  useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
-  }, [messages, sending]);
-
-  // Outside click closes the sessions popover.
-  useEffect(() => {
-    if (!sessionsOpen) return;
-    const onDoc = (event: MouseEvent) => {
-      if (sessionsRef.current?.contains(event.target as Node)) return;
-      setSessionsOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc, true);
-    return () => document.removeEventListener('mousedown', onDoc, true);
-  }, [sessionsOpen]);
-
-  // Outside click / Escape closes the context-usage dropdown.
-  useEffect(() => {
-    if (!ctxDropOpen) return;
-    const onDoc = (event: MouseEvent) => {
-      if (ctxDropRef.current?.contains(event.target as Node)) return;
-      setCtxDropOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setCtxDropOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc, true);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDoc, true);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [ctxDropOpen]);
-
-  // The signed-in GitHub account — real name + avatar on user messages.
-  // Reads the shared ghProfile cache (fetched at app start, kept fresh by
-  // the title bar account menu).
-  useEffect(
-    () =>
-      subscribeGhProfile((profile) => {
-        setGhUser(profile ? { name: profile.login, login: profile.name, avatarUrl: profile.avatarUrl } : null);
-      }),
-    [],
-  );
-
-  /** Starts a fresh conversation; the previous one stays in history. */
-  /** Rolling auto-summarize — every 15 messages since the last summary,
-   * the recent slice is distilled into the agent's own memory. Closing the
-   * app mid-session therefore loses at most those 15 messages of progress.
-   * The New-chat button summarizes everything remaining as well. */
-  const summarizedUpToRef = useRef(0);
-  useEffect(() => {
-    if (sending) return;
-    if (messages.length - summarizedUpToRef.current < 15) return;
-    const slice = messages.slice(summarizedUpToRef.current);
-    summarizedUpToRef.current = messages.length;
-    void summarizeSessionToMemory(slice);
-  }, [messages, sending]);
-  /** Auto-summarizes the ending session into the session owner's memory —
-   * progress survives even when the agent never called memory_save itself.
-   * Fire-and-forget: never blocks the new chat from starting. */
-  const summarizeSessionToMemory = async (history: ChatMessage[]) => {
-    if (history.length < 4) return;
-    const target = allAgents().find(
-      (agent) => agent.enabled && agent.username === scopeAgent,
-    );
-    if (!target) return;
-    const transcript = history
-      .slice(-30)
-      .map((m) =>
-        (m.role === 'assistant' ? '@' + (m.agent ?? target.username) + ': ' : 'user: ') +
-        String(m.text ?? '').replace(/\s+/g, ' ').slice(0, 300),
-      )
-      .join('\n');
-    const instruction: ChatMessage = {
-      role: 'user',
-      text:
-        '[session-end task] The conversation below is ending. Extract the durable facts, decisions, user preferences and progress as 1-3 short memory notes. One note per line, each self-contained. Return ONLY the note lines — no numbering, no commentary.\n\n--- CONVERSATION ---\n' +
-        transcript,
-      time: Date.now(),
-      owner: 'system',
-    };
-    try {
-      const reply = await runIsolatedTurn([instruction], target);
-      const notes = (reply.text || '')
-        .split('\n')
-        .map((l) => l.replace(/^[-*\d.\s]+/, '').trim())
-        .filter((l) => l.length > 10)
-        .slice(0, 5);
-      for (const note of notes) {
-        await memoryAdd(note, team, target.username);
-      }
-      if (notes.length > 0) {
-        notify('Session summarized — ' + notes.length + ' note(s) saved to @' + target.username + ' memory', 'success');
-      }
-    } catch {
-      // provider unavailable — silently skip
-    }
-  };
-  const startNewChat = () => {
-    // Auto-summarize the ending session into the agent's own memory.
-    void summarizeSessionToMemory(messages);
-    const id = `chat-${now().toString(36)}`;
-    setActiveSessionId(id, chatScope);
-    setSessionId(id);
-    createdAtRef.current = now();
-    setGroupTitle({ name: '', custom: false });
-    setMessages([]);
-    setInput('');
-    setImages([]);
-    setEditingIndex(null);
-    setSessionsOpen(false);
-  };
-
-  const switchSession = (session: AiChatSession) => {
-    setActiveSessionId(session.id, chatScope);
-    setSessionId(session.id);
-    createdAtRef.current = session.createdAt;
-    setGroupTitle({ name: session.title, custom: session.titleCustom === true });
-    setMessages(session.messages);
-    setInput('');
-    setEditingIndex(null);
-    setSessionsOpen(false);
-  };
-
-  /** Renames the group chat on disk and refreshes the list. */
-  const commitRename = async (session: AiChatSession, name: string) => {
-    const title = name.trim();
-    if (!title) {
-      setRenamingId(null);
-      return;
-    }
-    try {
-      await renameSessionFile(session.id, title);
-      setSessionList(await listSessions(chatScope));
-      if (session.id === sessionId) setGroupTitle({ name: title, custom: true });
-    } catch (error) {
-      notify(`Could not rename group: ${String(error)}`, 'error');
-    }
-    setRenamingId(null);
-  };
-
-  const removeSession = async (id: string) => {
-    await deleteSessionFile(id);
-    const kept = await listSessions(chatScope);
-    setSessionList(kept);
-    if (id === sessionId) startNewChat();
-  };
-
-  const attachImages = (files: FileList | null) => {
-    if (!files?.length) return;
-    setAttachError('');
-    Array.from(files)
-      .slice(0, 4)
-      .forEach((file) => {
-        if (!file.type.startsWith('image/')) {
-          setAttachError(`${file.name} is not an image`);
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          setImages((current) => [...current, { name: file.name, dataUrl: String(reader.result) }]);
-        };
-        reader.readAsDataURL(file);
-      });
-  };
-
-  /** Wraps the composer selection with markdown tokens (bold, code, link…). */
-  const applyMdWrap = (before: string, after: string, placeholder: string) => {
-    const ta = textareaRef.current;
-    const start = ta?.selectionStart ?? input.length;
-    const end = ta?.selectionEnd ?? input.length;
-    const selected = input.slice(start, end);
-    const body = selected || placeholder;
-    setInput(input.slice(0, start) + before + body + after + input.slice(end));
-    requestAnimationFrame(() => {
-      if (!ta) return;
-      ta.focus();
-      const selStart = start + before.length;
-      ta.setSelectionRange(selStart, selStart + body.length);
-    });
-  };
-
-  /** Prefixes every selected line (lists, quotes, headings). */
-  const applyMdPrefix = (prefix: string) => {
-    const ta = textareaRef.current;
-    const start = ta?.selectionStart ?? 0;
-    const end = ta?.selectionEnd ?? 0;
-    const lineStart = input.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-    const block = input.slice(lineStart, end);
-    const prefixed = block
-      ? block.split('\n').map((line) => (line.startsWith(prefix) ? line : prefix + line)).join('\n')
-      : prefix;
-    setInput(input.slice(0, lineStart) + prefixed + input.slice(end));
-    requestAnimationFrame(() => {
-      if (!ta) return;
-      ta.focus();
-      ta.setSelectionRange(lineStart, lineStart + prefixed.length);
-    });
-  };
-
-  /** Inline `code`, or a fenced block when the selection spans lines. */
-  const applyMdCode = () => {
-    const ta = textareaRef.current;
-    const start = ta?.selectionStart ?? 0;
-    const end = ta?.selectionEnd ?? 0;
-    const multi = input.slice(start, end).includes('\n');
-    applyMdWrap(multi ? '```\n' : '`', multi ? '\n```' : '`', 'code');
-  };
-
-  /** Paste support — images from the clipboard attach as chat images. */
-  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = event.clipboardData?.files;
-    if (files && Array.from(files).some((file) => file.type.startsWith('image/'))) {
-      event.preventDefault();
-      attachImages(files);
-    }
-  };
-
-  const attachActiveFile = async () => {
-    if (!fileName) return;
-    setAttachError('');
-    try {
-      const file = await readWorktreeFile(fileName);
-      if (file.binary || file.tooLarge) {
-        setAttachError('Active file is binary or too large to attach');
-        return;
-      }
-      setAttachedFiles((current) =>
-        current.some((f) => f.path === fileName)
-          ? current
-          : [...current, { path: fileName, content: file.content }],
-      );
-    } catch {
-      setAttachError('Could not read the active file');
-    }
-  };
-
-  const removeAttached = (path: string) => {
-    setAttachedFiles((current) => current.filter((file) => file.path !== path));
-  };
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || sending) return;
-    // @mentions direct the turn: one mention (or none — the menu's default
-    // agent) answers sequentially; TWO OR MORE mentions fan out in PARALLEL
-    // — every tagged agent runs its own turn in its own provider process
-    // simultaneously, and the replies land as separate bubbles.
-    const mentioned = mentionedAgents(
-      text,
-      allAgents().filter((agent) => agent.enabled && agent.username),
-    );
-    const target = mentioned[0] ?? defaultAgent ?? null;
-    if (!active) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: 'assistant',
-          text: 'No AI provider configured — add one in Settings → AI Provider.',
-          error: true,
-          time: now(),
-          agent: agentUsername,
-          owner: ownerName,
-        },
-      ]);
-      return;
-    }
-
+/** Gather project and selection context outside React's render analysis. */
+async function buildMessageContext({text, team, target, repositoryPath, activeSelection,
+  activeHistory, activeRailCommit, activeRailSelection, attachedFiles}: MessageContextOptions) {
     let context = '';
     // Project knowledge lives in the repo (.pigry/) — ride along every send.
     // Memory is a vector database: pick the semantically relevant entries.
@@ -2003,7 +1351,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     }
     // before-send hooks (Commands tab on Hooks) run in the repository root.
     try {
-      await runEventHooks('before-send', repository?.localPath ?? '.');
+      await runEventHooks('before-send', repositoryPath);
     } catch {
       // hook execution must never block a send
     }
@@ -2064,61 +1412,23 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       context += `\n\n[Attached file: ${attached.path}]\n${attached.content.slice(0, 12000)}`;
     }
 
-    const userMessage: ChatMessage = {
-      role: 'user',
-      text,
-      time: now(),
-      owner: ownerName,
-      agent: target?.username ?? agentUsername,
-      context,
-      selection: activeSelection
-        ? {
-            path: activeSelection.path,
-            startLine: activeSelection.startLine,
-            endLine: activeSelection.endLine,
-            text: activeSelection.text.slice(0, 8000),
-          }
-        : null,
-      images: images.map((image) => image.dataUrl),
-    };
-    const history = [...messages, userMessage];
-    setMessages(history);
-    setInput('');
-    setImages([]);
-    closeMention();
-    // ANY @mention routes through the parallel path — each mentioned agent
-    // gets the exchange recorded in ITS OWN session (single @mention works
-    // the same way, targets.length === 1).
-    if (mentioned.length >= 1) {
-      await doSendParallel(history, mentioned);
-      return;
-    }
-    await doSend(history, target);
-  };
+    return context;
+}
 
-  /** Edits a sent user message and re-runs the conversation from there
-   * (VS Code Copilot style): everything after the edited message is
-   * discarded and a fresh reply is generated. */
-  const resendEdited = async (index: number, newText: string) => {
-    if (sending || !newText.trim()) return;
-    const edited: ChatMessage = { ...messages[index], text: newText.trim(), time: now() };
-    const history = [...messages.slice(0, index), edited];
-    setMessages(history);
-    setEditingIndex(null);
-    // The retargeted mention (if any) decides who answers the re-run;
-    // no mention defers to the menu's default agent.
-    const target =
-      firstMentionedAgent(
-        edited.text,
-        allAgents().filter((agent) => agent.enabled && agent.username),
-      ) ?? defaultAgent ?? null;
-    await doSend(history, target);
-  };
+interface AgentTurnContext {
+ allProviders: AiProviderEntry[];
+ active: AiProviderEntry | null;
+ ownerName: string; agentUsername: string; team: string;
+ repository: ReturnType<typeof useRepository>['repository'];
+ setSending: React.Dispatch<React.SetStateAction<boolean>>;
+ setActivity: React.Dispatch<React.SetStateAction<ActivityState | null>>;
+ setReplyingAs: React.Dispatch<React.SetStateAction<string>>;
+ setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
+ messageDepthRef: React.RefObject<number>;
+ dmBubblesRef: React.RefObject<ChatMessage[]>;
+}
 
-  /** Runs the provider for `history` (whose last entry is the user turn),
-   * appending the reply — and when the reply @mentions other agents, tags
-   * them into the thread (agent-to-agent; budget-capped, each agent speaks
-   * at most once per chain so it always ends). Returns the updated history. */
+function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, team, repository, setSending, setActivity, setReplyingAs, setMessages, messageDepthRef, dmBubblesRef}: AgentTurnContext) {
   const doSend = async (
     history: ChatMessage[],
     target?: AgentEntry | null,
@@ -2149,10 +1459,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   /** One-hop agent-to-agent messaging — agent A asks agent B a question
    * and receives the reply of agent B inside its own turn. Depth-limited to one hop
    * so conversations can never loop. */
-  const messageDepthRef = useRef(0);
   /** DM replies collected during the current turn — shown as bubbles and
    * spliced into the turn's history so later writes keep them. */
-  const dmBubblesRef = useRef<ChatMessage[]>([]);
   const askAgent = async (
     fromUsername: string,
     toUsername: string,
@@ -2283,6 +1591,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     history: ChatMessage[],
     target: AgentEntry,
   ): Promise<ChatMessage> => {
+    if (!active) throw new Error('No AI provider configured');
     const last = history[history.length - 1];
     const provider = (() => {
       if (target.model) {
@@ -2473,7 +1782,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         if (id) { await memoryRemove(id, team, target.username); return 'forgot note ' + id; }
         const hits = await memorySearch(query, 20, team, target.username);
         if (hits.length === 0) return '(no matching notes to forget)';
-        for (var hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target.username); }
+        for (let hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target.username); }
         return 'forgot ' + hits.length + ' note(s) matching ' + query;
       },
     };
@@ -2632,6 +1941,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     target: AgentEntry | null,
     chainLeft: number,
   ): Promise<ChatMessage[]> => {
+    if (!active) throw new Error('No AI provider configured');
     const last = history[history.length - 1];
     // A tagged agent chats through its own provider/model when configured;
     // otherwise the globally active provider answers.
@@ -2818,7 +2128,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         if (id) { await memoryRemove(id, team, target?.username); return 'forgot note ' + id; }
         const hits = await memorySearch(query, 20, team, target?.username);
         if (hits.length === 0) return '(no matching notes to forget)';
-        for (var hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target?.username); }
+        for (let hi = 0; hi < hits.length; hi++) { await memoryRemove(hits[hi].id, team, target?.username); }
         return 'forgot ' + hits.length + ' note(s) matching ' + query;
       },
     };
@@ -3035,6 +2345,755 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     return working;
   };
 
+
+ return { doSend, doSendParallel, runIsolatedTurn };
+}
+
+async function summarizeAgentMemory(
+ history: ChatMessage[], scopeAgent: string, team: string,
+ runIsolatedTurn: ReturnType<typeof createAgentTurnRunner>['runIsolatedTurn'],
+ notify: ReturnType<typeof useRepository>['notify'],
+) {
+    if (history.length < 4) return;
+    const target = allAgents().find(
+      (agent) => agent.enabled && agent.username === scopeAgent,
+    );
+    if (!target) return;
+    const transcript = history
+      .slice(-30)
+      .map((m) =>
+        (m.role === 'assistant' ? '@' + (m.agent ?? target.username) + ': ' : 'user: ') +
+        String(m.text ?? '').replace(/\s+/g, ' ').slice(0, 300),
+      )
+      .join('\n');
+    const instruction: ChatMessage = {
+      role: 'user',
+      text:
+        '[session-end task] The conversation below is ending. Extract the durable facts, decisions, user preferences and progress as 1-3 short memory notes. One note per line, each self-contained. Return ONLY the note lines — no numbering, no commentary.\n\n--- CONVERSATION ---\n' +
+        transcript,
+      time: Date.now(),
+      owner: 'system',
+    };
+    try {
+      const reply = await runIsolatedTurn([instruction], target);
+      const notes = (reply.text || '')
+        .split('\n')
+        .map((l) => l.replace(/^[-*\d.\s]+/, '').trim())
+        .filter((l) => l.length > 10)
+        .slice(0, 5);
+      for (const note of notes) {
+        await memoryAdd(note, team, target.username);
+      }
+      if (notes.length > 0) {
+        notify('Session summarized — ' + notes.length + ' note(s) saved to @' + target.username + ' memory', 'success');
+      }
+    } catch {
+      // provider unavailable — silently skip
+    }
+  }
+
+export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection }: AiAgentPanelProps) {
+  const { repository, notify } = useRepository();
+  // Chats and memories live under this team's .pigry/teams/<team>/ store.
+  const team = defaultTeam ?? 'Copilot';
+  const [providers, setProviders] = useState<AiProviderEntry[]>([]);
+  const [activeId, setActiveId] = useState<string>(() => activeProviderId());
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  /** Which project-knowledge dialog is open (memory / skills). */
+  const [knowDialog, setKnowDialog] = useState<'memory' | 'skills' | null>(null);
+  // Message being edited (index) + its draft (Copilot-style edit & resubmit).
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState('');
+  // Dismissed selection key — reset during render when a different
+  // selection arrives (adjust-state-on-change, no effect needed).
+  const selectionKey = selection ? `${selection.path}:${selection.startLine}:${selection.endLine}` : '';
+  const [dismissedKey, setDismissedKey] = useState('');
+  const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
+  if (prevSelectionKey !== selectionKey) {
+    setPrevSelectionKey(selectionKey);
+    setDismissedKey('');
+  }
+  const activeSelection =
+    selection && selectionKey !== dismissedKey ? selection : null;
+
+  // File-history selection — same dismiss-and-reset pattern as the
+  // editor selection so a newly picked commit re-arms the chip.
+  const historyKey = historySelection
+    ? `${historySelection.path}@${historySelection.oid}`
+    : '';
+  const [dismissedHistory, setDismissedHistory] = useState('');
+  const [prevHistoryKey, setPrevHistoryKey] = useState(historyKey);
+  if (prevHistoryKey !== historyKey) {
+    setPrevHistoryKey(historyKey);
+    setDismissedHistory('');
+  }
+  const activeHistory =
+    historySelection && historyKey !== dismissedHistory ? historySelection : null;
+
+  // Commit shared from a workspace screen (Commit graph / Branches / Cherry
+  // Pick / Rebase Branch / Push Commits / Merge preview) — attachable chip.
+  const [railCommit, setRailCommit] = useState<{ oid: string; summary: string } | null>(null);
+  const [dismissedRailCommit, setDismissedRailCommit] = useState('');
+  const [prevRailCommitOid, setPrevRailCommitOid] = useState('');
+  if (prevRailCommitOid !== (railCommit?.oid ?? '')) {
+    setPrevRailCommitOid(railCommit?.oid ?? '');
+    setDismissedRailCommit('');
+  }
+  const activeRailCommit =
+    railCommit && railCommit.oid !== dismissedRailCommit ? railCommit : null;
+
+  // Code highlighted (คลุมดำ) anywhere in the workspace — either captured
+  // from the DOM selection or reported by a Monaco diff editor via the
+  // bridge; `source` names the workspace menu, `path` the file when known.
+  const [railSelection, setRailSelection] = useState<{
+    text: string;
+    source: string;
+    path?: string;
+  } | null>(null);
+  const railSelKey = railSelection?.text ?? '';
+  const [dismissedRailSel, setDismissedRailSel] = useState('');
+  const [prevRailSelKey, setPrevRailSelKey] = useState(railSelKey);
+  if (prevRailSelKey !== railSelKey) {
+    setPrevRailSelKey(railSelKey);
+    setDismissedRailSel('');
+  }
+  const activeRailSelection =
+    railSelection && railSelKey !== dismissedRailSel ? railSelection : null;
+
+  // Context is scoped to the menu's own chat (each menu has a separate
+  // conversation) — switching menus drops the shared commit/selection so one
+  // menu's context never rides into another menu's chat.
+  const [prevTeamScope, setPrevTeamScope] = useState(team);
+  if (prevTeamScope !== team) {
+    setPrevTeamScope(team);
+    setRailCommit(null);
+    setRailSelection(null);
+  }
+
+  // Workspace → chat bridge: screens announce the commit the user opened.
+  useEffect(() => {
+    const onShareCommit = (event: Event) => {
+      const detail = (event as CustomEvent<{ oid?: string; summary?: string }>).detail;
+      if (!detail?.oid) return;
+      setRailCommit({ oid: detail.oid, summary: detail.summary ?? '' });
+    };
+    window.addEventListener('pigry:chat-commit', onShareCommit);
+    return () => window.removeEventListener('pigry:chat-commit', onShareCommit);
+  }, []);
+
+  // Monaco diff editors announce their selections through the bridge
+  // (Monaco doesn't fire DOM selection events).
+  useEffect(() => {
+    const onShareSelection = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: string; path?: string; source?: string }>)
+        .detail;
+      const text = detail?.text ?? '';
+      if (!text.trim()) return;
+      setRailSelection({ text: text.slice(0, 8000), source: detail?.source ?? team, path: detail?.path });
+    };
+    window.addEventListener('pigry:chat-selection', onShareSelection);
+    return () => window.removeEventListener('pigry:chat-selection', onShareSelection);
+  }, [team]);
+
+  // Capture highlighted text anywhere in the app (debounced) — except inside
+  // this panel (chat text isn't context) and inside Monaco editors (they
+  // report through the bridge above, their DOM selection is not visible).
+  const panelRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    let timer = 0;
+    const onSelectionChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel?.toString() ?? '';
+        if (!sel || sel.isCollapsed || text.trim().length === 0) return;
+        const node = sel.anchorNode;
+        const el = node instanceof Element ? node : (node?.parentElement ?? null);
+        if (el && panelRef.current?.contains(el)) return;
+        if (el?.closest?.('.monaco-editor')) return;
+        setRailSelection({ text: text.slice(0, 8000), source: team });
+      }, 350);
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelectionChange);
+      window.clearTimeout(timer);
+    };
+  }, [team]);
+
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  /** Username of the agent currently generating a reply (typing indicator). */
+  const [replyingAs, setReplyingAs] = useState('');
+  /** Live phase of the replying agent — drives the activity animation. */
+  const [activity, setActivity] = useState<ActivityState | null>(null);
+  /** Which section of the panel is visible — chat body or one of the tool tabs. */
+  const [panelTab, setPanelTab] = useState<
+    'chat' | 'tools' | 'mcp' | 'plugins' | 'agents' | 'hooks' | 'instructions'
+  >('chat');
+  /** Active group-chat name; custom=true once the user renames the group. */
+  const [groupTitle, setGroupTitle] = useState<{ name: string; custom: boolean }>({
+    name: '',
+    custom: false,
+  });
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  /** Inline rename of the group name shown in the header. */
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  /** The signed-in GitHub account — real name + avatar on user messages. */
+  const [ghUser, setGhUser] = useState<{ name: string; login: string; avatarUrl: string } | null>(null);
+  // Attribution stamped into every message: agent username + repo owner.
+  const actingAgent = allAgents().find((agent) => agent.enabled);
+  const agentUsername = actingAgent?.username || 'ai-agent';
+  // Tier 1: the hard-coded default agent of this menu's team — answers
+  // every turn that carries no @mention, with its own private memory.
+  const defaultAgent = builtinAgents().find(
+    (agent) => agent.enabled && agent.tier === 'default' && agent.team === team,
+  );
+  /** The agent identity this menu's chat belongs to: its own default agent
+   * (not shared with other menus' agents), falling back to the first
+   * enabled agent when the team has no default-tier one. */
+  const scopeAgent = defaultAgent?.username ?? agentUsername;
+  // Sessions are scoped by that agent — the same default agent continues one
+  // conversation across menus; a different menu agent gets its own thread.
+  const ownerName = ghUser?.name || repository?.account.name || 'local-user';
+  const [images, setImages] = useState<ChatImage[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [attachError, setAttachError] = useState('');
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // @mention autocomplete — typing `@` opens the agent picker; the picked
+  // @username directs the message at that agent (its provider/model reply).
+  const [mention, setMention] = useState<MentionState | null>(null);
+  // Clicking an agent avatar/name in the chat opens its full profile.
+  const [viewingAgent, setViewingAgent] = useState<AgentEntry | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  // The @ picker lists only THIS menu's agents (team members + the menu's
+  // default agent) plus pigry's base agents — other teams stay out of the way.
+  const teamAgents = useMemo(
+    () =>
+      allAgents().filter(
+        (agent) =>
+          agent.enabled && agent.username && agent.team === team,
+      ),
+    [team],
+  );
+  const mentionList = useMemo(
+    () => (mention ? mentionCandidates(teamAgents, mention.query) : []),
+    [mention, teamAgents],
+  );
+  const mentionPos = Math.min(mentionIdx, Math.max(0, mentionList.length - 1));
+
+  // #skill autocomplete — typing `#` opens the skill picker; the picked
+  // #name tag attaches that skill's content to the turn.
+  const [skills, setSkills] = useState<SkillEntry[]>([]);
+  const [skillTok, setSkillTok] = useState<SkillTokenState | null>(null);
+  const [skillIdx, setSkillIdx] = useState(0);
+  const skillList = useMemo(
+    () => (skillTok ? skillCandidates(skills, skillTok.query) : []),
+    [skillTok, skills],
+  );
+  const skillPos = Math.min(skillIdx, Math.max(0, skillList.length - 1));
+
+  const closeSkill = () => {
+    setSkillTok(null);
+    setSkillIdx(0);
+  };
+
+  /** Commits the picked skill into the composer text. */
+  const pickSkill = (skill: SkillEntry) => {
+    if (!skillTok) return;
+    const caret = textareaRef.current?.selectionStart ?? input.length;
+    const next = applySkillToken(input, skillTok, caret, skill.name || skill.id);
+    setInput(next.value);
+    closeSkill();
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  // Load skill metadata once for the picker.
+  useEffect(() => {
+    let cancelled = false;
+    listSkills()
+      .then((list) => {
+        if (!cancelled) setSkills(list);
+      })
+      .catch(() => {
+        // skill listing unavailable
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const closeMention = () => {
+    setMention(null);
+    setMentionIdx(0);
+  };
+
+  /** Commits the picked agent into the composer text. */
+  const pickMention = (agent: AgentEntry) => {
+    if (!mention) return;
+    const caret = textareaRef.current?.selectionStart ?? input.length;
+    const next = applyMention(input, mention, caret, agent.username);
+    setInput(next.value);
+    closeMention();
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
+  // ZCode Cloud (GLM) — detected automatically when ZCode desktop is installed.
+  const [zcodeProvider, setZcodeProvider] = useState<AiProviderEntry | null>(null);
+  // CLI coding agents — detected via --version on mount.
+  const [cliProviders, setCliProviders] = useState<AiProviderEntry[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    detectZcodeGlm()
+      .then((provider) => {
+        if (!cancelled && provider) {
+          setZcodeProvider({
+            ...cliEntry('zcode-cloud', provider.name, 'claude-code', provider.model),
+            type: 'zcode',
+            baseUrl: provider.baseUrl,
+            apiKey: provider.apiKey,
+          });
+        }
+      })
+      .catch(() => {});
+    cliDetect()
+      .then((result) => {
+        if (cancelled) return;
+        const found: AiProviderEntry[] = [];
+        if (result.claude) {
+          found.push(
+            cliEntry(
+              'cli-claude',
+              'Claude Code' + (result.claudeVersion ? ' · ' + result.claudeVersion : ''),
+              'claude-code',
+              'claude CLI (own subscription)',
+            ),
+          );
+        }
+        if (result.codex) {
+          found.push(
+            cliEntry(
+              'cli-codex',
+              'Codex' + (result.codexVersion ? ' · ' + result.codexVersion : ''),
+              'codex',
+              'codex CLI (own subscription)',
+            ),
+          );
+        }
+        setCliProviders(found);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const allProviders = useMemo(
+    () => [...cliProviders, ...(zcodeProvider ? [zcodeProvider] : []), ...providers],
+    [cliProviders, zcodeProvider, providers],
+  );
+  const active =
+    allProviders.find((provider) => provider.id === activeId) ?? allProviders[0] ?? null;
+
+  // Mirror the Settings → AI Provider manager (localStorage-driven).
+  useEffect(() => {
+    const sync = () => {
+      setProviders(loadProviderStore());
+      const id = activeProviderId();
+      if (id) setActiveId(id);
+    };
+    sync();
+    window.addEventListener('focus', sync);
+    return () => window.removeEventListener('focus', sync);
+  }, []);
+
+  // Chat sessions (Copilot-style) stored IN the repo under .pigry/chat/:
+  // migrate legacy localStorage sessions, restore the active one on mount,
+  // and save the file on every change. Sessions with no messages are not kept.
+  const [sessionId, setSessionId] = useState(() => activeSessionId({ agent: scopeAgent }));
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  /** Context-usage dropdown beside the model pill (click the ctx ring). */
+  const [ctxDropOpen, setCtxDropOpen] = useState(false);
+  const ctxDropRef = useRef<HTMLDivElement | null>(null);
+  const [sessionList, setSessionList] = useState<AiChatSession[]>([]);
+  const sessionsRef = useRef<HTMLDivElement | null>(null);
+  /** Creation time of the current session (preserved across saves). */
+  const createdAtRef = useRef(now());
+
+  // One-shot restore: active session, else the newest, else a fresh id.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await migrateLocalSessions();
+      const sessions = await listSessions({ agent: scopeAgent });
+      if (cancelled) return;
+      let id = activeSessionId({ agent: scopeAgent });
+      let restored: AiChatSession | undefined = sessions.find((s) => s.id === id);
+      if (!restored && sessions.length > 0) {
+        restored = sessions[0];
+        id = restored.id;
+        setActiveSessionId(id, { agent: scopeAgent });
+      }
+      if (!id) {
+        id = `chat-${now().toString(36)}`;
+        setActiveSessionId(id, { agent: scopeAgent });
+      }
+      setSessionId(id);
+      if (restored) {
+        createdAtRef.current = restored.createdAt;
+        setMessages(restored.messages);
+      }
+      setSessionList(sessions);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Restore runs once per mount — the team does not change on this screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (messages.length === 0 || !sessionId) return;
+    let cancelled = false;
+    (async () => {
+      await saveSession({
+        id: sessionId,
+        title: groupTitle.custom ? groupTitle.name : titleFromMessages(messages),
+        titleCustom: groupTitle.custom,
+        createdAt: createdAtRef.current,
+        updatedAt: now(),
+        messages,
+        team,
+        // Tagged with the scope agent so the agent-scoped session list
+        // (the same identity on every menu this agent serves) finds it.
+        agentUsername: scopeAgent,
+        owner: ownerName,
+      });
+      if (!cancelled) setSessionList(await listSessions({ agent: scopeAgent }));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, sessionId, groupTitle, team, scopeAgent, ownerName]);
+
+  // Auto-scroll to the newest message.
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight });
+  }, [messages, sending]);
+
+  // Outside click closes the sessions popover.
+  useEffect(() => {
+    if (!sessionsOpen) return;
+    const onDoc = (event: MouseEvent) => {
+      if (sessionsRef.current?.contains(event.target as Node)) return;
+      setSessionsOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, true);
+    return () => document.removeEventListener('mousedown', onDoc, true);
+  }, [sessionsOpen]);
+
+  // Outside click / Escape closes the context-usage dropdown.
+  useEffect(() => {
+    if (!ctxDropOpen) return;
+    const onDoc = (event: MouseEvent) => {
+      if (ctxDropRef.current?.contains(event.target as Node)) return;
+      setCtxDropOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setCtxDropOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [ctxDropOpen]);
+
+  // The signed-in GitHub account — real name + avatar on user messages.
+  // Reads the shared ghProfile cache (fetched at app start, kept fresh by
+  // the title bar account menu).
+  useEffect(
+    () =>
+      subscribeGhProfile((profile) => {
+        setGhUser(profile ? { name: profile.login, login: profile.name, avatarUrl: profile.avatarUrl } : null);
+      }),
+    [],
+  );
+
+  /** Starts a fresh conversation; the previous one stays in history. */
+  /** Rolling auto-summarize — every 15 messages since the last summary,
+   * the recent slice is distilled into the agent's own memory. Closing the
+   * app mid-session therefore loses at most those 15 messages of progress.
+   * The New-chat button summarizes everything remaining as well. */
+  const summarizedUpToRef = useRef(0);
+
+  /** Auto-summarizes the ending session into the session owner's memory —
+   * progress survives even when the agent never called memory_save itself.
+   * Fire-and-forget: never blocks the new chat from starting. */
+  const summarizeSessionToMemory = (history: ChatMessage[]) =>
+    summarizeAgentMemory(history, scopeAgent, team, runIsolatedTurn, notify);
+  const startNewChat = () => {
+    // Auto-summarize the ending session into the agent's own memory.
+    void summarizeSessionToMemory(messages);
+    const id = `chat-${now().toString(36)}`;
+    setActiveSessionId(id, { agent: scopeAgent });
+    setSessionId(id);
+    createdAtRef.current = now();
+    setGroupTitle({ name: '', custom: false });
+    setMessages([]);
+    setInput('');
+    setImages([]);
+    setEditingIndex(null);
+    setSessionsOpen(false);
+  };
+
+  const switchSession = (session: AiChatSession) => {
+    setActiveSessionId(session.id, { agent: scopeAgent });
+    setSessionId(session.id);
+    createdAtRef.current = session.createdAt;
+    setGroupTitle({ name: session.title, custom: session.titleCustom === true });
+    setMessages(session.messages);
+    setInput('');
+    setEditingIndex(null);
+    setSessionsOpen(false);
+  };
+
+  /** Renames the group chat on disk and refreshes the list. */
+  const commitRename = async (session: AiChatSession, name: string) => {
+    const title = name.trim();
+    if (!title) {
+      setRenamingId(null);
+      return;
+    }
+    try {
+      await renameSessionFile(session.id, title);
+      setSessionList(await listSessions({ agent: scopeAgent }));
+      if (session.id === sessionId) setGroupTitle({ name: title, custom: true });
+    } catch (error) {
+      notify(`Could not rename group: ${String(error)}`, 'error');
+    }
+    setRenamingId(null);
+  };
+
+  const removeSession = async (id: string) => {
+    await deleteSessionFile(id);
+    const kept = await listSessions({ agent: scopeAgent });
+    setSessionList(kept);
+    if (id === sessionId) startNewChat();
+  };
+
+  const attachImages = (files: FileList | null) => {
+    if (!files?.length) return;
+    setAttachError('');
+    Array.from(files)
+      .slice(0, 4)
+      .forEach((file) => {
+        if (!file.type.startsWith('image/')) {
+          setAttachError(`${file.name} is not an image`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImages((current) => [...current, { name: file.name, dataUrl: String(reader.result) }]);
+        };
+        reader.readAsDataURL(file);
+      });
+  };
+
+  /** Wraps the composer selection with markdown tokens (bold, code, link…). */
+  const applyMdWrap = (before: string, after: string, placeholder: string) => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? input.length;
+    const end = ta?.selectionEnd ?? input.length;
+    const selected = input.slice(start, end);
+    const body = selected || placeholder;
+    setInput(input.slice(0, start) + before + body + after + input.slice(end));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      const selStart = start + before.length;
+      ta.setSelectionRange(selStart, selStart + body.length);
+    });
+  };
+
+  /** Prefixes every selected line (lists, quotes, headings). */
+  const applyMdPrefix = (prefix: string) => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? 0;
+    const end = ta?.selectionEnd ?? 0;
+    const lineStart = input.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const block = input.slice(lineStart, end);
+    const prefixed = block
+      ? block.split('\n').map((line) => (line.startsWith(prefix) ? line : prefix + line)).join('\n')
+      : prefix;
+    setInput(input.slice(0, lineStart) + prefixed + input.slice(end));
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(lineStart, lineStart + prefixed.length);
+    });
+  };
+
+  /** Inline `code`, or a fenced block when the selection spans lines. */
+  const applyMdCode = () => {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? 0;
+    const end = ta?.selectionEnd ?? 0;
+    const multi = input.slice(start, end).includes('\n');
+    applyMdWrap(multi ? '```\n' : '`', multi ? '\n```' : '`', 'code');
+  };
+
+  /** Paste support — images from the clipboard attach as chat images. */
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = event.clipboardData?.files;
+    if (files && Array.from(files).some((file) => file.type.startsWith('image/'))) {
+      event.preventDefault();
+      attachImages(files);
+    }
+  };
+
+  const attachActiveFile = async () => {
+    if (!fileName) return;
+    setAttachError('');
+    try {
+      const file = await readWorktreeFile(fileName);
+      if (file.binary || file.tooLarge) {
+        setAttachError('Active file is binary or too large to attach');
+        return;
+      }
+      setAttachedFiles((current) =>
+        current.some((f) => f.path === fileName)
+          ? current
+          : [...current, { path: fileName, content: file.content }],
+      );
+    } catch {
+      setAttachError('Could not read the active file');
+    }
+  };
+
+  const removeAttached = (path: string) => {
+    setAttachedFiles((current) => current.filter((file) => file.path !== path));
+  };
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+    // @mentions direct the turn: one mention (or none — the menu's default
+    // agent) answers sequentially; TWO OR MORE mentions fan out in PARALLEL
+    // — every tagged agent runs its own turn in its own provider process
+    // simultaneously, and the replies land as separate bubbles.
+    const mentioned = mentionedAgents(
+      text,
+      allAgents().filter((agent) => agent.enabled && agent.username),
+    );
+    const target = mentioned[0] ?? defaultAgent ?? null;
+    if (!active) {
+      setMessages((m) => [
+        ...m,
+        {
+          role: 'assistant',
+          text: 'No AI provider configured — add one in Settings → AI Provider.',
+          error: true,
+          time: now(),
+          agent: agentUsername,
+          owner: ownerName,
+        },
+      ]);
+      return;
+    }
+
+    const context = await buildMessageContext({
+      text, team, target, repositoryPath: repository?.localPath ?? '.',
+      activeSelection, activeHistory, activeRailCommit, activeRailSelection, attachedFiles,
+    });
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      text,
+      time: now(),
+      owner: ownerName,
+      agent: target?.username ?? agentUsername,
+      context,
+      selection: activeSelection
+        ? {
+            path: activeSelection.path,
+            startLine: activeSelection.startLine,
+            endLine: activeSelection.endLine,
+            text: activeSelection.text.slice(0, 8000),
+          }
+        : null,
+      images: images.map((image) => image.dataUrl),
+    };
+    const history = [...messages, userMessage];
+    setMessages(history);
+    setInput('');
+    setImages([]);
+    closeMention();
+    // ANY @mention routes through the parallel path — each mentioned agent
+    // gets the exchange recorded in ITS OWN session (single @mention works
+    // the same way, targets.length === 1).
+    if (mentioned.length >= 1) {
+      await doSendParallel(history, mentioned);
+      return;
+    }
+    await doSend(history, target);
+  };
+
+  /** Edits a sent user message and re-runs the conversation from there
+   * (VS Code Copilot style): everything after the edited message is
+   * discarded and a fresh reply is generated. */
+  const resendEdited = async (index: number, newText: string) => {
+    if (sending || !newText.trim()) return;
+    const edited: ChatMessage = { ...messages[index], text: newText.trim(), time: now() };
+    const history = [...messages.slice(0, index), edited];
+    setMessages(history);
+    setEditingIndex(null);
+    // The retargeted mention (if any) decides who answers the re-run;
+    // no mention defers to the menu's default agent.
+    const target =
+      firstMentionedAgent(
+        edited.text,
+        allAgents().filter((agent) => agent.enabled && agent.username),
+      ) ?? defaultAgent ?? null;
+    await doSend(history, target);
+  };
+
+  /** Runs the provider for `history` (whose last entry is the user turn),
+   * appending the reply — and when the reply @mentions other agents, tags
+   * them into the thread (agent-to-agent; budget-capped, each agent speaks
+   * at most once per chain so it always ends). Returns the updated history. */
+  const messageDepthRef = useRef(0);
+  const dmBubblesRef = useRef<ChatMessage[]>([]);
+  const turnRunner = () => createAgentTurnRunner({allProviders, active, ownerName, agentUsername, team, repository, setSending, setActivity, setReplyingAs, setMessages, messageDepthRef, dmBubblesRef});
+  const doSend: ReturnType<typeof createAgentTurnRunner>['doSend'] = (...args) => turnRunner().doSend(...args);
+  const doSendParallel: ReturnType<typeof createAgentTurnRunner>['doSendParallel'] = (...args) => turnRunner().doSendParallel(...args);
+  const runIsolatedTurn: ReturnType<typeof createAgentTurnRunner>['runIsolatedTurn'] = (...args) => turnRunner().runIsolatedTurn(...args);
+
+  const summarizeRecentMessages = useEffectEvent((history: ChatMessage[]) => {
+    void summarizeSessionToMemory(history);
+  });
+  useEffect(() => {
+    if (sending) return;
+    if (messages.length - summarizedUpToRef.current < 15) return;
+    const slice = messages.slice(summarizedUpToRef.current);
+    summarizedUpToRef.current = messages.length;
+    summarizeRecentMessages(slice);
+  }, [messages, sending]);
+
   const clearConversation = () => {
     setMessages([]);
     try {
@@ -3161,7 +3220,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
               title="Group chat"
               aria-label="Group chat"
               onClick={() => {
-                void listSessions(chatScope).then(setSessionList);
+                void listSessions({ agent: scopeAgent }).then(setSessionList);
                 setSessionsOpen((open) => !open);
               }}
             >

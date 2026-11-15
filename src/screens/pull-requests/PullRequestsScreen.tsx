@@ -207,7 +207,7 @@ export function PullRequestsScreen() {
     }, 0);
     ghPrDetail(selected)
       .then((result) => {
-        if (!cancelled) setDetail(result);
+        if (!cancelled) { setDetailError(null); setDetail(result); }
       })
       .catch((error) => {
         if (!cancelled) {
@@ -216,6 +216,7 @@ export function PullRequestsScreen() {
         }
       })
       .finally(() => {
+        window.clearTimeout(t2);
         if (!cancelled) setDetailLoading(false);
       });
     return () => {

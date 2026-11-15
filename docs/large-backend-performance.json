@@ -1,0 +1,230 @@
+{
+  "fixture": {
+    "commits": 10000,
+    "changes": 400,
+    "files": 20200,
+    "historyRows": 500
+  },
+  "cycles": 20,
+  "samples": [
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 0,
+      "files": 20200,
+      "historyMs": 188,
+      "historyRows": 500,
+      "stateMs": 1240,
+      "treeMs": 131
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 1,
+      "files": 20200,
+      "historyMs": 188,
+      "historyRows": 500,
+      "stateMs": 1026,
+      "treeMs": 133
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 2,
+      "files": 20200,
+      "historyMs": 162,
+      "historyRows": 500,
+      "stateMs": 951,
+      "treeMs": 134
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 3,
+      "files": 20200,
+      "historyMs": 162,
+      "historyRows": 500,
+      "stateMs": 954,
+      "treeMs": 125
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 4,
+      "files": 20200,
+      "historyMs": 168,
+      "historyRows": 500,
+      "stateMs": 866,
+      "treeMs": 115
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 5,
+      "files": 20200,
+      "historyMs": 172,
+      "historyRows": 500,
+      "stateMs": 846,
+      "treeMs": 107
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 6,
+      "files": 20200,
+      "historyMs": 150,
+      "historyRows": 500,
+      "stateMs": 791,
+      "treeMs": 106
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 7,
+      "files": 20200,
+      "historyMs": 187,
+      "historyRows": 500,
+      "stateMs": 860,
+      "treeMs": 137
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 8,
+      "files": 20200,
+      "historyMs": 165,
+      "historyRows": 500,
+      "stateMs": 890,
+      "treeMs": 111
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 9,
+      "files": 20200,
+      "historyMs": 151,
+      "historyRows": 500,
+      "stateMs": 849,
+      "treeMs": 110
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 10,
+      "files": 20200,
+      "historyMs": 147,
+      "historyRows": 500,
+      "stateMs": 817,
+      "treeMs": 125
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 11,
+      "files": 20200,
+      "historyMs": 160,
+      "historyRows": 500,
+      "stateMs": 804,
+      "treeMs": 127
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 12,
+      "files": 20200,
+      "historyMs": 158,
+      "historyRows": 500,
+      "stateMs": 831,
+      "treeMs": 111
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 13,
+      "files": 20200,
+      "historyMs": 154,
+      "historyRows": 500,
+      "stateMs": 803,
+      "treeMs": 112
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 14,
+      "files": 20200,
+      "historyMs": 145,
+      "historyRows": 500,
+      "stateMs": 826,
+      "treeMs": 110
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 15,
+      "files": 20200,
+      "historyMs": 155,
+      "historyRows": 500,
+      "stateMs": 801,
+      "treeMs": 114
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 16,
+      "files": 20200,
+      "historyMs": 148,
+      "historyRows": 500,
+      "stateMs": 777,
+      "treeMs": 115
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 17,
+      "files": 20200,
+      "historyMs": 153,
+      "historyRows": 500,
+      "stateMs": 782,
+      "treeMs": 104
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 18,
+      "files": 20200,
+      "historyMs": 149,
+      "historyRows": 500,
+      "stateMs": 823,
+      "treeMs": 109
+    },
+    {
+      "changes": 400,
+      "commits": 10000,
+      "cycle": 19,
+      "files": 20200,
+      "historyMs": 148,
+      "historyRows": 500,
+      "stateMs": 807,
+      "treeMs": 111
+    }
+  ],
+  "timings": {
+    "historyMs": {
+      "median": 158,
+      "max": 188,
+      "p95": 188
+    },
+    "stateMs": {
+      "median": 831,
+      "max": 1240,
+      "p95": 1026
+    },
+    "treeMs": {
+      "median": 114,
+      "max": 137,
+      "p95": 134
+    }
+  },
+  "checkedAt": "2026-11-15T07:20:02.1339358Z",
+  "scope": "Debug backend, same functions as desktop; warm repeated reads; not a release benchmark"
+}

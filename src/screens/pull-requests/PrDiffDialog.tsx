@@ -128,7 +128,7 @@ export function PrDiffDialog({
     };
     document.addEventListener('mousedown', onDocMouseDown, true);
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
-  }, []);
+  }, [onClose]);
 
   // Blame decorations: author + sha injected after each modified line
   // (Explorer blame style). Cleared when toggled off or file changes.

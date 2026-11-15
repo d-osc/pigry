@@ -486,6 +486,38 @@ fn file_history_lists_only_changing_commits() {
 }
 
 #[test]
+fn file_history_does_not_decode_large_unchanged_trees() {
+    let dir = scratch_repo("large-unchanged-file-history");
+    let repo = Repository::open(&dir).unwrap();
+    let blob = repo.blob(b"fixture\n").unwrap();
+    let tree_oid = {
+        let mut builder = repo.treebuilder(None).unwrap();
+        for i in 0..20_000 {
+            builder.insert(format!("file-{i:05}.txt"), blob, 0o100644).unwrap();
+        }
+        builder.write().unwrap()
+    };
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let signature = Signature::now("Validation", "validation@example.invalid").unwrap();
+    let mut oid = repo.commit(None, &signature, &signature, "base", &tree, &[]).unwrap();
+    for i in 0..2001 {
+        let parent = repo.find_commit(oid).unwrap();
+        oid = repo.commit(None, &signature, &signature, &format!("empty {i}"), &tree, &[&parent]).unwrap();
+    }
+    repo.reference("refs/heads/main", oid, true, "validation fixture").unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+    let start = std::time::Instant::now();
+    // The initial change lies outside the existing 2,000-commit scan window.
+    let entries = build_file_history(&dir, "file-19999.txt", None).unwrap();
+    assert!(entries.is_empty());
+    assert!(start.elapsed() < std::time::Duration::from_secs(10),
+        "unchanged tree scan exceeded its generous regression budget: {:?}", start.elapsed());
+    drop(tree);
+    drop(repo);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn read_file_at_commit_returns_historical_blob() {
     let dir = scratch_repo("blob-at");
     write(&dir, "doc.md", "old content\n");

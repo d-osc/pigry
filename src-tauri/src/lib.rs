@@ -88,7 +88,9 @@ pub fn run() {
     // never set this — no debugging surface ships to users.
     #[cfg(debug_assertions)]
     unsafe {
-        std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--remote-debugging-port=9222");
+        if std::env::var_os("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_none() {
+            std::env::set_var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "--remote-debugging-port=9222");
+        }
     }
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

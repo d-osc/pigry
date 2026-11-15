@@ -1,0 +1,25 @@
+{
+  "scope": "Isolated NSIS packaging fixture; real optimized release payload; no publishing/signing",
+  "phases": [
+    {
+      "phase": "install",
+      "binarySha256": "42ACAE2BD3CB7497A8019362EECFB0BAE5F919DC2056A2C270EBFE223EC06A1A",
+      "homePassed": true,
+      "version": "0.0.9"
+    },
+    {
+      "version": "0.1.0",
+      "phase": "upgrade",
+      "binarySha256": "46C3B94A43CDE69001086373CAC469A9F096CD742D46ECEA98CE23581D5C74BF",
+      "profilePreserved": true,
+      "homePassed": true,
+      "binaryReplaced": true
+    },
+    {
+      "passed": true,
+      "profileRetained": true,
+      "phase": "uninstall"
+    }
+  ],
+  "checkedAt": "2026-11-15T08:12:42.1657163Z"
+}

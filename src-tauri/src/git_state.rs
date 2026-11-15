@@ -1640,6 +1640,12 @@ pub fn build_file_history(
         walked += 1;
         let oid = oid.map_err(err)?;
         let commit = repo.find_commit(oid).map_err(err)?;
+        let parent = commit.parent(0).ok();
+        // Avoid decoding a large tree twice for commits whose tree is unchanged.
+        // Repeated empty commits otherwise make per-file history very expensive.
+        if parent.as_ref().is_some_and(|parent| parent.tree_id() == commit.tree_id()) {
+            continue;
+        }
         let tree = commit.tree().map_err(err)?;
 
         let entry = match tree.get_path(Path::new(path)) {
@@ -1648,15 +1654,15 @@ pub fn build_file_history(
         };
         // Only include commits where the blob differs from the first parent
         // (or the path is new relative to it).
-        let changed = match commit.parent(0) {
-            Ok(parent) => match parent.tree() {
+        let changed = match parent {
+            Some(parent) => match parent.tree() {
                 Ok(parent_tree) => match parent_tree.get_path(Path::new(path)) {
                     Ok(parent_entry) => parent_entry.id() != entry.id(),
                     Err(_) => true, // newly added in this commit
                 },
                 Err(_) => true,
             },
-            Err(_) => true, // root commit
+            None => true, // root commit
         };
         if !changed {
             continue;
