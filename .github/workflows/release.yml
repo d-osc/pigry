@@ -21,6 +21,9 @@ jobs:
           # Windows — x86_64 (NSIS + MSI installers)
           - platform: windows-latest
             args: ''
+          # Windows — arm64 (NSIS installer, cross-compiled from the x64 host)
+          - platform: windows-latest
+            args: '--target aarch64-pc-windows-msvc'
           # Linux — x86_64 (deb/rpm/AppImage)
           - platform: ubuntu-22.04
             args: ''
