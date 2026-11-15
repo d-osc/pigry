@@ -117,7 +117,7 @@ jobs:
           mkdir -p updater
           gh release download "${{ github.ref_name }}" --dir updater --clobber \
             --pattern "*.AppImage" --pattern "*.AppImage.sig" \
-            --pattern "*.nsis.zip" --pattern "*.nsis.zip.sig"
+            --pattern "*-setup.exe" --pattern "*-setup.exe.sig"
       - name: Build latest.json
         env:
           TAG: ${{ github.ref_name }}

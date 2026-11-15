@@ -16,20 +16,13 @@ const readSig = (artifact) => {
 
 const platforms = {};
 
-// Windows — NSIS zip bundles (x64 native + arm64 cross-compiled)
-const nsisFiles = fs.readdirSync('updater').filter((f) => f.endsWith('.nsis.zip'));
-for (const nsis of nsisFiles) {
-  if (nsis.includes('aarch64-pc-windows-msvc') || nsis.includes('_arm64-setup')) {
-    platforms['windows-aarch64'] = {
-      signature: readSig(`updater/${nsis}`),
-      url: `${base}/${nsis}`,
-    };
-  } else {
-    platforms['windows-x86_64'] = {
-      signature: readSig(`updater/${nsis}`),
-      url: `${base}/${nsis}`,
-    };
-  }
+// Windows — NSIS installers (v2 updater signs the plain -setup.exe, no zip)
+for (const exe of fs.readdirSync('updater').filter((f) => f.endsWith('-setup.exe'))) {
+  const key = exe.includes('_arm64-setup') ? 'windows-aarch64' : 'windows-x86_64';
+  platforms[key] = {
+    signature: readSig(`updater/${exe}`),
+    url: `${base}/${exe}`,
+  };
 }
 
 // Linux — AppImage x64 + arm64
