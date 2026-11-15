@@ -1,7 +1,7 @@
 const english = {
   skip: 'Skip to content', navOverview: 'Meet Pigry', navWorkflow: 'The workflow', navFaq: 'Good questions', getPigry: 'Get Pigry',
   eyebrow: 'A LITTLE CLARITY FOR YOUR CODE', heroLine1: 'Good code.', heroLine2: 'Clear head.',
-  heroDescription: 'A calmer way to work with Git. Bring your code, branches and AI together in one thoughtful desktop workspace.',
+  heroDescription: 'Pigry is a desktop Git GUI for Windows and Linux. Explore commit graphs, review diffs, manage branches and work with your own AI provider.',
   downloadPreview: 'Download v0.3.0', viewSource: 'Explore the source', heroNote: 'Windows x64 · Your existing Git repositories, welcome.', asideNote: 'A little more room for the things you want to build.',
   previewLabel: 'MEET YOUR NEW WORKSPACE', previewHint: 'Take a little look around.', previewDisclaimer: 'Illustrative product preview · Switch views and select a commit to explore.',
   foundationGit: 'The Git you already know', foundationDesktop: 'Made for your desktop', foundationAi: 'Your AI, your choice', foundationTheme: 'A light & a dark side',
@@ -106,6 +106,7 @@ function updateThemeButton() {
 function setLanguage(next) {
   language = next;
   document.documentElement.lang = language;
+  document.title = language === 'en' ? 'Pigry — Git GUI & AI Workspace for Windows and Linux' : 'Pigry — โปรแกรม Git GUI และพื้นที่ทำงาน AI สำหรับ Windows และ Linux';
   for (const [element, thai] of translations) {
     element.innerHTML = language === 'en' ? (english[element.dataset.i18n] ?? thai) : thai;
   }
