@@ -2,7 +2,7 @@ const english = {
   skip: 'Skip to content', navOverview: 'Meet Pigry', navWorkflow: 'The workflow', navFaq: 'Good questions', getPigry: 'Get Pigry',
   eyebrow: 'A LITTLE CLARITY FOR YOUR CODE', heroLine1: 'Good code.', heroLine2: 'Clear head.',
   heroDescription: 'Pigry is a desktop Git GUI for Windows and Linux. Explore commit graphs, review diffs, manage branches and work with your own AI provider.',
-  downloadPreview: 'Download v0.3.0', viewSource: 'Explore the source', heroNote: 'Windows x64 · Your existing Git repositories, welcome.', asideNote: 'A little more room for the things you want to build.',
+  downloadPreview: 'Download v0.3.1', viewSource: 'Explore the source', heroNote: 'Windows x64 · Your existing Git repositories, welcome.', asideNote: 'A little more room for the things you want to build.',
   previewLabel: 'MEET YOUR NEW WORKSPACE', previewHint: 'Take a little look around.', previewDisclaimer: 'Illustrative product preview · Switch views and select a commit to explore.',
   foundationGit: 'The Git you already know', foundationDesktop: 'Made for your desktop', foundationAi: 'Your AI, your choice', foundationTheme: 'A light & a dark side',
   workflowEyebrow: 'FROM THE FIRST CHANGE TO THE NEXT COMMIT', workflowTitle: 'See the big picture.<br>Care for the details.',
@@ -12,7 +12,7 @@ const english = {
   step3Title: 'Think it through, together.', step3Text: 'Give your assistant the context it needs. Connect your own AI provider or coding CLI, attach code and keep the conversation close to your work.', step3Action: 'Meet the AI workspace',
   githubTitle: 'Local work.<br>Connected thinking.', githubDescription: 'Pull requests, issues and Actions through the GitHub CLI. Branch, merge, rebase and stash tools for the work in between.', githubNote: 'Connect using your GitHub account and permissions through gh.',
   themeTitle: 'Find your kind<br>of focus.', themeDescription: 'A fresh, airy canvas or a quieter, darker space. Light and dark modes share the same thoughtful language, right down to the editor.', tryTheme: 'Try a different atmosphere',
-  downloadEyebrow: 'YOUR NEXT COMMIT STARTS HERE', downloadTitle: 'A good place<br>for your next idea.', downloadDescription: 'Bring Pigry into the project you’re working on.<br>Make something good, one commit at a time.', downloadWindows: 'Download v0.3.0',
+  downloadEyebrow: 'YOUR NEXT COMMIT STARTS HERE', downloadTitle: 'A good place<br>for your next idea.', downloadDescription: 'Bring Pigry into the project you’re working on.<br>Make something good, one commit at a time.', downloadWindows: 'Download v0.3.1',
   releaseStatus: 'Latest release · Available for Windows and Linux on x64 and ARM64.', viewReleases: 'All packages & release notes',
   downloadDisclosure: 'This Windows installer is unsigned. Windows may show a warning before opening it.',
   buildSource: 'More of a build-it-yourself person?', sourceRequirements: 'You’ll need Node.js 22.18+ or 24+, Rust, Git and the Tauri prerequisites for your operating system.', copy: 'Copy', readSetup: 'Read the full setup guide',
@@ -20,7 +20,7 @@ const english = {
   faq1Question: 'Can I open a repository I already have?', faq1Answer: 'Absolutely. Open a local Git repository and pick up where you left off. Pigry uses the Git CLI for commits and remote operations, so your existing Git configuration and hooks can come along.',
   faq2Question: 'Is an AI subscription included?', faq2Answer: 'You connect your own AI provider or coding CLI. Model access and any usage costs depend on the service you choose. The installer does not include an AI usage allowance.',
   faq3Question: 'Where does my data live?', faq3Answer: 'Your Git repositories stay on your machine. GitHub and AI features connect to the services you choose and may send data as needed for the requests you ask them to process.',
-  faq4Question: 'Which version can I download?', faq4Answer: 'Download v0.3.0 for Windows x64 using the button above. For Windows ARM64, MSI and Linux (.deb, .rpm, .AppImage) on x64 and ARM64, choose a package from the GitHub release. The Windows installer is unsigned.',
+  faq4Question: 'Which version can I download?', faq4Answer: 'Download v0.3.1 for Windows x64 using the button above. For Windows ARM64, MSI and Linux (.deb, .rpm, .AppImage) on x64 and ARM64, choose a package from the GitHub release. The Windows installer is unsigned.',
   footerTagline: 'A little more clarity in your everyday code.', backTop: 'Back to the top ↑',
 };
 const thai = {
@@ -33,7 +33,7 @@ const thai = {
   "heroLine1": "โค้ดไปต่อ",
   "heroLine2": "ได้อย่างสบายใจ.",
   "heroDescription": "ให้ Git เป็นเรื่องที่มองเห็นและเข้าใจง่าย รวมโค้ด บรานช์ และ AI ไว้ในพื้นที่ทำงานเดียวบนเดสก์ท็อปของคุณ",
-  "downloadPreview": "ดาวน์โหลด v0.3.0",
+  "downloadPreview": "ดาวน์โหลด v0.3.1",
   "viewSource": "ดูโค้ดบน GitHub",
   "heroNote": "Windows x64 · ใช้กับ Git repo ที่มีอยู่ได้เลย",
   "asideNote": "พื้นที่ให้คุณโฟกัสกับงานที่อยากสร้าง",
@@ -67,7 +67,7 @@ const thai = {
   "downloadEyebrow": "YOUR NEXT COMMIT STARTS HERE",
   "downloadTitle": "พื้นที่ดี ๆ<br>สำหรับไอเดียถัดไป.",
   "downloadDescription": "ลอง Pigry กับโปรเจกต์ที่คุณกำลังทำอยู่<br>แล้วค่อย ๆ ทำให้สิ่งดี ๆ เกิดขึ้นทีละ commit",
-  "downloadWindows": "ดาวน์โหลด v0.3.0",
+  "downloadWindows": "ดาวน์โหลด v0.3.1",
   "downloadDisclosure": "ตัวติดตั้ง Windows ยังไม่ได้เซ็นดิจิทัล Windows อาจแสดงคำเตือนก่อนเปิด",
   "buildSource": "ชอบเริ่มจาก source code?",
   "sourceRequirements": "ต้องใช้ Node.js 22.18+ หรือ 24+, Rust และ Git พร้อม Tauri prerequisites สำหรับระบบของคุณ",
@@ -82,7 +82,7 @@ const thai = {
   "faq3Question": "ข้อมูลของฉันอยู่ที่ไหน?",
   "faq3Answer": "Git repository อยู่บนเครื่องของคุณ ฟีเจอร์ GitHub และ AI จะเชื่อมกับบริการที่คุณเลือก และอาจส่งข้อมูลตามงานที่คุณสั่งให้บริการนั้นประมวลผล",
   "faq4Question": "ดาวน์โหลดเวอร์ชันไหนได้บ้าง?",
-  "faq4Answer": "ดาวน์โหลด v0.3.0 สำหรับ Windows x64 ได้จากปุ่มด้านบน สำหรับ Windows ARM64, MSI และ Linux (.deb, .rpm, .AppImage) ทั้ง x64 และ ARM64 เลือกแพ็กเกจจาก Release บน GitHub ได้ ตัวติดตั้ง Windows ยังไม่ได้เซ็นดิจิทัล",
+  "faq4Answer": "ดาวน์โหลด v0.3.1 สำหรับ Windows x64 ได้จากปุ่มด้านบน สำหรับ Windows ARM64, MSI และ Linux (.deb, .rpm, .AppImage) ทั้ง x64 และ ARM64 เลือกแพ็กเกจจาก Release บน GitHub ได้ ตัวติดตั้ง Windows ยังไม่ได้เซ็นดิจิทัล",
   "footerTagline": "ให้ทุกวันของการเขียนโค้ด ชัดเจนขึ้นอีกนิด.",
   "backTop": "กลับขึ้นด้านบน ↑"
 };
@@ -94,8 +94,8 @@ const themeButton = document.querySelector('#theme-toggle');
 const menuButton = document.querySelector('#menu-toggle');
 const mobileMenu = document.querySelector('#mobile-menu');
 const messages = {
-  th: { copied: 'คัดลอกคำสั่งแล้ว', copyFailed: 'คัดลอกไม่สำเร็จ กรุณาเลือกข้อความและคัดลอกด้วยตัวเอง', downloading: 'กำลังเริ่มดาวน์โหลด Windows v0.3.0', light: 'เปลี่ยนเป็นธีมสว่าง', dark: 'เปลี่ยนเป็นธีมมืด', openMenu: 'เปิดเมนู', closeMenu: 'ปิดเมนู' },
-  en: { copied: 'Commands copied.', copyFailed: 'Please select and copy the commands manually.', downloading: 'Starting your Windows v0.3.0 download.', light: 'Switch to light theme', dark: 'Switch to dark theme', openMenu: 'Open navigation', closeMenu: 'Close navigation' },
+  th: { copied: 'คัดลอกคำสั่งแล้ว', copyFailed: 'คัดลอกไม่สำเร็จ กรุณาเลือกข้อความและคัดลอกด้วยตัวเอง', downloading: 'กำลังเริ่มดาวน์โหลด Windows v0.3.1', light: 'เปลี่ยนเป็นธีมสว่าง', dark: 'เปลี่ยนเป็นธีมมืด', openMenu: 'เปิดเมนู', closeMenu: 'ปิดเมนู' },
+  en: { copied: 'Commands copied.', copyFailed: 'Please select and copy the commands manually.', downloading: 'Starting your Windows v0.3.1 download.', light: 'Switch to light theme', dark: 'Switch to dark theme', openMenu: 'Open navigation', closeMenu: 'Close navigation' },
 };
 function updateThemeButton() {
   const dark = document.documentElement.dataset.theme === 'dark';

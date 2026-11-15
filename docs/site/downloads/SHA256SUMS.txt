@@ -1,1 +1,1 @@
-150c929364e200ae9b28160a58d95e9caedeb24d2c3e9383a053bdb0949a4181  pigry_0.3.0_x64-setup.exe
+f21dcbdaa3af139264700ece1454766bb22eeba20d4d21b89ef61fedc1d6d2f4  pigry_0.3.1_x64-setup.exe
