@@ -87,3 +87,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+  # Builds latest.json for the in-app updater from the signed bundles
+  # (Windows NSIS zip + Linux AppImage) uploaded by the build jobs.
+  finalize-updater:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download signed bundles
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p updater
+          gh release download "${{ github.ref_name }}" --dir updater --clobber \
+            --pattern "*.AppImage" --pattern "*.AppImage.sig" \
+            --pattern "*.nsis.zip" --pattern "*.nsis.zip.sig"
+      - name: Build latest.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node scripts/build-updater-json.mjs
+      - name: Upload latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" updater/latest.json --clobber
