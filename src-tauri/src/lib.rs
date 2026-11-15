@@ -57,6 +57,7 @@ mod gh_insights;
 mod insights;
 mod watcher;
 mod wiki;
+mod launch;
 
 use std::sync::Mutex;
 
@@ -105,6 +106,7 @@ pub fn run() {
             let repo_path = None;
             let _ = &config.active;
             app.manage(Mutex::new(AppState { config, repo_path }));
+            app.manage(launch::LaunchFolder(launch::parse_folder(std::env::args_os().skip(1))));
 
             // File watcher: watches the active repo and emits `repo-changed`.
             let handle = app.handle().clone();
@@ -133,6 +135,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_state,
+            launch::get_launch_folder,
             validation_ready,
             commands::open_repository,
             commands::pick_repository,

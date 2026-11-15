@@ -76,6 +76,11 @@ export async function openRepository(path: string): Promise<AppStatePayload> {
   return invoke('open_repository', { path });
 }
 
+export async function getLaunchFolder(): Promise<string | null> {
+  if (!isTauri()) return null;
+  return invoke('get_launch_folder');
+}
+
 /** Opens the OS folder picker; null when the user cancels. */
 export async function pickRepository(): Promise<AppStatePayload | null> {
   return invoke('pick_repository');

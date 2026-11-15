@@ -1,6 +1,6 @@
 name: Release
 
-# Deploy builds for Windows / Linux / macOS on x86_64 + arm64.
+# Deploy builds for Windows / Linux on x86_64 + arm64.
 # Trigger: push a version tag (v0.1.0) or run manually from the Actions tab.
 # Draft release is created/updated by tauri-action; review and publish.
 
@@ -80,7 +80,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'PIGRY ${{ github.ref_name }}'
           releaseBody: |
-            Installers for Windows, Linux and macOS (x86_64 + arm64).
+            Installers for Windows and Linux (x86_64 + arm64).
 
             **Windows** — .msi / .exe (NSIS)
             **Linux** — .deb / .rpm / .AppImage
@@ -94,7 +94,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           shopt -s nullglob
-          sig_files=(src-tauri/target/*/release/bundle/*/*.sig)
+          sig_files=(src-tauri/target/release/bundle/*/*.sig src-tauri/target/*/release/bundle/*/*.sig)
           echo "Found ${#sig_files[@]} signature file(s):"
           for f in "${sig_files[@]}"; do echo "  $f"; done
           if [ ${#sig_files[@]} -gt 0 ]; then

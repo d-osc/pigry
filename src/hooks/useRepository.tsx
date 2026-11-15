@@ -103,7 +103,16 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // In a plain browser getAppState resolves with the design demo fixture.
     const current = stateGate.begin();
-    client.getAppState().then((payload) => { if (current()) setState(payload); })
+    client.getAppState().then(async (payload) => {
+      try {
+        const folder = await client.getLaunchFolder();
+        if (!current()) return;
+        const opened = folder ? await client.openRepository(folder) : payload;
+        if (current()) setState(opened);
+      } catch (e: unknown) {
+        if (current()) { setState(payload); setError(String(e)); }
+      }
+    })
       .catch((e: unknown) => { if (current()) setError(String(e)); });
     return () => stateGate.invalidate();
   }, [mode, stateGate]);
