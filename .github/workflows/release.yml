@@ -23,6 +23,7 @@ jobs:
             args: ''
           # Windows — arm64 (NSIS installer, cross-compiled from the x64 host)
           - platform: windows-latest
+            cross: aarch64-pc-windows-msvc
             args: '--target aarch64-pc-windows-msvc'
           # Linux — x86_64 (deb/rpm/AppImage)
           - platform: ubuntu-22.04
@@ -51,7 +52,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.cross || (matrix.platform == 'macos-14' && 'aarch64-apple-darwin' || matrix.platform == 'macos-13' && 'x86_64-apple-darwin' || '') }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
