@@ -69,8 +69,11 @@ md5sum sha1sum sha256sum expr tar seq · shell fallback: git, npm, cargo, … ·
     }
 
     // `cd` — same semantics as the one-shot terminal: canonicalize, must be
-    // a directory, quoted paths supported. Bare `cd` goes home.
-    if trimmed == "cd" || trimmed.starts_with("cd ") {
+    // a directory, quoted paths supported. Bare `cd` goes home. Lines with
+    // shell metacharacters (`cd src && build`) belong to the shell fallback,
+    // which handles the whole chain natively.
+    let has_metachars = trimmed.contains(['&', ';', '|', '>', '<']);
+    if !has_metachars && (trimmed == "cd" || trimmed.starts_with("cd ")) {
         let target = trimmed[2..].trim().trim_matches('"');
         let next = if target.is_empty() {
             std::env::var_os("USERPROFILE")

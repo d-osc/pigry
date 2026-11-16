@@ -34,7 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { aiChat,
-  openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memoryRemove, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+  openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memoryRemove, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile, agentShellRun } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
 import { effortPayloadFragment, providerStatus, resolveContextWindow } from '../../lib/aiProviders';
@@ -286,6 +286,33 @@ const FILE_TOOLS: ToolSpec[] = [
     },
   },
 ];
+
+/** The agent terminal: one private Pigry Bash PTY session per call — the
+ * same busybox + shell-fallback stack the integrated terminal hosts. */
+const SHELL_TOOL: ToolSpec = {
+  id: 'run_command',
+  name: 'run_command',
+  description:
+    'Run a shell command in the repository root and read its output. Pigry Bash handles busybox built-ins (ls, cat, grep, find, tar, …); anything else falls through to the system shell, so git/npm/cargo and pipes work. Use `cd dir && cmd` for one-shot directory chains.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'The command line to run' },
+      timeout_secs: { type: 'number', description: 'Optional timeout in seconds (default 120, max 600)' },
+    },
+    required: ['command'],
+  },
+  run: async (input) => {
+    const timeout = typeof input.timeout_secs === 'number' ? input.timeout_secs : undefined;
+    const result = await agentShellRun(String(input.command ?? ''), timeout);
+    const header = result.timedOut
+      ? '[timed out — output so far]\n'
+      : result.code !== 0
+        ? `[exit code ${result.code}]\n`
+        : '';
+    return header + result.output.slice(-18000);
+  },
+};
 
 /** Images the read_image tool captured this tool round — flushed into the
  * conversation as visible image blocks after the tool result. */
@@ -1787,7 +1814,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
       },
     };
     const agentAllowed = target.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
+    const tools = [...FILE_TOOLS, SHELL_TOOL, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
       (tool) => {
         if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
         // The Browser team assistant must show pages through the in-app
@@ -2133,7 +2160,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
       },
     };
     const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
+    const tools = [...FILE_TOOLS, SHELL_TOOL, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
       (tool) => {
         if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
         // The Browser team assistant must show pages through the in-app

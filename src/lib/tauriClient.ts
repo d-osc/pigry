@@ -716,6 +716,25 @@ export async function ptyKill(id: number): Promise<void> {
   return invoke('pty_kill', { id });
 }
 
+/** Output of one agent `run_command` — captured PTY transcript, plain text. */
+export interface AgentShellOutput {
+  output: string;
+  code: number;
+  timedOut: boolean;
+}
+
+/** Run one command through a private Pigry Bash session (agent terminal tool). */
+export async function agentShellRun(command: string, timeoutSecs?: number): Promise<AgentShellOutput> {
+  if (!isTauri()) {
+    return {
+      output: `Browser preview cannot run commands — launch the desktop app.\n$ ${command}`,
+      code: 0,
+      timedOut: false,
+    };
+  }
+  return invoke('agent_shell_run', { command, timeoutSecs });
+}
+
 export async function readBinaryFile(
   path: string,
 ): Promise<{ data: string; mime: string; size: number }> {

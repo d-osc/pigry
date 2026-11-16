@@ -155,6 +155,7 @@ pub fn run() {
             commands::get_file_tree,
             commands::terminal_run,
             pty::pty_list_shells,
+            pty::agent_shell_run,
             pty::pty_create,
             pty::pty_write,
             pty::pty_resize,

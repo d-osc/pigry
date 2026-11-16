@@ -21,8 +21,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'files-diff', name: 'read_diff', group: 'Files', description: 'Read staged/unstaged diffs of a file' },
   // Search (search_code)
   { id: 'search-code', name: 'search_code', group: 'Search', description: 'Full-text search across tracked files' },
-  // Terminal (terminal_run)
-  { id: 'terminal-run', name: 'run_command', group: 'Terminal', description: 'Run a shell command in the repository root' },
+  // Terminal (agent_shell_run — private Pigry Bash PTY session per call)
+  { id: 'terminal-run', name: 'run_command', group: 'Terminal', description: 'Run a shell command in the repository root (Pigry Bash: busybox built-ins + shell fallback) and read its captured output' },
   // Git (stage/unstage/discard/commit/stash, commit history)
   { id: 'git-stage', name: 'stage_changes', group: 'Git', description: 'Stage or unstage working-tree changes' },
   { id: 'git-commit', name: 'commit', group: 'Git', description: 'Commit staged changes' },
