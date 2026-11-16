@@ -2,7 +2,7 @@ const english = {
   skip: 'Skip to content', navOverview: 'Meet Pigry', navWorkflow: 'The workflow', navFaq: 'Good questions', getPigry: 'Get Pigry',
   eyebrow: 'A LITTLE CLARITY FOR YOUR CODE', heroLine1: 'Good code.', heroLine2: 'Clear head.',
   heroDescription: 'Pigry is a desktop Git GUI for Windows, Linux and macOS. Explore commit graphs, review diffs, manage branches and work with your own AI provider.',
-  downloadPreview: 'Download v0.3.2', viewSource: 'Explore the source', heroNote: 'Windows x64 · Your existing Git repositories, welcome.', asideNote: 'A little more room for the things you want to build.',
+  downloadPreview: 'Download', viewSource: 'Explore the source', heroNote: 'Windows x64 · Your existing Git repositories, welcome.', asideNote: 'A little more room for the things you want to build.',
   previewLabel: 'MEET YOUR NEW WORKSPACE', previewHint: 'Take a little look around.', previewDisclaimer: 'Illustrative product preview · Switch views and select a commit to explore.',
   foundationGit: 'The Git you already know', foundationDesktop: 'Made for your desktop', foundationAi: 'Your AI, your choice', foundationTheme: 'A light & a dark side',
   workflowEyebrow: 'FROM THE FIRST CHANGE TO THE NEXT COMMIT', workflowTitle: 'See the big picture.<br>Care for the details.',
@@ -23,15 +23,18 @@ const english = {
   faq1Question: 'Can I open a repository I already have?', faq1Answer: 'Absolutely. Open a local Git repository and pick up where you left off. Pigry uses the Git CLI for commits and remote operations, so your existing Git configuration and hooks can come along.',
   faq2Question: 'Is an AI subscription included?', faq2Answer: 'You connect your own AI provider or coding CLI. Model access and any usage costs depend on the service you choose. The installer does not include an AI usage allowance.',
   faq3Question: 'Where does my data live?', faq3Answer: 'Your Git repositories stay on your machine. GitHub and AI features connect to the services you choose and may send data as needed for the requests you ask them to process.',
-  faq4Question: 'Which version can I download?', faq4Answer: 'Choose User Setup (EXE) for your Windows account or Admin Setup (MSI) for all users. Both x64 and ARM64 are available below, alongside Linux AppImage, DEB and RPM packages. Windows installers are unsigned.',
-  "explorerEyebrow": "NEW IN v0.3.2 · TERMINAL",
+  faq4Question: 'Which version can I download?', faq4Answer: 'Every download on this page is always the latest release. Choose User Setup (EXE) for your Windows account or Admin Setup (MSI) for all users. x64 and ARM64 are available below, alongside macOS and Linux AppImage, DEB and RPM packages. Installers are unsigned.',
+  "explorerEyebrow": "NEW · TERMINAL",
   "explorerTitle": "A real terminal.<br>Right inside Pigry.",
   "explorerText": "Pigry now ships the integrated terminal the VS Code way: a real PTY session with colors, split panes, find and shell profiles. Pigry Bash — the built-in busybox shell — is the default; PowerShell, CMD, Git Bash and WSL are one click away.",
   "explorerNote": "Open it with Ctrl+`, split panes side by side, or pick another shell profile from the dropdown. The agent can run commands through the same stack.",
   "explorerAction": "Get Pigry for Windows",
   "explorerCaption": "Illustrative Pigry terminal",
   "packagesTitle": "Choose your platform.",
-  "packagesNote": "v0.3.2 · Official GitHub release downloads. Choose x64 for most Intel/AMD PCs, or ARM64 for ARM-based devices.",
+  "packageMac": "Intel & Apple Silicon",
+  "downloadMacos": "macOS · DMG",
+  "checksumLink": "Checksums & release notes ↗",
+  "packagesNote": "Always the latest release · Official GitHub downloads. Choose x64 for most Intel/AMD PCs, or ARM64 for ARM-based devices.",
   "windowsInstaller": "User · EXE",
   "packageX64": "Intel / AMD PCs",
   "packageArm": "ARM-based devices",
@@ -48,7 +51,7 @@ const thai = {
   "heroLine1": "โค้ดไปต่อ",
   "heroLine2": "ได้อย่างสบายใจ.",
   "heroDescription": "ให้ Git เป็นเรื่องที่มองเห็นและเข้าใจง่าย รวมโค้ด บรานช์ และ AI ไว้ในพื้นที่ทำงานเดียวบนเดสก์ท็อปของคุณ",
-  "downloadPreview": "ดาวน์โหลด v0.3.2",
+  "downloadPreview": "ดาวน์โหลด",
   "viewSource": "ดูโค้ดบน GitHub",
   "heroNote": "Windows x64 · ใช้กับ Git repo ที่มีอยู่ได้เลย",
   "asideNote": "พื้นที่ให้คุณโฟกัสกับงานที่อยากสร้าง",
@@ -100,15 +103,18 @@ const thai = {
   "faq3Question": "ข้อมูลของฉันอยู่ที่ไหน?",
   "faq3Answer": "Git repository อยู่บนเครื่องของคุณ ฟีเจอร์ GitHub และ AI จะเชื่อมกับบริการที่คุณเลือก และอาจส่งข้อมูลตามงานที่คุณสั่งให้บริการนั้นประมวลผล",
   "faq4Question": "ดาวน์โหลดเวอร์ชันไหนได้บ้าง?",
-  "faq4Answer": "เลือก User Setup (EXE) สำหรับบัญชี Windows ของคุณ หรือ Admin Setup (MSI) สำหรับผู้ใช้ทุกคน มีทั้ง x64 และ ARM64 พร้อม Linux AppImage, DEB และ RPM ในส่วนดาวน์โหลดด้านบน ตัวติดตั้ง Windows ยังไม่ได้เซ็นดิจิทัล",
-  "explorerEyebrow": "ใหม่ใน v0.3.2 · TERMINAL",
+  "faq4Answer": "ทุกปุ่มดาวน์โหลดในหน้านี้เป็นเวอร์ชันล่าสุดเสมอ เลือก User Setup (EXE) สำหรับบัญชี Windows ของคุณ หรือ Admin Setup (MSI) สำหรับผู้ใช้ทุกคน มีทั้ง x64, ARM64, macOS และ Linux AppImage, DEB, RPM ในส่วนดาวน์โหลดด้านบน ตัวติดตั้งยังไม่ได้เซ็นดิจิทัล",
+  "explorerEyebrow": "ใหม่ · TERMINAL",
   "explorerTitle": "เทอร์มินัลจริงในตัว<br>แบบ VS Code.",
   "explorerText": "Pigry มาพร้อม integrated terminal แบบ PTY จริง มีสี ANSI แยก pane ได้ มีช่องค้นหา และเลือก shell ได้ Pigry Bash shell ในตัวที่รวม busybox built-ins เป็นค่าเริ่มต้น ส่วน PowerShell, CMD, Git Bash และ WSL เลือกได้จากดรอปดาวน์",
   "explorerNote": "เปิดด้วย Ctrl+` แยก pane คู่กันได้ หรือเปลี่ยนโปรไฟล์จากดรอปดาวน์ agent ก็รันคำสั่งผ่านสแตกเดียวกันนี้ได้",
   "explorerAction": "ดาวน์โหลด Pigry สำหรับ Windows",
   "explorerCaption": "ภาพจำลองเทอร์มินัลของ Pigry",
   "packagesTitle": "เลือกแพลตฟอร์มของคุณ.",
-  "packagesNote": "v0.3.2 · ดาวน์โหลดโดยตรงจาก GitHub Release เลือก x64 สำหรับเครื่อง Intel/AMD ส่วนใหญ่ หรือ ARM64 สำหรับอุปกรณ์ที่ใช้ชิป ARM",
+  "packageMac": "Intel & Apple Silicon",
+  "downloadMacos": "macOS · DMG",
+  "checksumLink": "ลิงก์ checksum และ release notes ↗",
+  "packagesNote": "ดาวน์โหลดเวอร์ชันล่าสุดเสมอ · จาก GitHub Release โดยตรง เลือก x64 สำหรับเครื่อง Intel/AMD ส่วนใหญ่ หรือ ARM64 สำหรับอุปกรณ์ที่ใช้ชิป ARM",
   "windowsInstaller": "User · EXE",
   "packageX64": "เครื่อง Intel / AMD",
   "packageArm": "อุปกรณ์ที่ใช้ชิป ARM",
@@ -124,8 +130,8 @@ const themeButton = document.querySelector('#theme-toggle');
 const menuButton = document.querySelector('#menu-toggle');
 const mobileMenu = document.querySelector('#mobile-menu');
 const messages = {
-  th: { copied: 'คัดลอกคำสั่งแล้ว', copyFailed: 'คัดลอกไม่สำเร็จ กรุณาเลือกข้อความและคัดลอกด้วยตัวเอง', downloading: 'กำลังเริ่มดาวน์โหลด Windows v0.3.2', light: 'เปลี่ยนเป็นธีมสว่าง', dark: 'เปลี่ยนเป็นธีมมืด', openMenu: 'เปิดเมนู', closeMenu: 'ปิดเมนู' },
-  en: { copied: 'Commands copied.', copyFailed: 'Please select and copy the commands manually.', downloading: 'Starting your Windows v0.3.2 download.', light: 'Switch to light theme', dark: 'Switch to dark theme', openMenu: 'Open navigation', closeMenu: 'Close navigation' },
+  th: { copied: 'คัดลอกคำสั่งแล้ว', copyFailed: 'คัดลอกไม่สำเร็จ กรุณาเลือกข้อความและคัดลอกด้วยตัวเอง', downloading: 'กำลังเริ่มดาวน์โหลด', light: 'เปลี่ยนเป็นธีมสว่าง', dark: 'เปลี่ยนเป็นธีมมืด', openMenu: 'เปิดเมนู', closeMenu: 'ปิดเมนู' },
+  en: { copied: 'Commands copied.', copyFailed: 'Please select and copy the commands manually.', downloading: 'Starting your download.', light: 'Switch to light theme', dark: 'Switch to dark theme', openMenu: 'Open navigation', closeMenu: 'Close navigation' },
 };
 function updateThemeButton() {
   const dark = document.documentElement.dataset.theme === 'dark';
@@ -240,3 +246,47 @@ const observer = new IntersectionObserver(entries => {
 sections.forEach(section => observer.observe(section));
 document.querySelector('#year').textContent = new Date().getFullYear();
 setLanguage(language);
+
+/* Latest-release downloads: resolve every [data-asset] link against the
+ * newest GitHub release, so the page never pins a version number. Links
+ * keep pointing at the releases page as the no-JS / rate-limit fallback. */
+(async () => {
+  const API = 'https://api.github.com/repos/d-osc/pigry/releases/latest';
+  const patterns = {
+    'x64-setup': /^pigry_[\d.]+_x64-setup\.exe$/,
+    'arm64-setup': /^pigry_[\d.]+_arm64-setup\.exe$/,
+    'x64-msi': /^pigry_[\d.]+_x64_en-US\.msi$/,
+    'arm64-msi': /^pigry_[\d.]+_arm64_en-US\.msi$/,
+    'universal-dmg': /^pigry_[\d.]+_universal\.dmg$/,
+    'amd64-appimage': /^pigry_[\d.]+_amd64\.AppImage$/,
+    'amd64-deb': /^pigry_[\d.]+_amd64\.deb$/,
+    'x86_64-rpm': /^pigry-[\d.]+-1\.x86_64\.rpm$/,
+    'aarch64-appimage': /^pigry_[\d.]+_aarch64\.AppImage$/,
+    'arm64-deb': /^pigry_[\d.]+_arm64\.deb$/,
+    'aarch64-rpm': /^pigry-[\d.]+-1\.aarch64\.rpm$/,
+  };
+  try {
+    const res = await fetch(API, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) return;
+    const release = await res.json();
+    const assets = Array.isArray(release.assets) ? release.assets : [];
+    for (const link of document.querySelectorAll('[data-asset]')) {
+      const re = patterns[link.dataset.asset];
+      const hit = re && assets.find((a) => re.test(a.name));
+      if (hit) link.href = hit.browser_download_url;
+    }
+    // Keep the structured data honest about what "latest" means.
+    const version = String(release.tag_name || '').replace(/^v/, '');
+    if (version) {
+      for (const node of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const data = JSON.parse(node.textContent);
+          (Array.isArray(data) ? data : [data]).forEach((item) => {
+            if (item && item.softwareVersion === 'latest') item.softwareVersion = version;
+          });
+          node.textContent = JSON.stringify(data, null, 2);
+        } catch { /* malformed ld+json — ignore */ }
+      }
+    }
+  } catch { /* offline / rate-limited — fallback links stay */ }
+})();
