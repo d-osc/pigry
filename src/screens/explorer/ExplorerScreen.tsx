@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,6 +9,7 @@ import {
   RefreshCw,
   ReplaceAll,
   Settings,
+  SplitSquareHorizontal,
   X,
 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
@@ -36,6 +37,16 @@ import { EditorPane } from './EditorPane';
 import { AiAgentPanel } from './AiAgentPanel';
 import { teamForScreen } from '../../lib/agentExtras';
 import './ExplorerScreen.css';
+
+/** One VS Code-style editor group: its own tab strip and active editor. */
+interface EditorGroup {
+  /** Ordered tab paths in this group. */
+  tabs: string[];
+  /** Selected tab of this group (falls back to its last tab). */
+  active: string | null;
+}
+
+const MAX_GROUPS = 3;
 
 interface ExplorerScreenProps {
   /** Path requested by the palette (⌘P) — opens it when it changes. */
@@ -71,8 +82,14 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   const [treeAttempt, setTreeAttempt] = useState(0);
   const [tree, setTree] = useState<FileTreeData | null>(null);
   // Remounted by AppShell on openPath change (key), so the initializer runs.
-  const [selectedPath, setSelectedPath] = useState<string | null>(openPath ?? null);
-  const [openTabs, setOpenTabs] = useState<string[]>(openPath ? [openPath] : []);
+  // VS Code-style editor groups — each group owns a tab strip; splitting
+  // copies the focused editor into a new group beside it (up to MAX_GROUPS).
+  const [groups, setGroups] = useState<EditorGroup[]>(
+    openPath ? [{ tabs: [openPath], active: openPath }] : [{ tabs: [], active: null }],
+  );
+  const [activeGroup, setActiveGroup] = useState(0);
+  // Split ratios as flex-grow units (1 = equal share), one per group.
+  const [groupWidths, setGroupWidths] = useState<number[]>([1]);
   const [filter, setFilter] = useState('');
   const [codeHits, setCodeHits] = useState<CodeSearchHit[] | null>(null);
   // VS Code Search view options (Aa / ab / .* / AB / include / exclude / gear).
@@ -215,50 +232,177 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   // every tab the Explorer stays empty until a file is picked again.
   const [closedAll, setClosedAll] = useState(false);
 
-  const visibleTabs = useMemo(() => {
-    if (openTabs.length > 0) return openTabs;
-    if (!closedAll && tree?.entries.length) return [tree.entries[0]];
-    return [];
-  }, [openTabs, closedAll, tree]);
+  const safeActiveGroup = Math.min(activeGroup, groups.length - 1);
+  // Union of every explicit tab across groups (order of first appearance).
+  const unionTabs = useMemo(() => {
+    const seen: string[] = [];
+    for (const group of groups) {
+      for (const tab of group.tabs) {
+        if (!seen.includes(tab)) seen.push(tab);
+      }
+    }
+    return seen;
+  }, [groups]);
+  // Implicit auto-opened first file — shown until the first real tab opens.
+  const implicitTab =
+    !closedAll && unionTabs.length === 0 && tree?.entries.length
+      ? (tree.entries[0] ?? null)
+      : null;
 
-  // Active file = the selection when it is still open, otherwise the last tab.
-  const activePath = visibleTabs.includes(selectedPath ?? '')
-    ? selectedPath
-    : (visibleTabs[visibleTabs.length - 1] ?? null);
+  // Active file = the focused group's selection when still open, else its last tab.
+  const focusedGroup = groups[safeActiveGroup];
+  const focusedTabs =
+    focusedGroup.tabs.length > 0 ? focusedGroup.tabs : implicitTab ? [implicitTab] : [];
+  const activePath = focusedTabs.includes(focusedGroup.active ?? '')
+    ? focusedGroup.active
+    : (focusedTabs[focusedTabs.length - 1] ?? null);
 
   const handleSelectFile = useCallback(
     (path: string) => {
-      setSelectedPath(path);
       setClosedAll(false);
-      setOpenTabs((tabs) => {
-        if (tabs.includes(path)) return tabs;
-        // The auto-opened first file is implicit — keep it when a second opens.
-        if (tabs.length === 0 && visibleTabs.length === 1 && visibleTabs[0] !== path) {
-          return [visibleTabs[0], path];
-        }
-        return [...tabs, path];
-      });
+      setActiveGroup(safeActiveGroup);
+      setGroups((gs) =>
+        gs.map((group, index) => {
+          if (index !== safeActiveGroup) return group;
+          if (group.tabs.includes(path)) return { ...group, active: path };
+          // The auto-opened first file is implicit — keep it when a second opens.
+          if (group.tabs.length === 0 && implicitTab && implicitTab !== path) {
+            return { tabs: [implicitTab, path], active: path };
+          }
+          return { tabs: [...group.tabs, path], active: path };
+        }),
+      );
     },
-    [visibleTabs],
+    [safeActiveGroup, implicitTab],
   );
 
-  const handleCloseTab = useCallback((path: string) => {
-    // Closing the last visible tab (explicit or implicit) clears the editor.
-    const willBeEmpty = visibleTabs.length <= 1;
-    setOpenTabs((tabs) => {
-      const next = tabs.filter((tab) => tab !== path);
-      setSelectedPath((current) =>
-        current === path ? (next[next.length - 1] ?? null) : current,
-      );
+  const handleCloseTab = useCallback(
+    (path: string) => {
+      const explicit = groups.some((group) => group.tabs.includes(path));
+      if (!explicit) {
+        // Closing the implicit auto-opened file clears the editor.
+        setClosedAll(true);
+        setDirtyTabs((dirty) => {
+          const next = new Set(dirty);
+          next.delete(path);
+          return next;
+        });
+        return;
+      }
+      setGroups((gs) => {
+        let next = gs.map((group) => {
+          if (!group.tabs.includes(path)) return group;
+          const tabs = group.tabs.filter((tab) => tab !== path);
+          return {
+            tabs,
+            active: group.active === path ? (tabs[tabs.length - 1] ?? null) : group.active,
+          };
+        });
+        // A group left without tabs folds away (unless it is the only one).
+        if (next.length > 1) next = next.filter((group) => group.tabs.length > 0);
+        return next;
+      });
+      if (groups.length === 1 && focusedTabs.length <= 1) setClosedAll(true);
+      setDirtyTabs((dirty) => {
+        const next = new Set(dirty);
+        next.delete(path);
+        return next;
+      });
+    },
+    [groups, focusedTabs.length],
+  );
+
+  // Split the focused editor into a new group beside it (VS Code style —
+  // the active editor is copied, not moved).
+  const handleSplitEditor = useCallback(() => {
+    setGroups((gs) => {
+      if (gs.length >= MAX_GROUPS) return gs;
+      const index = Math.min(activeGroup, gs.length - 1);
+      const source = gs[index];
+      const seed = source.active ?? source.tabs[source.tabs.length - 1] ?? null;
+      const next = [...gs];
+      next.splice(index + 1, 0, { tabs: seed ? [seed] : [], active: seed });
       return next;
     });
-    if (willBeEmpty) setClosedAll(true);
-    setDirtyTabs((dirty) => {
-      const next = new Set(dirty);
-      next.delete(path);
+    setActiveGroup((current) => Math.min(current + 1, MAX_GROUPS - 1));
+    setGroupWidths((ws) => {
+      const next = [...ws];
+      while (next.length < groups.length + 1) next.push(1);
       return next;
     });
-  }, [visibleTabs.length]);
+  }, [activeGroup, groups.length]);
+
+  const handleCloseGroup = useCallback((index: number) => {
+    setGroups((gs) => (gs.length > 1 ? gs.filter((_, i) => i !== index) : gs));
+    setActiveGroup((current) => Math.max(0, current >= index ? current - 1 : current));
+    setGroupWidths((ws) => {
+      const next = [...ws];
+      next.splice(index, 1);
+      return next.length > 0 ? next : [1];
+    });
+  }, []);
+
+  // Drag a tab from one group's strip onto another group to move it there.
+  // The source strip is carried in the drag payload — the same file may be
+  // open in several groups, so a path alone is ambiguous.
+  const handleMoveTabToGroup = useCallback(
+    (path: string, fromIndex: number, targetIndex: number) => {
+      if (fromIndex === targetIndex || groups[fromIndex] === undefined || groups[targetIndex] === undefined)
+        return;
+      if (!groups[fromIndex].tabs.includes(path)) return;
+      const stripped = groups.map((group, i) => {
+        if (i !== fromIndex) return group;
+        const tabs = group.tabs.filter((tab) => tab !== path);
+        return {
+          tabs,
+          active: group.active === path ? (tabs[tabs.length - 1] ?? null) : group.active,
+        };
+      });
+      const target = stripped[targetIndex];
+      stripped[targetIndex] = target.tabs.includes(path)
+        ? { ...target, active: path }
+        : { tabs: [...target.tabs, path], active: path };
+      const kept = stripped
+        .map((group, i) => ({ group, i }))
+        .filter(({ group }) => group.tabs.length > 0);
+      const keptGroups = kept.map(({ group }) => group);
+      const nextTarget = kept.findIndex(({ i }) => i === targetIndex);
+      setGroups(keptGroups);
+      setActiveGroup(nextTarget === -1 ? Math.min(targetIndex, keptGroups.length - 1) : nextTarget);
+    },
+    [groups],
+  );
+
+  // Dragging a divider shifts flex-grow units between the two neighbors.
+  const groupsRowRef = useRef<HTMLDivElement | null>(null);
+  const shiftGroupWidths = useCallback(
+    (leftIndex: number, rightIndex: number, dx: number) => {
+      setGroupWidths((ws) => {
+        const widths = groups.map((_, i) => ws[i] ?? 1);
+        const total = widths.reduce((sum, grow) => sum + grow, 0);
+        const rowWidth = groupsRowRef.current?.clientWidth ?? 0;
+        if (rowWidth <= 0) return ws;
+        const delta = (dx / rowWidth) * total;
+        const next = [...widths];
+        next[leftIndex] = Math.max(0.12, next[leftIndex] + delta);
+        next[rightIndex] = Math.max(0.12, next[rightIndex] - delta);
+        return next;
+      });
+    },
+    [groups],
+  );
+
+  // Ctrl+\ splits the focused editor right (VS Code default binding).
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === '\\') {
+        event.preventDefault();
+        handleSplitEditor();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSplitEditor]);
 
   const handleBufferChange = useCallback(
     (buffer: { content: string; language: string; dirty: boolean } | null, path: string) => {
@@ -548,8 +692,12 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
           }
           return tab;
         };
-        setOpenTabs((tabs) => tabs.map(remap));
-        setSelectedPath((current) => (current ? remap(current) : current));
+        setGroups((gs) =>
+          gs.map((group) => ({
+            tabs: group.tabs.map(remap),
+            active: group.active ? remap(group.active) : group.active,
+          })),
+        );
         notify(`Moved to ${newPath}`, 'success');
       } catch (error) {
         notify(error instanceof Error ? error.message : String(error), 'error');
@@ -608,8 +756,12 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
           }
           return tab;
         };
-        setOpenTabs((tabs) => tabs.map(remap));
-        setSelectedPath((current) => (current ? remap(current) : current));
+        setGroups((gs) =>
+          gs.map((group) => ({
+            tabs: group.tabs.map(remap),
+            active: group.active ? remap(group.active) : group.active,
+          })),
+        );
         setDirtyTabs((dirty) => {
           const next = new Set<string>();
           dirty.forEach((tab) => next.add(remap(tab)));
@@ -636,14 +788,21 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
       setTree(await getFileTree());
       const underPath = (tab: string) =>
         tab === path || (kind === 'folder' && tab.startsWith(`${path}/`));
-      setOpenTabs((tabs) => tabs.filter((tab) => !underPath(tab)));
+      setGroups((gs) =>
+        gs.map((group) => {
+          const tabs = group.tabs.filter((tab) => !underPath(tab));
+          return {
+            tabs,
+            active: group.active && !underPath(group.active) ? group.active : null,
+          };
+        }),
+      );
       setDirtyTabs((dirty) => {
         if (![...dirty].some(underPath)) return dirty;
         const next = new Set(dirty);
         [...dirty].filter(underPath).forEach((tab) => next.delete(tab));
         return next;
       });
-      setSelectedPath((current) => (current && underPath(current) ? null : current));
     },
     [],
   );
@@ -985,60 +1144,155 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
           />
         )}
 
-        {activePath ? (
-          <section className="explorer-screen__editor-col">
-            <div className="explorer-tabs" role="tablist">
-              {visibleTabs.map((path) => {
-                const name = path.split('/').pop() ?? path;
-                const active = path === activePath;
-                const dirty = dirtyTabs.has(path);
-                return (
-                  <button
-                    key={path}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={`explorer-tab${active ? ' explorer-tab--active' : ''}`}
-                    onClick={() => setSelectedPath(path)}
+        <div className="explorer-screen__groups" ref={groupsRowRef}>
+          {unionTabs.length === 0 && !implicitTab ? (
+            <div className="explorer-screen__placeholder">Select a file to open it</div>
+          ) : (
+            groups.map((group, index) => {
+              const focused = index === safeActiveGroup;
+              const tabs =
+                group.tabs.length > 0 ? group.tabs : implicitTab ? [implicitTab] : [];
+              const groupActive = tabs.includes(group.active ?? '')
+                ? group.active
+                : (tabs[tabs.length - 1] ?? null);
+              return (
+                <Fragment key={index}>
+                  {index > 0 && (
+                    <ResizeHandle
+                      orientation="v"
+                      label="Resize editor split"
+                      onDelta={(dx) => shiftGroupWidths(index - 1, index, dx)}
+                    />
+                  )}
+                  <section
+                    className={`explorer-screen__editor-col${focused ? ' explorer-screen__editor-col--focused' : ''}`}
+                    style={{ flexGrow: groupWidths[index] ?? 1 }}
+                    onMouseDown={() => setActiveGroup(index)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      const dropped = event.dataTransfer.getData('text/pigry-tab');
+                      if (!dropped) return;
+                      const from = Number(
+                        event.dataTransfer.getData('text/pigry-tab-group'),
+                      );
+                      handleMoveTabToGroup(
+                        dropped,
+                        Number.isFinite(from) ? from : index,
+                        index,
+                      );
+                    }}
                   >
-                    <span className="explorer-tab__lang">{languageTag(path)}</span>
-                    <span className="explorer-tab__name">{name}</span>
-                    {dirty && <i className="explorer-tab__dirty" />}
-                    <span
-                      className="explorer-tab__close"
-                      role="button"
-                      aria-label={`Close ${name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleCloseTab(path);
-                      }}
-                    >
-                      <X size={11} strokeWidth={1.75} />
-                    </span>
-                  </button>
-                );
-              })}
-              <span className="explorer-tabs__repo" title={`Root folder · branch ${repository?.currentBranch ?? ''}`}>
-                <FolderOpen size={12} strokeWidth={1.25} />
-                {repoName}
-              </span>
-            </div>
-            <EditorPane
-              key={activePath}
-              path={activePath}
-              revealLine={revealTarget?.path === activePath ? revealTarget.line : null}
-              revealColumn={revealTarget?.path === activePath ? revealTarget.column : null}
-              terminalOpen={terminalOpen}
-              onToggleTerminal={onToggleTerminal}
-              onBufferChange={handleBufferChange}
-              onJumpToCommit={onJumpToCommit}
-              onSelectionChange={setEditorSelection}
-              onHistorySelect={setHistorySelection}
-            />
-          </section>
-        ) : (
-          <div className="explorer-screen__placeholder">Select a file to open it</div>
-        )}
+                    <div className="explorer-tabs" role="tablist">
+                      {tabs.map((path) => {
+                        const name = path.split('/').pop() ?? path;
+                        const active = path === groupActive;
+                        const dirty = dirtyTabs.has(path);
+                        return (
+                          <button
+                            key={path}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            className={`explorer-tab${active ? ' explorer-tab--active' : ''}`}
+                            draggable
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData('text/pigry-tab', path);
+                              event.dataTransfer.setData(
+                                'text/pigry-tab-group',
+                                String(index),
+                              );
+                            }}
+                            onClick={() => {
+                              setActiveGroup(index);
+                              setGroups((gs) =>
+                                gs.map((g, i) =>
+                                  i === index ? { ...g, active: path } : g,
+                                ),
+                              );
+                            }}
+                          >
+                            <span className="explorer-tab__lang">{languageTag(path)}</span>
+                            <span className="explorer-tab__name">{name}</span>
+                            {dirty && <i className="explorer-tab__dirty" />}
+                            <span
+                              className="explorer-tab__close"
+                              role="button"
+                              aria-label={`Close ${name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleCloseTab(path);
+                              }}
+                            >
+                              <X size={11} strokeWidth={1.75} />
+                            </span>
+                          </button>
+                        );
+                      })}
+                      {index === groups.length - 1 && (
+                        <span
+                          className="explorer-tabs__repo"
+                          title={`Root folder · branch ${repository?.currentBranch ?? ''}`}
+                        >
+                          <FolderOpen size={12} strokeWidth={1.25} />
+                          {repoName}
+                        </span>
+                      )}
+                      <span className="explorer-tabs__spacer" />
+                      {groups.length < MAX_GROUPS && (
+                        <button
+                          type="button"
+                          className="explorer-tabs__action"
+                          aria-label="Split editor right"
+                          title="Split editor right (Ctrl+\)"
+                          onClick={handleSplitEditor}
+                        >
+                          <SplitSquareHorizontal size={12} strokeWidth={1.5} />
+                        </button>
+                      )}
+                      {groups.length > 1 && (
+                        <button
+                          type="button"
+                          className="explorer-tabs__action"
+                          aria-label="Close editor group"
+                          title="Close editor group"
+                          onClick={() => handleCloseGroup(index)}
+                        >
+                          <X size={12} strokeWidth={1.5} />
+                        </button>
+                      )}
+                    </div>
+                    {groupActive ? (
+                      <EditorPane
+                        key={`${index}:${groupActive}`}
+                        path={groupActive}
+                        revealLine={
+                          focused && revealTarget?.path === groupActive
+                            ? revealTarget.line
+                            : null
+                        }
+                        revealColumn={
+                          focused && revealTarget?.path === groupActive
+                            ? revealTarget.column
+                            : null
+                        }
+                        terminalOpen={focused ? terminalOpen : false}
+                        onToggleTerminal={onToggleTerminal}
+                        onBufferChange={handleBufferChange}
+                        onJumpToCommit={onJumpToCommit}
+                        onSelectionChange={setEditorSelection}
+                        onHistorySelect={setHistorySelection}
+                      />
+                    ) : (
+                      <div className="explorer-screen__placeholder">
+                        Select a file to open it
+                      </div>
+                    )}
+                  </section>
+                </Fragment>
+              );
+            })
+          )}
+        </div>
 
         {aiOpen && (
           <ResizeHandle

@@ -17,7 +17,13 @@ export function ResizeHandle({ orientation, onDelta, label, onReset }: ResizeHan
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    // Synthetic pointers (automation/tests) have no capturable id — drag
+    // still works without capture, moves just stop outside the handle.
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
     last.current = { x: event.clientX, y: event.clientY };
     document.body.classList.add('resizing');
   }, []);
@@ -34,7 +40,11 @@ export function ResizeHandle({ orientation, onDelta, label, onReset }: ResizeHan
   );
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore — capture may never have been taken
+    }
     last.current = null;
     document.body.classList.remove('resizing');
   }, []);
