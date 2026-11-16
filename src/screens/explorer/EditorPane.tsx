@@ -404,13 +404,12 @@ export function EditorPane({
   }, [path]);
 
   // Blame decorations: inject author + sha after each line when blame mode
-  // is on. Cleared when toggled off or when the file changes.
+  // is on. Cleared when toggled off or when the file changes. The previous
+  // collection is always cleared first so re-runs can never stack duplicate
+  // labels on the same line.
   useEffect(() => {
-    const collection = decorationsRef.current;
-    if (!blameOn || !blameLines || !editorInstance) {
-      collection?.clear();
-      return;
-    }
+    decorationsRef.current?.clear();
+    if (!blameOn || !blameLines || !editorInstance) return;
     const model = editorInstance.getModel();
     if (!model) return;
     const monaco = monacoRef.current;
@@ -422,7 +421,7 @@ export function EditorPane({
         const maxCol = model.getLineMaxColumn(lineNum);
         const label = line.uncommitted
           ? '  — Uncommitted'
-          : `  ${line.shortOid} ${line.authorInitials} · ${relativeTime(line.timeSeconds)}`;
+          : `  ${line.shortOid} ${line.authorName} · ${relativeTime(line.timeSeconds)}`;
         return {
           range: new monaco.Range(lineNum, 1, lineNum, maxCol),
           options: {
@@ -447,7 +446,11 @@ export function EditorPane({
       id: 'pigry.copySha', label: 'Copy full SHA',
       run: (_editor, sha: string) => { void navigator.clipboard?.writeText(sha); },
     });
-    return () => { jump.dispose(); copy.dispose(); };
+    const copyMsg = editorInstance.addAction({
+      id: 'pigry.copyMessage', label: 'Copy commit message',
+      run: (_editor, message: string) => { void navigator.clipboard?.writeText(message); },
+    });
+    return () => { jump.dispose(); copy.dispose(); copyMsg.dispose(); };
   }, [editorInstance]);
 
   // Blame hover popup: rich GitLens-style card (summary, body, author with
@@ -463,9 +466,12 @@ export function EditorPane({
       model.getLanguageId(),
       {
         provideHover: (
-          _model: MonacoEditorNS.ITextModel,
+          hoverModel: MonacoEditorNS.ITextModel,
           position: { lineNumber: number },
         ) => {
+          // Providers register per language; ignore hovers from other editors
+          // sharing the language so contents never merge across editors.
+          if (hoverModel.id !== model.id) return null;
           const info = byLine.get(position.lineNumber);
           if (!info) return null;
           const range = new monaco.Range(position.lineNumber, 1, position.lineNumber, 1);
@@ -485,9 +491,18 @@ export function EditorPane({
             };
           }
 
-          const body = info.message.startsWith(info.summary)
-            ? info.message.slice(info.summary.length).trim()
-            : info.message.trim();
+          // Summary is collapsed to one line by git (newlines → spaces), so
+          // compare with whitespace normalized — a plain startsWith fails on
+          // multi-line first paragraphs and echoed the summary twice.
+          const summaryNorm = info.summary.replace(/\s+/g, ' ').trim();
+          const paragraphs = info.message
+            .split(/\n{2,}/)
+            .map((p) => p.replace(/\s+/g, ' ').trim())
+            .filter(Boolean);
+          const bodyParas =
+            paragraphs.length > 0 && paragraphs[0] === summaryNorm
+              ? paragraphs.slice(1)
+              : paragraphs;
           const authored = new Date(info.timeSeconds * 1000);
           const absolute = authored.toLocaleString('en-US', {
             year: 'numeric',
@@ -500,10 +515,8 @@ export function EditorPane({
           const contents: { value: string; isTrusted?: boolean }[] = [
             { value: `**${info.summary}**` },
           ];
-          if (body) {
-            for (const paragraph of body.split(/\n{2,}/)) {
-              contents.push({ value: paragraph.replace(/\n/g, ' ') });
-            }
+          for (const paragraph of bodyParas) {
+            contents.push({ value: paragraph });
           }
           contents.push(
             {
@@ -514,14 +527,20 @@ export function EditorPane({
             },
             { value: `🔑 \`${info.oid}\`` },
             { value: `📄 \`${path}\` · line ${info.line}` },
-            {
-              value: [
-                `[View commit in graph](command:${editorInstance.getId()}:pigry.jumpToCommit?${encodeURIComponent(JSON.stringify([info.oid]))})`,
-                `[Copy full sha](command:${editorInstance.getId()}:pigry.copySha?${encodeURIComponent(JSON.stringify([info.oid]))})`,
-              ].join(' · '),
-              isTrusted: true,
-            },
           );
+          if (info.filesChanged !== undefined) {
+            contents.push({
+              value: `📊 ${info.filesChanged} file${info.filesChanged === 1 ? '' : 's'} changed · +${info.insertions ?? 0} −${info.deletions ?? 0}`,
+            });
+          }
+          contents.push({
+            value: [
+              `[View commit in graph](command:${editorInstance.getId()}:pigry.jumpToCommit?${encodeURIComponent(JSON.stringify([info.oid]))})`,
+              `[Copy full sha](command:${editorInstance.getId()}:pigry.copySha?${encodeURIComponent(JSON.stringify([info.oid]))})`,
+              `[Copy commit message](command:${editorInstance.getId()}:pigry.copyMessage?${encodeURIComponent(JSON.stringify([info.message]))})`,
+            ].join(' · '),
+            isTrusted: true,
+          });
           return { range, contents };
         },
       },

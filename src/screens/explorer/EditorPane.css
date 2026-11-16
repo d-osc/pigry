@@ -85,6 +85,8 @@
 
 /* ---- Inline history block ---- */
 .editor-pane__history {
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
   max-height: 190px;
   overflow: hidden;
@@ -95,6 +97,7 @@
 .editor-pane__history .file-history {
   border-left: none;
   background: none;
+  min-height: 0;
 }
 
 .editor-pane__history .file-history__head {
@@ -103,7 +106,7 @@
 }
 
 .editor-pane__history .file-history__list {
-  overflow: visible;
+  overflow-y: auto;
   padding: 0 12px 8px;
 }
 

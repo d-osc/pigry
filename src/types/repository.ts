@@ -263,6 +263,10 @@ export interface BlameLine {
   /** Full commit message (summary + body). */
   message: string;
   uncommitted: boolean;
+  /** Commit stats vs its parent — shown in the blame hover (worktree blame). */
+  filesChanged?: number;
+  insertions?: number;
+  deletions?: number;
 }
 
 export interface Contributor {

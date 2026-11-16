@@ -3154,10 +3154,32 @@ pub struct BlameLine {
     pub message: String,
     /// True when the line has uncommitted worktree changes.
     pub uncommitted: bool,
+    /// Stats of the blamed commit vs its parent (worktree blame only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files_changed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insertions: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deletions: Option<i64>,
 }
 
-/// Per-line blame for a file in the working directory. Uncommitted lines
-/// carry `uncommitted: true` with placeholder identity.
+/// Insertions/deletions/files of a commit's diff against its first parent
+/// (empty tree for root commits).
+fn commit_stats(repo: &Repository, commit_id: git2::Oid) -> Result<(u32, i64, i64)> {
+    let commit = repo.find_commit(commit_id).map_err(err)?;
+    let tree = commit.tree().map_err(err)?;
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+    let diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)
+        .map_err(err)?;
+    let stats = diff.stats().map_err(err)?;
+    Ok((
+        stats.files_changed() as u32,
+        stats.insertions() as i64,
+        stats.deletions() as i64,
+    ))
+}
+
 /// Per-line blame of `path` as it exists at `ref_name` — no checkout needed.
 /// Uses `git blame --porcelain <ref> -- <path>` and parses the porcelain stream.
 pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<BlameLine>> {
@@ -3181,13 +3203,29 @@ pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<Blam
     let mut summary = String::new();
     let mut hunk_start: u64 = 0;
     let mut in_hunk_index: u64 = 0;
+    // Porcelain prints the commit metadata only for a commit's first hunk,
+    // so remember it per oid and restore it when the commit reappears.
+    let mut metas: std::collections::HashMap<String, (String, String, i64, String)> =
+        std::collections::HashMap::new();
 
     for line in text.lines() {
-        if let Some(content) = line.strip_prefix('\t') {
+        if line.starts_with('\t') {
+            // Content line: the first line of a hunk sits at `hunk_start`
+            // itself, so use the index before advancing it.
+            let line_no = (hunk_start + in_hunk_index) as u32;
             in_hunk_index += 1;
             let initials: String = author_name.chars().take(2).collect::<String>().to_uppercase();
+            metas.insert(
+                oid.clone(),
+                (
+                    author_name.clone(),
+                    author_email.clone(),
+                    time_seconds,
+                    summary.clone(),
+                ),
+            );
             out.push(BlameLine {
-                line: (hunk_start + in_hunk_index) as u32,
+                line: line_no,
                 short_oid: oid.chars().take(7).collect(),
                 oid: oid.clone(),
                 author_name: author_name.clone(),
@@ -3197,6 +3235,9 @@ pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<Blam
                 summary: summary.clone(),
                 message: summary.clone(),
                 uncommitted: false,
+                files_changed: None,
+                insertions: None,
+                deletions: None,
             });
             continue;
         }
@@ -3210,10 +3251,20 @@ pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<Blam
             oid = tokens[0].to_string();
             hunk_start = tokens[2].parse::<u64>().unwrap_or(0);
             in_hunk_index = 0;
-            author_name.clear();
-            author_email.clear();
-            summary.clear();
-            time_seconds = 0;
+            match metas.get(&oid) {
+                Some((name, email, time, sum)) => {
+                    author_name = name.clone();
+                    author_email = email.clone();
+                    time_seconds = *time;
+                    summary = sum.clone();
+                }
+                None => {
+                    author_name.clear();
+                    author_email.clear();
+                    summary.clear();
+                    time_seconds = 0;
+                }
+            }
             continue;
         }
         if let Some(rest) = line.strip_prefix("author ") {
@@ -3238,6 +3289,9 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
         .map_err(|e| format!("blame failed for {path}: {e}"))?;
 
     let mut lines = Vec::new();
+    // Commit stats computed once per commit — blame hunks share commits.
+    let mut stats_cache: std::collections::HashMap<git2::Oid, (u32, i64, i64)> =
+        std::collections::HashMap::new();
     for i in 0..blame.len() {
         let Some(hunk) = blame.get_index(i) else { continue; };
         let start = hunk.final_start_line() as u32;
@@ -3258,6 +3312,9 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
                     summary: String::new(),
                     message: String::new(),
                     uncommitted: true,
+                    files_changed: None,
+                    insertions: None,
+                    deletions: None,
                 });
             }
             continue;
@@ -3272,6 +3329,14 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
         let short_oid = commit_id.to_string()[..7].to_string();
         let time_seconds = commit.time().seconds() as i64;
         let initials = initials_for(&author_name);
+        let (files_changed, insertions, deletions) = match stats_cache.get(&commit_id) {
+            Some(stats) => *stats,
+            None => {
+                let stats = commit_stats(&repo, commit_id).unwrap_or((0, 0, 0));
+                stats_cache.insert(commit_id, stats);
+                stats
+            }
+        };
 
         for offset in 0..count {
             lines.push(BlameLine {
@@ -3285,6 +3350,9 @@ pub fn file_blame(repo_path: &Path, path: &str) -> Result<Vec<BlameLine>> {
                 summary: summary.clone(),
                 message: message.clone(),
                 uncommitted: false,
+                files_changed: Some(files_changed),
+                insertions: Some(insertions),
+                deletions: Some(deletions),
             });
         }
     }

@@ -1157,8 +1157,41 @@ fn file_blame_attributes_lines_to_commits() {
     assert!(!blame[0].uncommitted);
     assert_eq!(blame[0].short_oid.len(), 7);
 
+    // Per-commit stats vs the parent, cached across hunks.
+    assert_eq!(blame[0].files_changed, Some(1));
+    assert_eq!(blame[0].insertions, Some(2));
+    assert_eq!(blame[0].deletions, Some(0));
+    assert_eq!(blame[1].files_changed, Some(1));
+    assert_eq!(blame[1].insertions, Some(1));
+    assert_eq!(blame[1].deletions, Some(1));
+
     // Nonexistent file errors clearly.
     assert!(file_blame(&dir, "missing.txt").is_err());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn blame_at_parses_porcelain_hunks_and_metadata() {
+    let dir = scratch_repo("blame-at");
+    write(&dir, "doc.txt", "one\ntwo\nthree\nfour\nfive\nsix\n");
+    commit_all(&dir, "first commit");
+    write(&dir, "doc.txt", "one\ntwo\nTHREE\nFOUR\nfive\nsix\n");
+    commit_all(&dir, "second commit");
+
+    // Hunks: lines 1-2 and 5-6 from the first commit, 3-4 from the second.
+    // The first commit's metadata appears once in the porcelain stream and
+    // must carry over to its second hunk.
+    let blame = blame_at(&dir, "doc.txt", "HEAD").unwrap();
+    assert_eq!(blame.len(), 6);
+    for (index, row) in blame.iter().enumerate() {
+        assert_eq!(row.line as usize, index + 1, "line numbers stay 1-based sequential");
+    }
+    assert_eq!(blame[0].summary, "first commit");
+    assert_eq!(blame[2].summary, "second commit");
+    assert_eq!(blame[4].summary, "first commit");
+    assert_eq!(blame[4].author_name, "Test User", "repeat hunk keeps commit metadata");
+    assert_eq!(blame[4].author_email, "test@pigry.dev");
 
     let _ = fs::remove_dir_all(&dir);
 }

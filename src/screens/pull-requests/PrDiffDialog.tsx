@@ -131,20 +131,21 @@ export function PrDiffDialog({
   }, [onClose]);
 
   // Blame decorations: author + sha injected after each modified line
-  // (Explorer blame style). Cleared when toggled off or file changes.
+  // (Explorer blame style). Cleared when toggled off or file changes. The
+  // previous collection is always cleared first so re-runs can never stack
+  // duplicate labels on the same line.
   useEffect(() => {
-    const collection = decorationsRef.current;
-    if (!blameOn || !blameRows || !modifiedEditor) {
-      collection?.clear();
-      return;
-    }
+    decorationsRef.current?.clear();
+    if (!blameOn || !blameRows || !modifiedEditor) return;
     const model = modifiedEditor.getModel();
     if (!model) return;
     const decorations = blameRows
       .filter((line) => line.line <= model.getLineCount())
       .map((line) => {
         const maxCol = model.getLineMaxColumn(line.line);
-        const label = `  ${line.shortOid} ${line.authorInitials} · ${relativeTime(line.timeSeconds)}`;
+        const label = line.uncommitted
+          ? '  — Uncommitted'
+          : `  ${line.shortOid} ${line.authorName} · ${relativeTime(line.timeSeconds)}`;
         return {
           range: {
             startLineNumber: line.line,
@@ -167,19 +168,48 @@ export function PrDiffDialog({
   useEffect(() => {
     if (!blameOn || !blameRows || !modifiedEditor || !monacoInst) return;
     const byLine = new Map(blameRows.map((line) => [line.line, line]));
-    const languageId = modifiedEditor.getModel()?.getLanguageId() ?? '';
+    const model = modifiedEditor.getModel();
+    if (!model) return;
+    const languageId = model.getLanguageId();
     const disposable = monacoInst.languages.registerHoverProvider(languageId, {
       provideHover: (
-        _model: MonacoEditorNS.ITextModel,
+        hoverModel: MonacoEditorNS.ITextModel,
         position: { lineNumber: number },
       ) => {
+        // Providers register per language; ignore hovers from other editors
+        // sharing the language so contents never merge across editors.
+        if (hoverModel.id !== model.id) return null;
         const info = byLine.get(position.lineNumber);
         if (!info) return null;
         const range = new monacoInst.Range(position.lineNumber, 1, position.lineNumber, 1);
 
-        const body = info.message.startsWith(info.summary)
-          ? info.message.slice(info.summary.length).trim()
-          : info.message.trim();
+        if (info.uncommitted) {
+          return {
+            range,
+            contents: [
+              { value: '**Uncommitted changes**' },
+              {
+                value: 'This line is edited in your working tree and is not part of any commit yet.',
+              },
+              {
+                value: `👤 You (working tree) · 📄 ${activePath} · line ${info.line}`,
+              },
+            ],
+          };
+        }
+
+        // Summary is collapsed to one line by git (newlines → spaces), so
+        // compare with whitespace normalized — a plain startsWith fails on
+        // multi-line first paragraphs and echoed the summary twice.
+        const summaryNorm = info.summary.replace(/\s+/g, ' ').trim();
+        const paragraphs = info.message
+          .split(/\n{2,}/)
+          .map((p) => p.replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+        const bodyParas =
+          paragraphs.length > 0 && paragraphs[0] === summaryNorm
+            ? paragraphs.slice(1)
+            : paragraphs;
         const authored = new Date(info.timeSeconds * 1000);
         const absolute = authored.toLocaleString('en-US', {
           year: 'numeric',
@@ -192,10 +222,8 @@ export function PrDiffDialog({
         const contents: { value: string; isTrusted?: boolean }[] = [
           { value: `**${info.summary}**` },
         ];
-        if (body) {
-          for (const paragraph of body.split(/\n{2,}/)) {
-            contents.push({ value: paragraph.replace(/\n/g, ' ') });
-          }
+        for (const paragraph of bodyParas) {
+          contents.push({ value: paragraph });
         }
         contents.push(
           { value: `👤 **${info.authorName}**${info.authorEmail ? ` \`<${info.authorEmail}>\`` : ''}` },
@@ -203,6 +231,11 @@ export function PrDiffDialog({
           { value: `🔑 \`${info.oid}\`` },
           { value: `📄 \`${activePath}\` · line ${info.line}` },
         );
+        if (info.filesChanged !== undefined) {
+          contents.push({
+            value: `📊 ${info.filesChanged} file${info.filesChanged === 1 ? '' : 's'} changed · +${info.insertions ?? 0} −${info.deletions ?? 0}`,
+          });
+        }
         return { range, contents };
       },
     });
