@@ -284,10 +284,36 @@ pub fn pty_create(
         },
     );
 
-    // Output pump: read the master and forward chunks to the webview until
-    // the child closes the console (EOF), then report the exit code.
-    let app_out = app.clone();
+    // Exit watcher: polls the child independently of the output pipe. The
+    // ConPTY output stream does NOT reach EOF while the master is alive in
+    // the registry, so exit detection must not depend on the reader.
     let app_exit = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let Ok(mut map) = PTYS.lock() else { return };
+        match map.get_mut(&id) {
+            Some(session) => match session.child.try_wait() {
+                Ok(Some(status)) => {
+                    let code = Some(status.exit_code());
+                    map.remove(&id); // drops the master → ConPTY closes → reader EOFs
+                    let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code });
+                    return;
+                }
+                Ok(None) => continue,
+                Err(_) => {
+                    map.remove(&id);
+                    let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code: None });
+                    return;
+                }
+            },
+            // Killed/closed from the frontend — it owns the announcement.
+            None => return,
+        }
+    });
+
+    // Output pump: read the master and forward chunks to the webview until
+    // the ConPTY closes (the exit watcher drops the master on child exit).
+    let app_out = app.clone();
     std::thread::spawn(move || {
         let mut reader = reader;
         let mut buf = [0u8; 8192];
@@ -313,31 +339,6 @@ pub fn pty_create(
                 },
             );
         }
-
-        // The console closes a beat before the process is reaped — poll for
-        // the real exit code, then drop the dead session from the registry.
-        let mut code: Option<u32> = None;
-        for _ in 0..100 {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let Ok(mut map) = PTYS.lock() else { break };
-            match map.get_mut(&id) {
-                Some(session) => match session.child.try_wait() {
-                    Ok(Some(status)) => {
-                        code = Some(status.exit_code());
-                        map.remove(&id);
-                        break;
-                    }
-                    Ok(None) => continue,
-                    Err(_) => {
-                        map.remove(&id);
-                        break;
-                    }
-                },
-                // Killed/closed from the frontend while we were waiting.
-                None => break,
-            }
-        }
-        let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code });
     });
 
     Ok(PtySessionInfo {

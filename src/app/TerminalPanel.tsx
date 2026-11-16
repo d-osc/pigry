@@ -1,5 +1,9 @@
 /** Integrated terminal panel — VS Code-style: real PTY panes (xterm.js),
- * tab list, split, shell-profile dropdown, find, maximize. */
+ * tab list, split, shell-profile dropdown, find, maximize.
+ *
+ * Terminals live in GROUPS: a group is one split tree (a lone terminal is a
+ * one-leaf tree, splitting nests two panes). The pane area renders the
+ * active group; the tab bar lists every terminal across groups. */
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
@@ -44,10 +48,16 @@ type PaneNode =
   | { kind: 'leaf'; id: number }
   | { kind: 'split'; splitId: number; children: [PaneNode, PaneNode]; weights: [number, number] };
 
+interface TerminalGroup {
+  id: number;
+  tree: PaneNode;
+}
+
 const MIN_PANE = 80;
 const HEIGHT_KEY = 'pigry:terminal-height';
 const SHELL_KEY = 'pigry:terminal-shell';
 let splitSeq = 1;
+let groupSeq = 1;
 
 const leaf = (id: number): PaneNode => ({ kind: 'leaf', id });
 const makeSplit = (a: PaneNode, b: PaneNode): PaneNode => ({
@@ -141,7 +151,8 @@ function useTerminalTheme(): Record<string, string> {
 
 export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
-  const [root, setRoot] = useState<PaneNode | null>(null);
+  const [groups, setGroups] = useState<TerminalGroup[]>([]);
+  const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [shells, setShells] = useState<ShellProfile[]>([]);
   const [lastShellId, setLastShellId] = useState<string | null>(() => localStorage.getItem(SHELL_KEY));
@@ -156,11 +167,15 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   const [maximized, setMaximized] = useState(false);
   const theme = useTerminalTheme();
   const tabsRef = useRef<TerminalTab[]>([]);
-  const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  const groupsRef = useRef<TerminalGroup[]>([]);
 
   useEffect(() => {
     tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   // Kill every session when the panel unmounts (repository switch — the
   // panel is keyed by repo path, so unmount = the workspace went away).
@@ -192,8 +207,10 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
           shellName: info.shellName,
           exited: false,
         };
+        const group: TerminalGroup = { id: groupSeq++, tree: leaf(info.id) };
         setTabs((prev) => [...prev, tab]);
-        setRoot((prev) => (prev ? prev : leaf(info.id)));
+        setGroups((prev) => [...prev, group]);
+        setActiveGroupId(group.id);
         setActiveId(info.id);
       } catch (error) {
         console.warn('terminal spawn failed', error);
@@ -217,18 +234,38 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd]);
 
+  const groupOf = (terminalId: number, list: TerminalGroup[]) =>
+    list.find((group) => collectLeafIds(group.tree).includes(terminalId)) ?? null;
+
   const killTerminal = useCallback(
     (id: number) => {
       void ptyKill(id);
       const current = tabsRef.current;
-      const index = current.findIndex((tab) => tab.id === id);
-      const next = current.filter((tab) => tab.id !== id);
-      setTabs(next);
-      if (next.length === 0) onClose();
-      else if (activeId === id) setActiveId(next[Math.max(0, index - 1)].id);
-      setRoot((prev) => (prev ? removeLeaf(prev, id) : prev));
+      const nextTabs = current.filter((tab) => tab.id !== id);
+      setTabs(nextTabs);
+
+      // Groups that lose their last leaf die with the terminal.
+      const kept: TerminalGroup[] = [];
+      for (const group of groupsRef.current) {
+        const tree = removeLeaf(group.tree, id);
+        if (tree) kept.push({ ...group, tree });
+      }
+      setGroups(kept);
+
+      if (kept.length === 0) {
+        setActiveGroupId(null);
+        setActiveId(null);
+        if (nextTabs.length === 0) onClose();
+      } else if (!kept.some((group) => group.id === activeGroupId)) {
+        // Active group died — focus the neighbouring one.
+        const fallback = kept[kept.length - 1];
+        setActiveGroupId(fallback.id);
+        setActiveId(firstLeafId(fallback.tree));
+      } else if (activeId === id) {
+        setActiveId(firstLeafId(kept[0].tree));
+      }
     },
-    [activeId, onClose],
+    [activeGroupId, activeId, onClose],
   );
 
   const splitActive = useCallback(
@@ -239,11 +276,21 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         const shell = tabs.find((tab) => tab.id === target);
         try {
           const info = await ptyCreate(shell?.shellId ?? null, cwd);
-          setTabs((prev) => [
-            ...prev,
-            { id: info.id, label: info.label, shellId: shell?.shellId ?? 'powershell', shellName: info.shellName, exited: false },
-          ]);
-          setRoot((prev) => (prev ? insertSplit(prev, target, info.id) : leaf(info.id)));
+          const tab: TerminalTab = {
+            id: info.id,
+            label: info.label,
+            shellId: shell?.shellId ?? 'powershell',
+            shellName: info.shellName,
+            exited: false,
+          };
+          setTabs((prev) => [...prev, tab]);
+          setGroups((prev) =>
+            prev.map((group) =>
+              collectLeafIds(group.tree).includes(target)
+                ? { ...group, tree: insertSplit(group.tree, target, info.id) }
+                : group,
+            ),
+          );
           setActiveId(info.id);
         } catch (error) {
           console.warn('terminal split failed', error);
@@ -279,8 +326,14 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   }, [profileMenuOpen, tabMenu]);
 
   const handleTitle = useCallback((id: number, title: string) => {
-    const trimmed = title.trim();
+    let trimmed = title.trim();
     if (!trimmed) return;
+    // PowerShell under ConPTY titles itself with its full exe path — show
+    // the program name instead, the way VS Code's process title does.
+    const lastSegment = trimmed.split(/[\\/]/).pop() ?? trimmed;
+    if (lastSegment !== trimmed && /\.(exe|cmd|bat|ps1)$/i.test(lastSegment)) {
+      trimmed = lastSegment.replace(/\.(exe|cmd|bat|ps1)$/i, '');
+    }
     setTabs((prev) => prev.map((tab) => (tab.id === id && !tab.exited ? { ...tab, label: trimmed } : tab)));
   }, []);
 
@@ -297,6 +350,12 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
     if (!id || !name) return;
     setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, label: name } : tab)));
   }, [renamingId, renameValue]);
+
+  const activateTab = useCallback((id: number) => {
+    setActiveId(id);
+    const group = groupOf(id, groupsRef.current);
+    if (group) setActiveGroupId(group.id);
+  }, []);
 
   const renderNode = (node: PaneNode): React.ReactNode => {
     if (node.kind === 'leaf') {
@@ -320,7 +379,15 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
               <ResizeHandle
                 orientation="v"
                 label="Resize terminal panes"
-                onDelta={(dx) => setRoot((prev) => (prev ? adjustWeights(prev, node.splitId, (index - 1) as 0 | 1, dx) : prev))}
+                onDelta={(dx) =>
+                  setGroups((prev) =>
+                    prev.map((group) =>
+                      group.id === activeGroupId
+                        ? { ...group, tree: adjustWeights(group.tree, node.splitId, (index - 1) as 0 | 1, dx) }
+                        : group,
+                    ),
+                  )
+                }
               />
             )}
             <div className="terminal-panel__pane" style={{ flexGrow: node.weights[index], flexBasis: 0, minWidth: MIN_PANE }}>
@@ -333,6 +400,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   };
 
   const activeTab = tabs.find((tab) => tab.id === activeId) ?? null;
+  const activeTree = groups.find((group) => group.id === activeGroupId)?.tree ?? null;
   const demo = !isTauri();
 
   return (
@@ -351,19 +419,19 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         />
       )}
       <header className="terminal-panel__tabsbar">
-        <div className="terminal-panel__tabs" ref={tabsBarRef}>
+        <div className="terminal-panel__tabs">
           {tabs.map((tab) => (
             <div
               key={tab.id}
               className={`terminal-panel__tab${tab.id === activeId ? ' terminal-panel__tab--active' : ''}${tab.exited ? ' terminal-panel__tab--exited' : ''}`}
-              onMouseDown={() => setActiveId(tab.id)}
+              onMouseDown={() => activateTab(tab.id)}
               onDoubleClick={() => {
                 setRenamingId(tab.id);
                 setRenameValue(tab.label);
               }}
               onContextMenu={(event) => {
                 event.preventDefault();
-                setActiveId(tab.id);
+                activateTab(tab.id);
                 setTabMenu({ x: event.clientX, y: event.clientY, id: tab.id });
               }}
               title={`${tab.shellName} — ${cwd}`}
@@ -373,6 +441,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
                   className="terminal-panel__rename"
                   value={renameValue}
                   autoFocus
+                  onFocus={(event) => event.currentTarget.select()}
                   spellCheck={false}
                   onChange={(event) => setRenameValue(event.target.value)}
                   onBlur={commitRename}
@@ -497,8 +566,8 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
           <div className="terminal-panel__demo">
             <p>The integrated terminal runs in the desktop app — a real PTY (ConPTY) needs Tauri.</p>
           </div>
-        ) : root ? (
-          renderNode(root)
+        ) : activeTree ? (
+          renderNode(activeTree)
         ) : null}
       </div>
 
@@ -544,4 +613,14 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
       )}
     </section>
   );
+}
+
+function collectLeafIds(node: PaneNode, into: number[] = []): number[] {
+  if (node.kind === 'leaf') into.push(node.id);
+  else node.children.forEach((child) => collectLeafIds(child, into));
+  return into;
+}
+
+function firstLeafId(node: PaneNode): number {
+  return node.kind === 'leaf' ? node.id : firstLeafId(node.children[0]);
 }

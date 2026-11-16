@@ -265,8 +265,16 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
     );
   }
 
+  // Clicking a pane always focuses its xterm (even if it was already the
+  // active pane — otherwise keyboard input can stay stranded elsewhere,
+  // e.g. right after a rename input unmounts).
+  const onMouseDown = () => {
+    onFocused(id);
+    termRef.current?.focus();
+  };
+
   return (
-    <div className="pty-pane" onMouseDown={() => onFocused(id)} onContextMenu={onContextMenu}>
+    <div className="pty-pane" onMouseDown={onMouseDown} onContextMenu={onContextMenu}>
       <div className="pty-view" ref={containerRef} />
       {findOpen && (
         <div className="pty-view__find" role="search" aria-label="Find in terminal">
