@@ -55,6 +55,7 @@ pub mod ops;
 pub mod settings;
 mod gh_insights;
 mod insights;
+mod pty;
 mod watcher;
 mod wiki;
 mod launch;
@@ -152,6 +153,11 @@ pub fn run() {
             commands::get_commit_file_diff,
             commands::get_file_tree,
             commands::terminal_run,
+            pty::pty_list_shells,
+            pty::pty_create,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
             commands::gh_install,
             commands::gh_open_url,
             commands::gh_token_scopes,
@@ -296,7 +302,13 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|_, _| {});
+    // Terminal PTY children must not outlive the app — the exit event is
+    // the one place the run loop lets us clean them up.
+    app.run(|_, event| {
+        if let tauri::RunEvent::Exit = event {
+            pty::kill_all();
+        }
+    });
 }
 
 /// Holds the background file watcher handle.
