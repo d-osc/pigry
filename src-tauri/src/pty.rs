@@ -103,8 +103,19 @@ fn probe(paths: &[std::path::PathBuf]) -> Option<String> {
 
 /// Detect shells available on this machine, VS Code-style: the ones the
 /// platform guarantees first, optional ones only when installed.
+/// Pigry Bash (the busybox REPL, this binary with `--pty-bash`) leads the
+/// list and is therefore the default profile.
 pub fn detect_shells() -> Vec<ShellProfile> {
     let mut shells = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        shells.push(ShellProfile {
+            id: "pigry-bash".into(),
+            name: "Pigry Bash".into(),
+            exe: exe.to_string_lossy().into_owned(),
+            args: vec!["--pty-bash".into()],
+        });
+    }
 
     #[cfg(windows)]
     {

@@ -55,7 +55,9 @@ interface TerminalGroup {
 
 const MIN_PANE = 80;
 const HEIGHT_KEY = 'pigry:terminal-height';
-const SHELL_KEY = 'pigry:terminal-shell';
+// v2: Pigry Bash became the default profile — bump so a stored pre-v2
+// choice doesn't shadow the new default.
+const SHELL_KEY = 'pigry:terminal-shell-v2';
 let splitSeq = 1;
 let groupSeq = 1;
 
@@ -524,7 +526,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
                   <button
                     key={shell.id}
                     type="button"
-                    className={`terminal-panel__profile${shell.id === lastShellId ? ' terminal-panel__profile--default' : ''}`}
+                    className={`terminal-panel__profile${shell.id === (lastShellId ?? shells[0]?.id) ? ' terminal-panel__profile--default' : ''}`}
                     role="menuitem"
                     title={shell.exe}
                     onClick={() => {

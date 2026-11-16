@@ -56,6 +56,7 @@ pub mod settings;
 mod gh_insights;
 mod insights;
 mod pty;
+pub mod pty_bash;
 mod watcher;
 mod wiki;
 mod launch;
