@@ -103,6 +103,24 @@ fn probe(paths: &[std::path::PathBuf]) -> Option<String> {
         .map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Path of the `pigry-shell` helper binary — the console-subsystem host for
+/// the Pigry Bash REPL. The main binary is `windows_subsystem = "windows"`
+/// in release builds, and ConPTY hands GUI-subsystem children neither a
+/// console nor stdio, so the REPL must run from this helper. Cargo places it
+/// next to the main binary; the Windows installers ship it as a resource.
+fn pigry_shell_path() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let mut candidates = Vec::new();
+    #[cfg(windows)]
+    candidates.push(dir.join("pigry-shell.exe"));
+    // NSIS/wix resources land in a subdirectory of the install dir.
+    #[cfg(windows)]
+    candidates.push(dir.join("binaries").join("pigry-shell.exe"));
+    candidates.push(dir.join("pigry-shell"));
+    candidates.into_iter().find(|p| p.is_file())
+}
+
 /// Detect shells available on this machine, VS Code-style: the ones the
 /// platform guarantees first, optional ones only when installed.
 /// Pigry Bash (the busybox REPL, this binary with `--pty-bash`) leads the
@@ -111,10 +129,13 @@ pub fn detect_shells() -> Vec<ShellProfile> {
     let mut shells = Vec::new();
 
     if let Ok(exe) = std::env::current_exe() {
+        // Prefer the console-subsystem helper; fall back to this binary
+        // (debug builds are console-subsystem themselves).
+        let host = pigry_shell_path().unwrap_or(exe);
         shells.push(ShellProfile {
             id: "pigry-bash".into(),
             name: "Pigry Bash".into(),
-            exe: exe.to_string_lossy().into_owned(),
+            exe: host.to_string_lossy().into_owned(),
             args: vec!["--pty-bash".into()],
         });
     }
@@ -520,7 +541,11 @@ pub async fn agent_shell_run(
 }
 
 fn agent_shell_blocking(cwd: &std::path::Path, command: &str, timeout_ms: u64) -> Result<AgentShellOutput, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("current_exe failed: {e}"))?;
+    // Same host rule as the terminal profiles: the console-subsystem helper
+    // when present, else this binary (debug builds).
+    let exe = pigry_shell_path()
+        .or_else(|| std::env::current_exe().ok())
+        .ok_or_else(|| "current_exe failed".to_string())?;
     let pty_system = native_pty_system();
     // Wide rows keep long lines unwrapped for cleaner model output.
     let pair = pty_system
