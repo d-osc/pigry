@@ -7,7 +7,7 @@
 // invoked: target/release (default) or target/<triple>/release when the CI
 // passes an explicit --target.
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const srcTauri = fileURLToPath(new URL('..', import.meta.url));
