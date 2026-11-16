@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { NavSidebar } from './NavSidebar';
-import { StatusBar } from './StatusBar';
+import { StatusBar, type EditorStatusInfo } from './StatusBar';
 import { ToastContainer } from './Toast';
 import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
@@ -125,6 +125,7 @@ function renderScreen(
   openFilePalette: () => void,
   terminalOpen: boolean,
   onToggleTerminal: () => void,
+  onEditorStatus: (status: EditorStatusInfo | null) => void,
 ) {
   switch (screen) {
     case 'working-changes':
@@ -152,6 +153,7 @@ function renderScreen(
           onOpenFilePalette={openFilePalette}
           terminalOpen={terminalOpen}
           onToggleTerminal={onToggleTerminal}
+          onEditorStatus={onEditorStatus}
         />
       );
     case 'projects':
@@ -217,6 +219,8 @@ function AppShellInner() {
   const [focusCommit, setFocusCommit] = useState<string | null>(null);
   const [rebaseBase, setRebaseBase] = useState<string | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // Live info of the focused editor — merged into the single status bar.
+  const [editorStatus, setEditorStatus] = useState<EditorStatusInfo | null>(null);
   // Shared AI Agent rail — shown on the workspace screens listed above.
   // One instance, so chats persist while hopping between those screens.
   const [railOpen, setRailOpen] = useState(false);
@@ -511,7 +515,7 @@ function AppShellInner() {
                   <RebaseBanner onAbort={() => void repository.abortRebase()} />
                   <ErrorBanner />
                   <ErrorBoundary key={`${repository.repository?.localPath}:${repository.repository?.currentBranch}:${screen}`}><Suspense fallback={<div className="screen-loading" role="status">Loading workspace…</div>}>
-                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal)}
+                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal, setEditorStatus)}
                   </Suspense></ErrorBoundary>
                 </main>
                 {AI_RAIL_SCREENS.includes(screen) && railOpen && (
@@ -555,7 +559,7 @@ function AppShellInner() {
                     </button>
                   ))}
               </div>
-              <StatusBar />
+              <StatusBar editorStatus={editorStatus} terminalOpen={terminalOpen} onToggleTerminal={toggleTerminal} />
             </>
           )}
         </>

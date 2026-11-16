@@ -1,9 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, Bell, CircleCheck, CircleX, CloudDownload } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Bell,
+  CircleCheck,
+  CircleX,
+  CloudDownload,
+  SquareTerminal,
+} from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import './StatusBar.css';
 
-export function StatusBar() {
+/** Live info of the focused editor, merged into the single status bar. */
+export interface EditorStatusInfo {
+  path: string;
+  line: number;
+  column: number;
+  language: string;
+  dirty: boolean;
+}
+
+export function StatusBar({
+  editorStatus,
+  terminalOpen,
+  onToggleTerminal,
+}: {
+  editorStatus?: EditorStatusInfo | null;
+  terminalOpen?: boolean;
+  onToggleTerminal?: () => void;
+} = {}) {
   const { repository, refresh, busy, fetchRemote, pullRemote, pushRemote, notifications, clearNotifications } =
     useRepository();
   const [bellOpen, setBellOpen] = useState(false);
@@ -40,6 +65,10 @@ export function StatusBar() {
         ) : (
           <span>Local repository</span>
         )}
+        <span className="status-bar__branch" title={repository.currentBranch}>
+          {repository.currentBranch ?? 'main'}
+          {editorStatus?.dirty ? ' ✱' : ''}
+        </span>
       </div>
       <span className="status-bar__path">{repository.localPath}</span>
       <div className="status-bar__right">
@@ -89,6 +118,24 @@ export function StatusBar() {
             {upstream && upstream.ahead > 0 ? upstream.ahead : ''}
           </button>
         </div>
+        {editorStatus && (
+          <>
+            <span className="status-bar__editor">
+              Ln {editorStatus.line}, Col {editorStatus.column} · Spaces: 2 · UTF-8 · LF ·{' '}
+              {editorStatus.language}
+            </span>
+            <button
+              type="button"
+              className={`status-bar__terminal${terminalOpen ? ' status-bar__terminal--open' : ''}`}
+              aria-label="Toggle terminal"
+              title="Toggle terminal"
+              onClick={() => onToggleTerminal?.()}
+            >
+              <SquareTerminal size={11} strokeWidth={1.5} />
+              Terminal
+            </button>
+          </>
+        )}
         <div ref={bellRef} className="status-bell">
           <button
             type="button"

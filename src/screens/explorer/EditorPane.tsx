@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Monaco } from '@monaco-editor/react';
 import { Editor } from '../../editor/ThemedEditors';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
-import { GitCompare, GitMerge, History, Quote, SquareTerminal, Eye,
+import { GitCompare, GitMerge, History, Quote, Eye,
 } from 'lucide-react';
 import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
@@ -17,6 +17,7 @@ import { FileHistoryPanel } from './FileHistoryPanel';
 import { MergePanel } from './MergePanel';
 import './MergePanel.css';
 import { ConflictController } from '../../editor/conflictMarkers';
+import type { EditorStatusInfo } from '../../app/StatusBar';
 import { FileViewer, MarkdownViewer, SvgViewer, fileKindFor, type ViewerKind, type BinaryContent } from './FileViewers';
 import { ComparePanel } from './ComparePanel';
 import '../../editor/monacoSetup';
@@ -45,6 +46,9 @@ interface EditorPaneProps {
   /** Reports the history commit selected in the file-history panel (for the
    * AI chat's "attach file history" chip). */
   onHistorySelect?: (info: { path: string; oid: string } | null) => void;
+  /** Reports this pane's live info to the merged status bar (focused group
+   * only — undefined while another group is focused). */
+  onStatusChange?: (status: EditorStatusInfo | null) => void;
 }
 
 function editorPrefs(): {
@@ -90,6 +94,7 @@ export function EditorPane({
   onJumpToCommit,
   onSelectionChange,
   onHistorySelect,
+  onStatusChange,
 }: EditorPaneProps) {
   const { refresh, busy, repository } = useRepository();
   const [entry, setEntry] = useState<{
@@ -394,6 +399,18 @@ export function EditorPane({
   const segments = path.split('/');
   const dirty = entry?.path === path && draft !== entry.content.content;
   const languageLabel = entry?.content.language || 'plaintext';
+  // Live info for the merged status bar — reported while this pane is the
+  // focused group; the callback flips to undefined when focus moves away.
+  useEffect(() => {
+    if (!onStatusChange) return;
+    onStatusChange({
+      path,
+      line: cursor.line,
+      column: cursor.column,
+      language: languageLabel,
+      dirty,
+    });
+  }, [onStatusChange, cursor, path, languageLabel, dirty]);
   const symbolName = useMemo(() => {
     const name = path.split('/').pop() ?? '';
     const base = name.replace(/\.[^.]+$/, '');
@@ -779,26 +796,6 @@ export function EditorPane({
           onClose={() => onToggleTerminal?.()}
         />
       )}
-
-      <footer className="editor-pane__status">
-        <span className="editor-pane__branch">
-          <i />
-          {repository?.currentBranch ?? 'main'}
-          {dirty ? '✱' : ''}
-        </span>
-        <span className="editor-pane__status-right">
-          Ln {cursor.line}, Col {cursor.column} · Spaces: 2 · UTF-8 · LF · {languageLabel}
-          <button
-            type="button"
-            className="editor-pane__terminal"
-            aria-label="Toggle terminal"
-            onClick={() => onToggleTerminal?.()}
-          >
-            <SquareTerminal size={11} strokeWidth={1.5} />
-            Terminal
-          </button>
-        </span>
-      </footer>
     </div>
   );
 }

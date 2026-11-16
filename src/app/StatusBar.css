@@ -46,6 +46,43 @@
   gap: 2px;
 }
 
+/* Focused editor info — branch chip (left) + cursor info and terminal toggle
+   merged here from the old per-editor footer (VS Code-style single bar). */
+.status-bar__branch {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-left: 8px;
+  color: var(--text-secondary);
+}
+
+.status-bar__editor {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.status-bar__terminal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+}
+
+.status-bar__terminal:hover,
+.status-bar__terminal--open {
+  color: var(--text-primary);
+}
+
 .status-bar__net-button {
   display: inline-flex;
   align-items: center;

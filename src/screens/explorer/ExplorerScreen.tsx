@@ -35,6 +35,7 @@ import {
 import { FileTree } from './FileTree';
 import { EditorPane } from './EditorPane';
 import { AiAgentPanel } from './AiAgentPanel';
+import type { EditorStatusInfo } from '../../app/StatusBar';
 import { teamForScreen } from '../../lib/agentExtras';
 import './ExplorerScreen.css';
 
@@ -58,6 +59,8 @@ interface ExplorerScreenProps {
   /** Integrated terminal panel visibility (rendered in the editor column). */
   terminalOpen?: boolean;
   onToggleTerminal?: () => void;
+  /** Reports the focused editor's live info for the merged status bar. */
+  onEditorStatus?: (status: EditorStatusInfo | null) => void;
 }
 
 function languageTag(path: string): string {
@@ -76,7 +79,7 @@ function languageTag(path: string): string {
   }
 }
 
-export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal }: ExplorerScreenProps) {
+export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal, onEditorStatus }: ExplorerScreenProps) {
   const { repository, stage, unstage, discard, notify } = useRepository();
   const [treeError, setTreeError] = useState<string | null>(null);
   const [treeAttempt, setTreeAttempt] = useState(0);
@@ -256,6 +259,17 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   const activePath = focusedTabs.includes(focusedGroup.active ?? '')
     ? focusedGroup.active
     : (focusedTabs[focusedTabs.length - 1] ?? null);
+
+  // Focused editor reports its live info for the merged status bar. Only the
+  // focused group forwards — switching focus re-runs the new pane's report
+  // effect (its callback prop flips from undefined to a handler).
+  const handleEditorStatus = useCallback(
+    (status: EditorStatusInfo | null) => onEditorStatus?.(status),
+    [onEditorStatus],
+  );
+  useEffect(() => {
+    if (!activePath) onEditorStatus?.(null);
+  }, [activePath, onEditorStatus]);
 
   const handleSelectFile = useCallback(
     (path: string) => {
@@ -1281,6 +1295,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
                         onJumpToCommit={onJumpToCommit}
                         onSelectionChange={setEditorSelection}
                         onHistorySelect={setHistorySelection}
+                        onStatusChange={focused ? handleEditorStatus : undefined}
                       />
                     ) : (
                       <div className="explorer-screen__placeholder">
