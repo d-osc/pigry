@@ -74,6 +74,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # The tauri CLI's universal build lipos only the main binary, but the
+      # bundler copies every cargo bin — build the pigry-shell REPL host for
+      # both arches and lipo it into place or the macOS bundle fails.
+      - name: Prepare universal pigry-shell (REPL host)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p src-tauri/target/universal-apple-darwin/release
+          cargo build --manifest-path src-tauri/Cargo.toml --release --target aarch64-apple-darwin --bin pigry-shell
+          cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-apple-darwin --bin pigry-shell
+          lipo -create \
+            src-tauri/target/aarch64-apple-darwin/release/pigry-shell \
+            src-tauri/target/x86_64-apple-darwin/release/pigry-shell \
+            -output src-tauri/target/universal-apple-darwin/release/pigry-shell
+
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v0
         env:

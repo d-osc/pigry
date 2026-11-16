@@ -106,17 +106,14 @@ fn probe(paths: &[std::path::PathBuf]) -> Option<String> {
 /// Path of the `pigry-shell` helper binary — the console-subsystem host for
 /// the Pigry Bash REPL. The main binary is `windows_subsystem = "windows"`
 /// in release builds, and ConPTY hands GUI-subsystem children neither a
-/// console nor stdio, so the REPL must run from this helper. Cargo places it
-/// next to the main binary; the Windows installers ship it as a resource.
+/// console nor stdio, so the REPL must run from this helper. The bundlers
+/// install every cargo bin next to the main executable.
 fn pigry_shell_path() -> Option<std::path::PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?;
     let mut candidates = Vec::new();
     #[cfg(windows)]
     candidates.push(dir.join("pigry-shell.exe"));
-    // NSIS/wix resources land in a subdirectory of the install dir.
-    #[cfg(windows)]
-    candidates.push(dir.join("binaries").join("pigry-shell.exe"));
     candidates.push(dir.join("pigry-shell"));
     candidates.into_iter().find(|p| p.is_file())
 }
