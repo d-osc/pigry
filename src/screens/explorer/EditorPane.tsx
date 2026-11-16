@@ -102,7 +102,7 @@ export function EditorPane({
   const [saving, setSaving] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [blameOn, setBlameOn] = useState(false);
-  const [historyOn, setHistoryOn] = useState(true);
+  const [historyOn, setHistoryOn] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
   const [mergeOn, setMergeOn] = useState(false);
   const [baseOid, setBaseOid] = useState<string | null>(null);
