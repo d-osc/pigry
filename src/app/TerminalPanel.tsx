@@ -309,20 +309,28 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
     return () => window.removeEventListener('pigry:terminal-new', onNew);
   }, [createTerminal]);
 
-  // Close popovers on outside interaction (ExplorerScreen context-menu pattern).
+  // Close popovers on outside interaction. The capture-phase listener must
+  // NOT swallow pointer events inside the menus — unmounting on mousedown
+  // would kill the item's click before it ever fires.
   useEffect(() => {
     if (!profileMenuOpen && !tabMenu) return;
-    const close = () => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest('.terminal-panel__profiles, .context-menu')) {
+        return;
+      }
       setProfileMenuOpen(false);
       setTabMenu(null);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
+      if (event.key === 'Escape') {
+        setProfileMenuOpen(false);
+        setTabMenu(null);
+      }
     };
-    window.addEventListener('mousedown', close, true);
+    window.addEventListener('mousedown', onPointerDown, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('mousedown', close, true);
+      window.removeEventListener('mousedown', onPointerDown, true);
       window.removeEventListener('keydown', onKey);
     };
   }, [profileMenuOpen, tabMenu]);
