@@ -395,7 +395,7 @@ function AppShellInner() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [toggleTerminal]);
 
   // Files are (re)loaded each time file-search mode is entered; the request
   // id marks which load is current.
