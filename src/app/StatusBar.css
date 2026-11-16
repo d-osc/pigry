@@ -104,6 +104,13 @@
 /* ---------------------------------------------------------------------------
  * Notification bell (replaces the old Terminal toggle in the status bar)
  * ------------------------------------------------------------------------- */
+/* Anchors the popover; without it the menu resolves against the viewport
+ * and lands entirely above the window. */
+.status-bell {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .status-bar__bell {
   position: relative;
   display: flex;

@@ -104,42 +104,50 @@ export function StatusBar() {
             {unread > 0 && <span className="status-bar__bell-badge">{unread > 9 ? '9+' : unread}</span>}
           </button>
           {bellOpen && (
-            <>
-              <div
-                className="status-bell__menu"
-                role="menu"
-                aria-label="Notifications"
-                onClick={() => setBellOpen(false)}
-              >
-                <header className="status-bell__head">
-                  <strong>Notifications</strong>
-                  {notifications.length > 0 && (
-                    <button type="button" className="status-bell__clear" onClick={clearNotifications}>
-                      Clear all
-                    </button>
-                  )}
-                </header>
-                {notifications.length === 0 ? (
-                  <p className="status-bell__empty">No notifications yet</p>
-                ) : (
-                  <ul className="status-bell__list">
-                    {notifications.map((item) => (
-                      <li key={item.id} className={`status-bell__item status-bell__item--${item.type}`}>
-                        {item.type === 'success' ? (
-                          <CircleCheck size={13} strokeWidth={1.5} />
-                        ) : (
-                          <CircleX size={13} strokeWidth={1.5} />
-                        )}
-                        <span className="status-bell__msg">{item.message}</span>
-                        <span className="status-bell__time">
-                          {new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+            <div
+              className="status-bell__menu"
+              role="menu"
+              aria-label="Notifications"
+              onClick={() => setBellOpen(false)}
+            >
+              <header className="status-bell__head">
+                <strong>Notifications</strong>
+                {notifications.length > 0 && (
+                  <button
+                    type="button"
+                    className="status-bell__clear"
+                    onClick={(event) => {
+                      // Clearing keeps the menu open so the empty state is visible.
+                      event.stopPropagation();
+                      clearNotifications();
+                    }}
+                  >
+                    Clear all
+                  </button>
                 )}
-              </div>
-            </>
+              </header>
+              {notifications.length === 0 ? (
+                <p className="status-bell__empty">No notifications yet</p>
+              ) : (
+                <ul className="status-bell__list">
+                  {notifications.map((item) => (
+                    <li key={item.id} className={`status-bell__item status-bell__item--${item.type}`}>
+                      {item.type === 'success' ? (
+                        <CircleCheck size={13} strokeWidth={1.5} />
+                      ) : (
+                        <CircleX size={13} strokeWidth={1.5} />
+                      )}
+                      <span className="status-bell__msg" title={item.message}>
+                        {item.message}
+                      </span>
+                      <span className="status-bell__time">
+                        {new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       </div>
