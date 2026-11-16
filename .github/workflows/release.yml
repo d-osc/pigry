@@ -1,6 +1,6 @@
 name: Release
 
-# Deploy builds for Windows / Linux on x86_64 + arm64.
+# Deploy builds for Windows / Linux / macOS on x86_64 + arm64.
 # Trigger: push a version tag (v0.1.0) or run manually from the Actions tab.
 # Draft release is created/updated by tauri-action; review and publish.
 
@@ -31,6 +31,10 @@ jobs:
           # Linux — arm64 (native GitHub arm runner)
           - platform: ubuntu-24.04-arm
             args: ''
+          # macOS — universal binary (Intel + Apple Silicon in one .dmg)
+          - platform: macos-latest
+            cross: aarch64-apple-darwin,x86_64-apple-darwin
+            args: '--target universal-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -80,10 +84,11 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'PIGRY ${{ github.ref_name }}'
           releaseBody: |
-            Installers for Windows and Linux (x86_64 + arm64).
+            Installers for Windows, Linux and macOS (x86_64 + arm64).
 
             **Windows** — .msi / .exe (NSIS)
             **Linux** — .deb / .rpm / .AppImage
+            **macOS** — .dmg (universal: Intel + Apple Silicon)
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -101,7 +106,7 @@ jobs:
             gh release upload "${{ github.ref_name }}" --clobber "${sig_files[@]}"
           fi
   # Builds latest.json for the in-app updater from the signed bundles
-  # (Windows NSIS zip + Linux AppImage) uploaded by the build jobs.
+  # (Windows NSIS + Linux AppImage + macOS app.tar.gz) uploaded by the build jobs.
   finalize-updater:
     needs: build
     runs-on: ubuntu-latest
@@ -117,7 +122,8 @@ jobs:
           mkdir -p updater
           gh release download "${{ github.ref_name }}" --dir updater --clobber \
             --pattern "*.AppImage" --pattern "*.AppImage.sig" \
-            --pattern "*-setup.exe" --pattern "*-setup.exe.sig"
+            --pattern "*-setup.exe" --pattern "*-setup.exe.sig" \
+            --pattern "*.app.tar.gz" --pattern "*.app.tar.gz.sig"
       - name: Build latest.json
         env:
           TAG: ${{ github.ref_name }}

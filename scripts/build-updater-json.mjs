@@ -1,5 +1,6 @@
 // Builds updater latest.json from the release's signed bundles.
-// Scopes: Windows NSIS zip (x86_64), Linux AppImage (x86_64 + arm64).
+// Scopes: Windows NSIS (x86_64 + arm64), Linux AppImage (x86_64 + arm64),
+// macOS universal app bundle (darwin-aarch64 + darwin-x86_64).
 // Usage: node scripts/build-updater-json.mjs
 // Env: TAG (e.g. v0.3.0) — reads ./updater/* artifacts.
 import fs from 'node:fs';
@@ -38,6 +39,17 @@ for (const arch of ['amd64', 'aarch64']) {
   }
 }
 
+// macOS — the universal app bundle serves both architectures; the updater
+// looks its runtime arch up in latest.json, so register it under both keys.
+for (const app of fs.readdirSync('updater').filter((f) => f.endsWith('.app.tar.gz'))) {
+  const entry = {
+    signature: readSig(`updater/${app}`),
+    url: `${base}/${app}`,
+  };
+  platforms['darwin-aarch64'] = entry;
+  platforms['darwin-x86_64'] = entry;
+}
+
 if (Object.keys(platforms).length === 0) {
   console.error('no updater artifacts found');
   process.exit(1);
@@ -45,7 +57,7 @@ if (Object.keys(platforms).length === 0) {
 
 const latest = {
   version,
-  notes: `PIGRY ${tag} — Windows / Linux installers (x86_64 + arm64).`,
+  notes: `PIGRY ${tag} — Windows / Linux / macOS installers (x86_64 + arm64).`,
   pub_date: new Date().toISOString(),
   platforms,
 };

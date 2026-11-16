@@ -27,6 +27,10 @@ jobs:
           # Linux — arm64 native
           - platform: ubuntu-24.04-arm
             cross: ''
+          # macOS — Apple Silicon native (x86_64 ships via the universal
+          # release build in release.yml)
+          - platform: macos-latest
+            cross: ''
 
     runs-on: ${{ matrix.platform }}
     steps:
