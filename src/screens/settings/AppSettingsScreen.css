@@ -793,3 +793,12 @@
   color: var(--accent);
   font-weight: 600;
 }
+
+/* The AI-provider section stretches to fill the content pane so the
+   provider manager (rail + detail) uses the full panel height. */
+.app-settings__section:has(> .prov-mgr) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

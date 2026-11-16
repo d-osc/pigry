@@ -4,6 +4,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Stretch to the settings pane so the manager fills the panel height. */
+  flex: 1;
+  min-height: 0;
 }
 
 .prov-mgr__empty {
@@ -104,6 +107,8 @@
   grid-template-columns: 210px 1fr;
   gap: 12px;
   min-height: 420px;
+  /* Rail and detail stretch with the pane (420px stays the floor). */
+  flex: 1;
 }
 
 /* --- left rail --- */
