@@ -43,3 +43,9 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# macOS release builds cross-compile universal binaries (x86_64 + aarch64 in
+# one .dmg). GitHub's arm64 runners only carry a native OpenSSL, which the
+# x86_64 target can't link — build OpenSSL from source for the bundle instead.
+[target.'cfg(target_os = "macos")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
