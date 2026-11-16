@@ -13,6 +13,8 @@ test('large folders keep a bounded DOM while scrolling, selecting and collapsing
   await expect(last).toBeVisible();
   await last.click();
   await expect(last).toHaveClass(/tree-row--selected/);
+  // The history panel starts closed like Compare/Merge/Blame — open it first.
+  await page.getByRole('button', { name: 'History' }).click();
   await expect(page.locator('.editor-pane .file-history__count')).toContainText('file-19999.txt');
   await tree.evaluate(element => { element.scrollTop = 0; });
   await tree.locator('[title="large"]').click();
