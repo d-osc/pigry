@@ -663,6 +663,59 @@ $ ${command}`,
   return invoke('terminal_run', { command, cwd });
 }
 
+// --- Real PTY terminal (VS Code-style, ConPTY-backed) ---
+
+/** A shell the integrated terminal can be spawned with. */
+export interface ShellProfile {
+  id: string;
+  name: string;
+  exe: string;
+  args: string[];
+}
+
+export interface PtySessionInfo {
+  id: number;
+  label: string;
+  shellName: string;
+}
+
+/** `pty-output` event payload — one decoded chunk of terminal output. */
+export interface PtyChunkEvent {
+  id: number;
+  data: string;
+}
+
+/** `pty-exit` event payload — the session's shell process ended. */
+export interface PtyExitEvent {
+  id: number;
+  code: number | null;
+}
+
+export async function ptyListShells(): Promise<ShellProfile[]> {
+  if (!isTauri()) return [];
+  return invoke('pty_list_shells');
+}
+
+export async function ptyCreate(shellId: string | null, cwd: string): Promise<PtySessionInfo> {
+  if (!isTauri()) throw new Error('The integrated terminal needs the desktop app.');
+  return invoke('pty_create', { shellId, cwd });
+}
+
+export async function ptyWrite(id: number, data: string): Promise<void> {
+  if (!isTauri()) return;
+  return invoke('pty_write', { id, data });
+}
+
+export async function ptyResize(id: number, cols: number, rows: number): Promise<void> {
+  if (!isTauri()) return;
+  return invoke('pty_resize', { id, cols, rows });
+}
+
+export async function ptyKill(id: number): Promise<void> {
+  if (!isTauri()) return;
+  return invoke('pty_kill', { id });
+}
+
 export async function readBinaryFile(
   path: string,
 ): Promise<{ data: string; mime: string; size: number }> {

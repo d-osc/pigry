@@ -1,358 +1,547 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, Copy, Plus, X } from 'lucide-react';
-import { terminalRun } from '../lib/tauriClient';
+/** Integrated terminal panel — VS Code-style: real PTY panes (xterm.js),
+ * tab list, split, shell-profile dropdown, find, maximize. */
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  SquareSplitHorizontal,
+  SquareTerminal,
+  Trash2,
+  X,
+} from 'lucide-react';
+import {
+  isTauri,
+  ptyCreate,
+  ptyKill,
+  ptyListShells,
+  type ShellProfile,
+} from '../lib/tauriClient';
+import { PtyTerminalView } from './PtyTerminalView';
 import { ResizeHandle } from './ResizeHandle';
 import './TerminalPanel.css';
 
 interface TerminalPanelProps {
   /** Repository root — new terminals start here. */
   cwd: string;
+  /** Panel visibility; hidden panels keep their PTY sessions + scrollback. */
+  visible: boolean;
   onClose: () => void;
 }
 
-interface TerminalLine {
-  kind: 'cmd' | 'out' | 'err' | 'info';
-  text: string;
+interface TerminalTab {
+  /** Backend PTY session id. */
+  id: number;
+  /** Tab label — shell name until the shell reports an OSC title. */
+  label: string;
+  shellId: string;
+  shellName: string;
+  exited: boolean;
 }
 
-interface TerminalSession {
-  id: string;
-  name: string;
-  lines: TerminalLine[];
-  cwd: string;
-  history: string[];
-  historyIndex: number;
+/** Binary pane tree: a leaf holds one PTY, a split holds two panes + weights. */
+type PaneNode =
+  | { kind: 'leaf'; id: number }
+  | { kind: 'split'; splitId: number; children: [PaneNode, PaneNode]; weights: [number, number] };
+
+const MIN_PANE = 80;
+const HEIGHT_KEY = 'pigry:terminal-height';
+const SHELL_KEY = 'pigry:terminal-shell';
+let splitSeq = 1;
+
+const leaf = (id: number): PaneNode => ({ kind: 'leaf', id });
+const makeSplit = (a: PaneNode, b: PaneNode): PaneNode => ({
+  kind: 'split',
+  splitId: splitSeq++,
+  children: [a, b],
+  weights: [1, 1],
+});
+
+function insertSplit(node: PaneNode, targetId: number, newId: number): PaneNode {
+  if (node.kind === 'leaf') {
+    return node.id === targetId ? makeSplit(node, leaf(newId)) : node;
+  }
+  const children = node.children.map((child) => insertSplit(child, targetId, newId)) as [PaneNode, PaneNode];
+  return { ...node, children };
 }
 
-const WELCOME = 'integrated terminal — commands run in the repository. `cls` clears.';
-
-/** Suggestions for the autocomplete dropdown (busybox built-ins + common commands). */
-const COMMANDS = [
-  'ls', 'ls -l', 'cat', 'head', 'tail', 'wc', 'grep', 'find', 'tree', 'du', 'df', 'stat',
-  'touch', 'mkdir', 'rmdir', 'rm', 'mv', 'cp', 'echo', 'pwd', 'cd', 'date', 'whoami', 'id',
-  'hostname', 'uname', 'which', 'env', 'sleep', 'seq', 'help', 'clear', 'cls', 'true', 'false',
-  'sort', 'uniq', 'cut', 'printf', 'diff', 'cmp', 'ln', 'chmod', 'test', 'nl', 'tac', 'rev',
-  'md5sum', 'sha1sum', 'sha256sum', 'expr',
-  'tar -cf backup.tar', 'tar -tf backup.tar', 'tar -xf backup.tar',
-  'git status', 'git log', 'git diff', 'git add .', 'git commit', 'git push', 'git pull',
-  'git fetch', 'git branch', 'git checkout', 'git merge',
-  'npm run dev', 'npm install', 'npm test', 'cargo check', 'cargo build', 'cargo test',
-];
-
-function filterCommands(query: string): string[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return COMMANDS.filter((c) => c.toLowerCase().startsWith(q)).slice(0, 8);
+function removeLeaf(node: PaneNode, id: number): PaneNode | null {
+  if (node.kind === 'leaf') return node.id === id ? null : node;
+  const kept: PaneNode[] = [];
+  const weights: number[] = [];
+  node.children.forEach((child, index) => {
+    const next = removeLeaf(child, id);
+    if (next) {
+      kept.push(next);
+      weights.push(node.weights[index] ?? 1);
+    }
+  });
+  if (kept.length === 0) return null;
+  if (kept.length === 1) return kept[0];
+  return { ...node, children: kept as [PaneNode, PaneNode], weights: weights as [number, number] };
 }
 
-function newSession(cwd: string, index: number): TerminalSession {
+function adjustWeights(node: PaneNode, splitId: number, index: 0 | 1, delta: number): PaneNode {
+  if (node.kind === 'leaf') return node;
+  if (node.splitId === splitId) {
+    const weights = [...node.weights] as [number, number];
+    weights[index] = Math.max(MIN_PANE, weights[index] + delta);
+    weights[1 - index] = Math.max(MIN_PANE, weights[1 - index] - delta);
+    return { ...node, weights };
+  }
+  const children = node.children.map((child) => adjustWeights(child, splitId, index, delta)) as [PaneNode, PaneNode];
+  return { ...node, children };
+}
+
+// --- xterm theme from the app tokens (Primer dark, light-aware) ------------
+
+function terminalTheme(): Record<string, string> {
+  const style = getComputedStyle(document.documentElement);
+  const v = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+  const bg = v('--bg-panel', '#161b22');
+  const fg = v('--text-primary', '#e6edf3');
+  const accent = v('--accent', '#4493f8');
   return {
-    id: `t${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    name: `Terminal ${index + 1}`,
-    lines: [{ kind: 'info', text: WELCOME }],
-    cwd,
-    history: [],
-    historyIndex: -1,
+    background: bg,
+    foreground: fg,
+    cursor: fg,
+    cursorAccent: bg,
+    selectionBackground: `${accent}55`,
+    // Primer dark ANSI palette.
+    black: '#484f58',
+    red: v('--red', '#f85149'),
+    green: v('--green', '#3fb950'),
+    yellow: '#d29922',
+    blue: accent,
+    magenta: '#db61a2',
+    cyan: '#39c5cf',
+    white: '#e6edf3',
+    brightBlack: '#6e7681',
+    brightRed: '#ff6a60',
+    brightGreen: '#61d176',
+    brightYellow: '#e3b341',
+    brightBlue: '#6cb6ff',
+    brightMagenta: '#f7a5cb',
+    brightCyan: '#6fd7e0',
+    brightWhite: '#ffffff',
   };
 }
 
-export function TerminalPanel({ cwd, onClose }: TerminalPanelProps) {
-  const [sessions, setSessions] = useState<TerminalSession[]>(() => [
-    newSession(cwd, 0),
-  ]);
-  const [activeId, setActiveId] = useState(sessions[0].id);
-  const [input, setInput] = useState('');
-  const [running, setRunning] = useState(false);
-  const [suggestIdx, setSuggestIdx] = useState(-1);
-  const [height, setHeight] = useState(260);
-  const [copied, setCopied] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+function useTerminalTheme(): Record<string, string> {
+  const [theme, setTheme] = useState(terminalTheme);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(terminalTheme()));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
 
-  const active = sessions.find((s) => s.id === activeId) ?? sessions[0];
-  const suggestions = useMemo(() => filterCommands(input), [input]);
+// ---------------------------------------------------------------------------
 
-  const updateSession = useCallback((id: string, patch: Partial<TerminalSession>) => {
-    setSessions((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
+  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  const [root, setRoot] = useState<PaneNode | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [shells, setShells] = useState<ShellProfile[]>([]);
+  const [lastShellId, setLastShellId] = useState<string | null>(() => localStorage.getItem(SHELL_KEY));
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [height, setHeight] = useState(() => {
+    const stored = Number(localStorage.getItem(HEIGHT_KEY));
+    return Number.isFinite(stored) && stored >= 140 && stored <= 600 ? stored : 280;
+  });
+  const [maximized, setMaximized] = useState(false);
+  const theme = useTerminalTheme();
+  const tabsRef = useRef<TerminalTab[]>([]);
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  // Kill every session when the panel unmounts (repository switch — the
+  // panel is keyed by repo path, so unmount = the workspace went away).
+  useEffect(() => {
+    return () => {
+      for (const tab of tabsRef.current) void ptyKill(tab.id);
+    };
   }, []);
 
-  const copyAll = useCallback(() => {
-    const session = active;
-    if (!session) return;
-    const text = session.lines
-      .map((line) => (line.kind === 'cmd' ? `❯ ${line.text}` : line.text))
-      .join('\n');
-    void navigator.clipboard?.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  }, [active]);
+  const rememberHeight = useCallback((next: number) => {
+    setHeight(next);
+    localStorage.setItem(HEIGHT_KEY, String(Math.round(next)));
+  }, []);
 
-  // Keep the output pinned to the bottom.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [active?.lines]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [activeId, running, active?.lines.length]);
-
-  const addSession = useCallback(() => {
-    // Create the session outside the updater — StrictMode double-invokes
-    // updaters, which would desync the active id from the created session.
-    const session = newSession(cwd, sessions.length);
-    setSessions((prev) => [...prev, session]);
-    setActiveId(session.id);
-  }, [cwd, sessions.length]);
-
-  const closeSession = useCallback(
-    (id: string) => {
-      setSessions((prev) => {
-        const next = prev.filter((s) => s.id !== id);
-        if (next.length === 0) {
-          onClose();
-          return prev;
+  const createTerminal = useCallback(
+    async (shellId?: string | null) => {
+      if (!isTauri()) return;
+      const chosen = shellId ?? lastShellId ?? shells[0]?.id ?? null;
+      try {
+        const info = await ptyCreate(chosen, cwd);
+        if (chosen) {
+          setLastShellId(chosen);
+          localStorage.setItem(SHELL_KEY, chosen);
         }
-        if (id === activeId) setActiveId(next[next.length - 1].id);
-        return next;
-      });
+        const tab: TerminalTab = {
+          id: info.id,
+          label: info.label,
+          shellId: chosen ?? shells[0]?.id ?? 'powershell',
+          shellName: info.shellName,
+          exited: false,
+        };
+        setTabs((prev) => [...prev, tab]);
+        setRoot((prev) => (prev ? prev : leaf(info.id)));
+        setActiveId(info.id);
+      } catch (error) {
+        console.warn('terminal spawn failed', error);
+      }
+    },
+    [cwd, lastShellId, shells],
+  );
+
+  // Load the shell profile list once.
+  useEffect(() => {
+    void ptyListShells().then(setShells).catch(() => undefined);
+  }, []);
+
+  // The first terminal spawns as soon as the panel exists (VS Code keeps at
+  // least one shell around while the panel is open).
+  const bootedRef = useRef(false);
+  useEffect(() => {
+    if (bootedRef.current || !isTauri() || !cwd) return;
+    bootedRef.current = true;
+    void createTerminal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cwd]);
+
+  const killTerminal = useCallback(
+    (id: number) => {
+      void ptyKill(id);
+      const current = tabsRef.current;
+      const index = current.findIndex((tab) => tab.id === id);
+      const next = current.filter((tab) => tab.id !== id);
+      setTabs(next);
+      if (next.length === 0) onClose();
+      else if (activeId === id) setActiveId(next[Math.max(0, index - 1)].id);
+      setRoot((prev) => (prev ? removeLeaf(prev, id) : prev));
     },
     [activeId, onClose],
   );
 
-  const run = useCallback(
-    async (command: string) => {
-      if (!active) return;
-      const session = active;
-      updateSession(session.id, {
-        lines: [...session.lines, { kind: 'cmd', text: command }],
-        history: [...session.history, command],
-        historyIndex: -1,
-      });
-
-      if (command === 'cls' || command === 'clear') {
-        updateSession(session.id, { lines: [{ kind: 'info', text: WELCOME }] });
-        return;
-      }
-
-      setRunning(true);
-      try {
-        const result = await terminalRun(command, session.cwd);
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.id === session.id
-              ? {
-                  ...s,
-                  cwd: result.cwd,
-                  lines: [
-                    ...s.lines,
-                    ...(result.stdout
-                      ? [{ kind: 'out' as const, text: result.stdout.replace(/\n$/, '') }]
-                      : []),
-                    ...(result.stderr
-                      ? [{ kind: 'err' as const, text: result.stderr.replace(/\n$/, '') }]
-                      : []),
-                    ...(result.code !== 0
-                      ? [{ kind: 'err' as const, text: `exit code: ${result.code}` }]
-                      : []),
-                  ],
-                }
-              : s,
-          ),
-        );
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        updateSession(session.id, {
-          lines: [...session.lines, { kind: 'err', text: message }],
-        });
-      } finally {
-        setRunning(false);
-        inputRef.current?.focus();
-      }
+  const splitActive = useCallback(
+    (targetId?: number) => {
+      const target = targetId ?? activeId ?? tabs[tabs.length - 1]?.id;
+      if (!target) return;
+      void (async () => {
+        const shell = tabs.find((tab) => tab.id === target);
+        try {
+          const info = await ptyCreate(shell?.shellId ?? null, cwd);
+          setTabs((prev) => [
+            ...prev,
+            { id: info.id, label: info.label, shellId: shell?.shellId ?? 'powershell', shellName: info.shellName, exited: false },
+          ]);
+          setRoot((prev) => (prev ? insertSplit(prev, target, info.id) : leaf(info.id)));
+          setActiveId(info.id);
+        } catch (error) {
+          console.warn('terminal split failed', error);
+        }
+      })();
     },
-    [active, updateSession],
+    [activeId, cwd, tabs],
   );
 
-  const submit = () => {
-    const command = input.trim();
-    if (!command || running || !active) return;
-    setInput('');
-    void run(command);
+  // Ctrl+Shift+` (AppShell) asks for a fresh default terminal.
+  useEffect(() => {
+    const onNew = () => void createTerminal();
+    window.addEventListener('pigry:terminal-new', onNew);
+    return () => window.removeEventListener('pigry:terminal-new', onNew);
+  }, [createTerminal]);
+
+  // Close popovers on outside interaction (ExplorerScreen context-menu pattern).
+  useEffect(() => {
+    if (!profileMenuOpen && !tabMenu) return;
+    const close = () => {
+      setProfileMenuOpen(false);
+      setTabMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('mousedown', close, true);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', close, true);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [profileMenuOpen, tabMenu]);
+
+  const handleTitle = useCallback((id: number, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    setTabs((prev) => prev.map((tab) => (tab.id === id && !tab.exited ? { ...tab, label: trimmed } : tab)));
+  }, []);
+
+  const handleExited = useCallback((id: number, code: number | null) => {
+    setTabs((prev) =>
+      prev.map((tab) => (tab.id === id ? { ...tab, exited: true, label: `${tab.shellName} (exit ${code ?? '?'})` } : tab)),
+    );
+  }, []);
+
+  const commitRename = useCallback(() => {
+    const id = renamingId;
+    const name = renameValue.trim();
+    setRenamingId(null);
+    if (!id || !name) return;
+    setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, label: name } : tab)));
+  }, [renamingId, renameValue]);
+
+  const renderNode = (node: PaneNode): React.ReactNode => {
+    if (node.kind === 'leaf') {
+      return (
+        <PtyTerminalView
+          key={`pty-${node.id}`}
+          id={node.id}
+          focused={node.id === activeId}
+          theme={theme}
+          onFocused={setActiveId}
+          onTitle={handleTitle}
+          onExited={handleExited}
+        />
+      );
+    }
+    return (
+      <div key={`split-${node.splitId}`} className="terminal-panel__split">
+        {node.children.map((child, index) => (
+          <Fragment key={child.kind === 'leaf' ? `pty-${child.id}` : `split-${child.splitId}`}>
+            {index > 0 && (
+              <ResizeHandle
+                orientation="v"
+                label="Resize terminal panes"
+                onDelta={(dx) => setRoot((prev) => (prev ? adjustWeights(prev, node.splitId, (index - 1) as 0 | 1, dx) : prev))}
+              />
+            )}
+            <div className="terminal-panel__pane" style={{ flexGrow: node.weights[index], flexBasis: 0, minWidth: MIN_PANE }}>
+              {renderNode(child)}
+            </div>
+          </Fragment>
+        ))}
+      </div>
+    );
   };
 
-  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    const matches = running ? [] : suggestions;
-    const hasHighlight = suggestIdx >= 0 && suggestIdx < matches.length;
-
-    if (event.key === 'Tab' && matches.length > 0) {
-      event.preventDefault();
-      const idx = hasHighlight ? suggestIdx : 0;
-      setInput(matches[idx]);
-      setSuggestIdx(idx);
-      return;
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      if (matches.length > 0) {
-        setSuggestIdx(suggestIdx + 1 >= matches.length ? 0 : suggestIdx + 1);
-        return;
-      }
-      if (!active || active.history.length === 0) return;
-      const next =
-        active.historyIndex < 0
-          ? active.history.length - 1
-          : Math.max(0, active.historyIndex - 1);
-      updateSession(active.id, { historyIndex: next });
-      setInput(active.history[next]);
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (matches.length > 0) {
-        setSuggestIdx(suggestIdx <= 0 ? matches.length - 1 : suggestIdx - 1);
-        return;
-      }
-      if (!active || active.history.length === 0) return;
-      const next =
-        active.historyIndex < 0
-          ? active.history.length - 1
-          : Math.max(0, active.historyIndex - 1);
-      updateSession(active.id, { historyIndex: next });
-      setInput(active.history[next]);
-      return;
-    }
-    if (event.key === 'Escape') {
-      setSuggestIdx(-1);
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (hasHighlight) {
-        const chosen = matches[suggestIdx];
-        setInput('');
-        setSuggestIdx(-1);
-        void run(chosen);
-        return;
-      }
-      submit();
-    }
-  };
-
-  const shortCwd = active ? (active.cwd.length > 44 ? `…${active.cwd.slice(-42)}` : active.cwd) : '';
+  const activeTab = tabs.find((tab) => tab.id === activeId) ?? null;
+  const demo = !isTauri();
 
   return (
-    <section className="terminal-panel" role="region" aria-label="Integrated terminal" style={{ height }}>
-      <ResizeHandle
-        orientation="h"
-        label="Resize terminal"
-        onDelta={(_dx, dy) => setHeight((h) => Math.min(520, Math.max(140, h - dy)))}
-      />
-      <header className="terminal-panel__head">
-        <div className="terminal-panel__tabs">
-          {sessions.map((session, index) => (
+    <section
+      className={`terminal-panel${visible ? '' : ' terminal-panel--hidden'}${maximized ? ' terminal-panel--max' : ''}`}
+      role="region"
+      aria-label="Integrated terminal"
+      aria-hidden={!visible}
+      style={maximized ? undefined : { height }}
+    >
+      {!maximized && (
+        <ResizeHandle
+          orientation="h"
+          label="Resize terminal"
+          onDelta={(_dx, dy) => rememberHeight(Math.min(600, Math.max(140, height - dy)))}
+        />
+      )}
+      <header className="terminal-panel__tabsbar">
+        <div className="terminal-panel__tabs" ref={tabsBarRef}>
+          {tabs.map((tab) => (
             <div
-              key={session.id}
-              className={`terminal-panel__tab${session.id === activeId ? ' terminal-panel__tab--active' : ''}`}
+              key={tab.id}
+              className={`terminal-panel__tab${tab.id === activeId ? ' terminal-panel__tab--active' : ''}${tab.exited ? ' terminal-panel__tab--exited' : ''}`}
+              onMouseDown={() => setActiveId(tab.id)}
+              onDoubleClick={() => {
+                setRenamingId(tab.id);
+                setRenameValue(tab.label);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setActiveId(tab.id);
+                setTabMenu({ x: event.clientX, y: event.clientY, id: tab.id });
+              }}
+              title={`${tab.shellName} — ${cwd}`}
             >
-              <button
-                type="button"
-                className="terminal-panel__tab-btn"
-                onClick={() => setActiveId(session.id)}
-                title={session.cwd}
-              >
-                {index + 1}: {session.name}
-              </button>
+              {renamingId === tab.id ? (
+                <input
+                  className="terminal-panel__rename"
+                  value={renameValue}
+                  autoFocus
+                  spellCheck={false}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  onBlur={commitRename}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') commitRename();
+                    if (event.key === 'Escape') setRenamingId(null);
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="terminal-panel__tab-btn"
+                  title={`${tab.shellName} — ${cwd}`}
+                >
+                  <SquareTerminal size={12} strokeWidth={1.6} />
+                  <span className="terminal-panel__tab-label">{tab.label}</span>
+                </button>
+              )}
               <button
                 type="button"
                 className="terminal-panel__tab-close"
-                aria-label={`Close ${session.name}`}
-                onClick={() => closeSession(session.id)}
+                aria-label={`Kill ${tab.label}`}
+                title="Kill terminal"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  killTerminal(tab.id);
+                }}
               >
                 <X size={11} strokeWidth={1.75} />
               </button>
             </div>
           ))}
+        </div>
+        <div className="terminal-panel__actions">
           <button
             type="button"
-            className="terminal-panel__tab-add"
-            aria-label="New terminal"
-            title="New terminal"
-            onClick={addSession}
+            className="terminal-panel__action"
+            aria-label="Split terminal"
+            title="Split terminal"
+            disabled={demo || !activeTab}
+            onClick={() => splitActive()}
           >
-            <Plus size={13} strokeWidth={1.5} />
+            <SquareSplitHorizontal size={13} strokeWidth={1.5} />
+          </button>
+          <button
+            type="button"
+            className="terminal-panel__action"
+            aria-label="Kill active terminal"
+            title="Kill active terminal"
+            disabled={demo || !activeTab}
+            onClick={() => activeTab && killTerminal(activeTab.id)}
+          >
+            <Trash2 size={13} strokeWidth={1.5} />
+          </button>
+          <div className="terminal-panel__newgroup">
+            <button
+              type="button"
+              className="terminal-panel__action terminal-panel__new"
+              aria-label="New terminal"
+              title={`New terminal (${shells.find((shell) => shell.id === lastShellId)?.name ?? shells[0]?.name ?? 'default shell'})`}
+              disabled={demo}
+              onClick={() => void createTerminal()}
+            >
+              <Plus size={13} strokeWidth={1.5} />
+            </button>
+            <button
+              type="button"
+              className="terminal-panel__action terminal-panel__newdrop"
+              aria-label="Select shell profile"
+              title="Select shell profile"
+              disabled={demo}
+              onClick={() => setProfileMenuOpen((open) => !open)}
+            >
+              <ChevronDown size={11} strokeWidth={1.75} />
+            </button>
+            {profileMenuOpen && (
+              <div className="terminal-panel__profiles" role="menu">
+                <div className="terminal-panel__profiles-title">Terminal profiles</div>
+                {shells.map((shell) => (
+                  <button
+                    key={shell.id}
+                    type="button"
+                    className={`terminal-panel__profile${shell.id === lastShellId ? ' terminal-panel__profile--default' : ''}`}
+                    role="menuitem"
+                    title={shell.exe}
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      void createTerminal(shell.id);
+                    }}
+                  >
+                    <SquareTerminal size={12} strokeWidth={1.6} />
+                    <span>{shell.name}</span>
+                    {shell.id === lastShellId && <span className="terminal-panel__profile-default">default</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="terminal-panel__action"
+            aria-label={maximized ? 'Restore panel size' : 'Maximize panel'}
+            title={maximized ? 'Restore panel size' : 'Maximize panel'}
+            onClick={() => setMaximized((value) => !value)}
+          >
+            {maximized ? <ChevronDown size={13} strokeWidth={1.5} /> : <ChevronUp size={13} strokeWidth={1.5} />}
+          </button>
+          <button
+            type="button"
+            className="terminal-panel__action"
+            aria-label="Close terminal panel"
+            title="Close panel (stays running)"
+            onClick={onClose}
+          >
+            <X size={14} strokeWidth={1.5} />
           </button>
         </div>
-        <button
-          type="button"
-          className="terminal-panel__copy"
-          aria-label="Copy terminal output"
-          title="Copy terminal output"
-          onClick={copyAll}
-        >
-          {copied ? <Check size={13} strokeWidth={1.75} /> : <Copy size={13} strokeWidth={1.5} />}
-        </button>
-        <span className="terminal-panel__cwd" title={active?.cwd}>
-          {shortCwd}
-        </span>
-        <button type="button" className="terminal-panel__close" aria-label="Close terminal panel" onClick={onClose}>
-          <ChevronDown size={14} strokeWidth={1.5} />
-        </button>
       </header>
 
-      <div className="terminal-panel__scroll" ref={scrollRef}>
-        {active?.lines.map((line, index) => (
-          <div key={index} className={`terminal-panel__line terminal-panel__line--${line.kind}`}>
-            {line.kind === 'cmd' ? <span className="terminal-panel__ps">❯ </span> : null}
-            {line.text}
+      <div className="terminal-panel__body">
+        {demo ? (
+          <div className="terminal-panel__demo">
+            <p>The integrated terminal runs in the desktop app — a real PTY (ConPTY) needs Tauri.</p>
           </div>
-        ))}
+        ) : root ? (
+          renderNode(root)
+        ) : null}
       </div>
 
-      <div className="terminal-panel__inputrow">
-        {suggestions.length > 0 && !running && (
-          <div className="terminal-panel__dropdown">
-            {suggestions.map((cmd, i) => (
-              <button
-                key={cmd}
-                type="button"
-                className={`terminal-panel__option${i === suggestIdx ? ' terminal-panel__option--active' : ''}`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  setInput(cmd);
-                  setSuggestIdx(i);
-                }}
-              >
-                {cmd}
-              </button>
-            ))}
-            <div className="terminal-panel__dropdown-hint">Tab เติมคำ · Enter รัน · ↑↓ เลือก</div>
-          </div>
-        )}
-        <span className="terminal-panel__ps">{running ? '…' : '❯'}</span>
-        <input
-          ref={inputRef}
-          className="terminal-panel__input"
-          value={input}
-          onChange={(event) => {
-            setInput(event.target.value);
-            setSuggestIdx(filterCommands(event.target.value).length > 0 ? 0 : -1);
-          }}
-          onKeyDown={onKeyDown}
-          placeholder={running ? 'running…' : 'type a command'}
-          spellCheck={false}
-          disabled={running}
-          aria-label="Terminal command input"
-        />
-        <button
-          type="button"
-          className="terminal-panel__kill"
-          aria-label="Close terminal panel"
-          title="Close panel"
-          onClick={onClose}
-        >
-          <X size={13} strokeWidth={1.5} />
-        </button>
-      </div>
+      {tabMenu && (
+        <div className="context-menu" style={{ left: tabMenu.x, top: tabMenu.y }} role="menu" onClick={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const tab = tabs.find((candidate) => candidate.id === tabMenu.id);
+              setTabMenu(null);
+              if (tab) {
+                setRenamingId(tab.id);
+                setRenameValue(tab.label);
+              }
+            }}
+          >
+            Rename…
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              const id = tabMenu.id;
+              setTabMenu(null);
+              splitActive(id);
+            }}
+          >
+            Split terminal
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="context-menu__item--danger"
+            onClick={() => {
+              killTerminal(tabMenu.id);
+              setTabMenu(null);
+            }}
+          >
+            Kill terminal
+          </button>
+        </div>
+      )}
     </section>
   );
 }

@@ -21,6 +21,16 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
     ],
   },
   {
+    title: 'Terminal',
+    items: [
+      ['⌘ `', 'Toggle integrated terminal'],
+      ['⌘ ⇧ `', 'New terminal'],
+      ['Ctrl C / V', 'Copy / paste (with selection)'],
+      ['Ctrl ⇧ C / V', 'Always copy / paste'],
+      ['Ctrl F', 'Find in terminal'],
+    ],
+  },
+  {
     title: 'Working changes',
     items: [
       ['⌘ F', 'Filter file list'],

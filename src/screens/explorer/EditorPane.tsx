@@ -790,12 +790,14 @@ export function EditorPane({
         />
       )}
 
-      {terminalOpen && (
-        <TerminalPanel
-          cwd={repository?.localPath ?? ''}
-          onClose={() => onToggleTerminal?.()}
-        />
-      )}
+      {/* Always mounted — hidden terminals keep their PTY sessions and
+          scrollback alive (keyed by repo so sessions die with the repo). */}
+      <TerminalPanel
+        key={repository?.localPath ?? 'no-repo'}
+        cwd={repository?.localPath ?? ''}
+        visible={!!terminalOpen}
+        onClose={() => onToggleTerminal?.()}
+      />
     </div>
   );
 }

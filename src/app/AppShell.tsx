@@ -320,7 +320,7 @@ function AppShellInner() {
 
   // Ctrl/Cmd+K toggles the command palette; Ctrl/Cmd+P opens file search;
   // Ctrl/Cmd+, opens repository settings; Ctrl/Cmd+/ shows the shortcut sheet;
-  // Ctrl/Cmd+1..3 jumps between the main screens.
+  // Ctrl/Cmd+` toggles the integrated terminal; Ctrl/Cmd+1..3 jumps screens.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const cmd = event.ctrlKey || event.metaKey;
@@ -376,6 +376,12 @@ function AppShellInner() {
         // VS Code-style toggle of the primary side bar.
         event.preventDefault();
         setSidebarOpen((open) => !open);
+      } else if (event.code === 'Backquote') {
+        // VS Code-style integrated terminal: Ctrl+` toggles the panel,
+        // Ctrl+Shift+` spawns a new terminal session.
+        event.preventDefault();
+        if (event.shiftKey) window.dispatchEvent(new CustomEvent('pigry:terminal-new'));
+        else toggleTerminal();
       } else if (key === '1') {
         event.preventDefault();
         setScreen('working-changes');
