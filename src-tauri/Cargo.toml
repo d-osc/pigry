@@ -23,6 +23,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "pigry-shell"
 path = "src/bin/pigry_shell.rs"
 
+[features]
+# `tauri build` enables this itself and embeds the frontend. A plain
+# `cargo build --release` leaves it off and produces a DEV-mode binary that
+# loads http://localhost:1420 — always pass --features custom-protocol when
+# building outside the tauri CLI.
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
