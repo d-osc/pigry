@@ -26,12 +26,22 @@
 }
 
 .tree-root__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .tree-root__branch {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   margin-left: auto;
   font-family: var(--font-mono);
   font-size: var(--fs-2xs);

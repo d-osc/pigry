@@ -401,8 +401,14 @@ export function FileTree({
       {(repoName || branch) && !filter && (
         <div className="tree-root">
           <img className="tree-row__fileicon" src="/fileicons/folder-base.svg" alt="" draggable={false} />
-          <span className="tree-root__name">{(repoName ?? 'repository').toUpperCase()}</span>
-          {branch && <span className="tree-root__branch">{branch}</span>}
+          <span className="tree-root__name" title={(repoName ?? 'repository').toUpperCase()}>
+            {(repoName ?? 'repository').toUpperCase()}
+          </span>
+          {branch && (
+            <span className="tree-root__branch" title={branch}>
+              {branch}
+            </span>
+          )}
         </div>
       )}
       {(!tree || tree.entries.length === 0) && (
