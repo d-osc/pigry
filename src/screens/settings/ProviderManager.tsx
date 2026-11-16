@@ -270,7 +270,17 @@ export function ProviderManager() {
   if (!selected) {
     return (
       <div className="prov-mgr">
-        <p className="prov-mgr__empty">No providers configured.</p>
+        <div className="prov-mgr__empty-state">
+          <p className="prov-mgr__empty">No providers configured.</p>
+          <p className="prov-mgr__empty-hint">
+            Add an OpenAI-compatible or Anthropic-compatible endpoint, then pick it in the chat
+            model picker.
+          </p>
+          <button type="button" className="prov-mgr__add" onClick={addProvider}>
+            <Plus size={13} strokeWidth={1.75} />
+            Add provider
+          </button>
+        </div>
       </div>
     );
   }
