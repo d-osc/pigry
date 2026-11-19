@@ -3,6 +3,9 @@ pub use pigry_lib::CommandNoWindow;
 #[path = "../src/gh.rs"]
 #[allow(dead_code)]
 mod gh;
+#[path = "../src/gh_cache.rs"]
+#[allow(dead_code)]
+mod gh_cache;
 
 use std::{path::Path, time::Instant};
 
