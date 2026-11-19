@@ -8,6 +8,10 @@
   flex-shrink: 0;
 }
 
+.nav-sidebar + .resize-handle--v {
+  margin-inline: -2.5px;
+}
+
 .nav-sidebar__workspace {
   padding-top: 20px;
   min-height: 0;
