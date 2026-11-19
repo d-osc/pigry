@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const pages = ['Explorer', 'Copilot', 'Working changes', 'Push Commits', 'Merge branch',
+const pages = ['Explorer', 'Copilot', 'Working changes', 'Push Commits', 'Pull commit', 'Merge branch',
   'Stashes Code', 'Cherry Pick', 'Rebase Branch', 'Pull requests', 'Commit graph',
   'Branches', 'Releases', 'Actions', 'Security and quality', 'Issues', 'Projects', 'Wiki', 'Insights'];
 

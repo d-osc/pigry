@@ -22,6 +22,7 @@ import {
 const MergeBranchScreen = lazy(() => import('../screens/merge-branch/MergeBranchScreen').then((module) => ({ default: module.MergeBranchScreen })));
 const RebaseBranchScreen = lazy(() => import('../screens/rebase-branch/RebaseBranchScreen').then((module) => ({ default: module.RebaseBranchScreen })));
 const PushCommitsScreen = lazy(() => import('../screens/push-commits/PushCommitsScreen').then((module) => ({ default: module.PushCommitsScreen })));
+const PullCommitsScreen = lazy(() => import('../screens/pull-commits/PullCommitsScreen').then((module) => ({ default: module.PullCommitsScreen })));
 const StashesScreen = lazy(() => import('../screens/stashes/StashesScreen').then((module) => ({ default: module.StashesScreen })));
 const CherryPickScreen = lazy(() => import('../screens/cherry-pick/CherryPickScreen').then((module) => ({ default: module.CherryPickScreen })));
 const BranchesScreen = lazy(() => import('../screens/branches/BranchesScreen').then((module) => ({ default: module.BranchesScreen })));
@@ -50,6 +51,7 @@ const AI_RAIL_SCREENS: NavId[] = [
   'merge-branch',
   'rebase-branch',
   'push-commits',
+  'pull-commits',
   'stashes',
   'cherry-pick',
   'branches',
@@ -136,6 +138,8 @@ function renderScreen(
       return <RebaseBranchScreen />;
     case 'push-commits':
       return <PushCommitsScreen />;
+    case 'pull-commits':
+      return <PullCommitsScreen />;
     case 'stashes':
       return <StashesScreen />;
     case 'cherry-pick':

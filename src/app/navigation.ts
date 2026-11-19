@@ -15,6 +15,7 @@ import {
   GitMerge,
   History,
   ArrowUpCircle,
+  ArrowDownCircle,
   Archive,
   GitBranch,
   Cherry,
@@ -27,6 +28,7 @@ export type NavId =
   | 'merge-branch'
   | 'rebase-branch'
   | 'push-commits'
+  | 'pull-commits'
   | 'stashes'
   | 'cherry-pick'
   | 'branches'
@@ -54,6 +56,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
+  { id: 'pull-commits', label: 'Pull commit', icon: ArrowDownCircle },
   { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },

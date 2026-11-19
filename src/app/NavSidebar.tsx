@@ -147,6 +147,9 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings, onCollaps
                 {id === 'working-changes' && !clean && (
                   <span className="nav-item__badge">{repository.files.length}</span>
                 )}
+                {id === 'pull-commits' && repository.upstream && repository.upstream.behind > 0 && (
+                  <span className="nav-item__badge">{repository.upstream.behind}</span>
+                )}
                 {id !== 'working-changes' && badge !== undefined && (
                   <span className="nav-item__badge">{badge}</span>
                 )}
