@@ -113,8 +113,10 @@ interface ParsedFile {
 export function parseUnifiedByFile(diff: string): PrDiffFile[] {
   const files: ParsedFile[] = [];
   let current: ParsedFile | null = null;
+  let inHunk = false;
   for (const raw of diff.split('\n')) {
     if (raw.startsWith('diff --git ')) {
+      inHunk = false;
       const match = raw.match(/^diff --git a\/(.+?) b\/(.+)$/);
       current = {
         path: match ? match[2] : '',
@@ -125,17 +127,11 @@ export function parseUnifiedByFile(diff: string): PrDiffFile[] {
       continue;
     }
     if (!current) continue;
-    if (raw.startsWith('@@')) continue;
-    if (
-      raw.startsWith('+++ ') ||
-      raw.startsWith('--- ') ||
-      raw.startsWith('index ') ||
-      raw.startsWith('new file mode') ||
-      raw.startsWith('deleted file mode') ||
-      raw.startsWith('\\')
-    ) {
+    if (raw.startsWith('@@ ')) {
+      inHunk = true;
       continue;
     }
+    if (!inHunk) continue;
     if (raw.startsWith('+')) {
       current.modifiedLines.push(raw.slice(1));
       continue;
@@ -144,8 +140,10 @@ export function parseUnifiedByFile(diff: string): PrDiffFile[] {
       current.originalLines.push(raw.slice(1));
       continue;
     }
-    current.originalLines.push(raw);
-    current.modifiedLines.push(raw);
+    if (raw.startsWith(' ')) {
+      current.originalLines.push(raw.slice(1));
+      current.modifiedLines.push(raw.slice(1));
+    }
   }
   return files
     .filter((file) => file.path)

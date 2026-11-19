@@ -24,6 +24,43 @@ test('populated private PR and workflow details render', async ({ page }) => {
   await expect(page.getByText('CI completed successfully')).toBeVisible();
 });
 
+test('PR commit opens its changed files and code compare', async ({ page }) => {
+  await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
+  await page.getByRole('button', { name: /^Commits/ }).click();
+  await page.getByRole('button', { name: /Update feature files/ }).click();
+  const compare = page.getByRole('dialog', { name: 'Commit 1234567 · Changed files' });
+  await expect(compare.getByRole('button', { name: /feature.txt/ })).toBeVisible();
+  await compare.getByRole('button', { name: /notes.txt/ }).click();
+  await expect(compare.locator('.diff-pane__comparison')).toHaveText('notes.txt');
+  await expect(compare.getByText('release notes', { exact: true }).first()).toBeVisible();
+  await compare.getByRole('button', { name: 'Unified' }).click();
+  await expect(compare.getByRole('button', { name: 'Unified' })).toHaveClass(/is-active/);
+  expect(await page.evaluate(() => window.testBackend.calls.find(({ cmd }) => cmd === 'gh_pr_commit_diff')?.args))
+    .toEqual({ oid: '1234567890123456789012345678901234567890' });
+});
+
+test('PR files expand an inline diff and share it with full compare', async ({ page }) => {
+  await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
+  await page.getByRole('button', { name: /^Files changed/ }).click();
+  const feature = page.getByRole('button', { name: /^feature.txt/ });
+  const notes = page.getByRole('button', { name: /^notes.txt/ });
+  const inline = page.locator('.pr-file__compare');
+
+  await feature.click();
+  await expect(feature).toHaveAttribute('aria-expanded', 'true');
+  await expect(inline.getByText('new feature', { exact: true }).first()).toBeVisible();
+  await notes.click();
+  await expect(feature).toHaveAttribute('aria-expanded', 'false');
+  await expect(inline.getByText('release notes', { exact: true }).first()).toBeVisible();
+  await notes.press('Space');
+  await expect(inline).toHaveCount(0);
+
+  await page.getByRole('button', { name: /View full diff/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Full diff · #42' })).toBeVisible();
+  expect(await page.evaluate(() => window.testBackend.calls.filter(({ cmd }) => cmd === 'gh_pr_diff')))
+    .toEqual([{ cmd: 'gh_pr_diff', args: { number: 42 } }]);
+});
+
 for (const message of ['HTTP 401: Bad credentials', 'HTTP 403: Resource protected by organization SAML enforcement. Authorize SSO.', 'HTTP 404: Not Found. Check repository access.']) {
   test(`GitHub failure is visible and retry recovers: ${message.slice(0, 8)}`, async ({ page }) => {
     await page.evaluate(message => { window.testBackend.failures.gh_pr_list = message; }, message);

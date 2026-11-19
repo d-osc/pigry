@@ -43,6 +43,10 @@ const HomeScreen = lazy(() => import('../screens/home/HomeScreen').then((module)
 import { ErrorBoundary } from './ErrorBoundary';
 import './AppShell.css';
 
+const SIDEBAR_WIDTH_KEY = 'pigry:sidebar-width';
+const MIN_SIDEBAR_WIDTH = 160;
+const MAX_SIDEBAR_WIDTH = 420;
+
 /** Workspace screens that show the shared AI Agent rail. Every nav menu has
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
@@ -219,6 +223,24 @@ function AppShellInner() {
       return true;
     }
   });
+  const [sidebarWidth, setSidebarWidth] = useState<number | undefined>(() => {
+    try {
+      const width = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+      if (width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) return width;
+    } catch {
+      // Storage may be unavailable.
+    }
+    return undefined;
+  });
+  const sidebarRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    try {
+      if (sidebarWidth === undefined) localStorage.removeItem(SIDEBAR_WIDTH_KEY);
+      else localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+    } catch {
+      // Storage may be unavailable.
+    }
+  }, [sidebarWidth]);
   const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
   const [focusCommit, setFocusCommit] = useState<string | null>(null);
   const [rebaseBase, setRebaseBase] = useState<string | null>(null);
@@ -504,12 +526,27 @@ function AppShellInner() {
             <>
               <div className="app-shell__body">
                 {sidebarOpen ? (
-                  <NavSidebar
-                    activeScreen={screen}
-                    onNavigate={setScreen}
-                    onOpenSettings={() => setSettingsOpen(true)}
-                    onCollapse={() => setSidebarOpen(false)}
-                  />
+                  <>
+                    <NavSidebar
+                      ref={sidebarRef}
+                      width={sidebarWidth}
+                      activeScreen={screen}
+                      onNavigate={setScreen}
+                      onOpenSettings={() => setSettingsOpen(true)}
+                      onCollapse={() => setSidebarOpen(false)}
+                    />
+                    <ResizeHandle
+                      orientation="v"
+                      label="Resize workspace sidebar"
+                      onDelta={(dx) => {
+                        const width = sidebarRef.current?.offsetWidth;
+                        if (width !== undefined) {
+                          setSidebarWidth((current) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, (current ?? width) + dx)));
+                        }
+                      }}
+                      onReset={() => setSidebarWidth(undefined)}
+                    />
+                  </>
                 ) : (
                   <button
                     type="button"

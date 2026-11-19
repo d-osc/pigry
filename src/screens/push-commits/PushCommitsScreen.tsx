@@ -1,31 +1,18 @@
 import { useScopedState } from '../../hooks/useScopedState';
-import { useRequestGate } from '../../hooks/useRequestGate';
 /** Push Commits screen — the local commits waiting for the upstream, each
  * expandable with its message and files, files open as before/after compares,
  * plus the push action itself. The list sorts by date (toggle) and reveals
  * older commits in batches. */
 import { useEffect, useMemo, useState } from 'react';
-import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
+import { CommitPreviewList } from '../commit-preview/CommitPreviewList';
 import { ArrowDown, ArrowUp, ArrowUpCircle, CheckCircle2, CloudUpload } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
   pushPreview,
-  readFileAtCommit,
   type PushPreview,
-  type PushPreviewCommit,
-  type PushPreviewCommitFile,
 } from '../../lib/tauriClient';
-import { relativeTime } from '../../lib/relativeTime';
-import { shareCommitWithChat } from '../../lib/chatBridge';
-import '../../editor/monacoSetup';
 import './PushCommitsScreen.css';
 import { canPushPreview, parsePushSort, pushErrorMessage } from './pushState';
-
-interface FileVersions {
-  before: string;
-  after: string;
-  language: string;
-}
 
 const PAGE_SIZE = 40;
 const SORT_KEY = 'pigry:push-sort-v2'; // v2: resets stale persisted orders
@@ -40,7 +27,6 @@ function loadSortDir(): 'desc' | 'asc' {
 }
 
 export function PushCommitsScreen() {
-  const fileGate = useRequestGate();
   const { repository, pushRemote, busy, notify } = useRepository();
   const headOid = repository?.headOid ?? '';
   const [reload, setReload] = useState(0);
@@ -48,11 +34,6 @@ export function PushCommitsScreen() {
   const [preview, setPreview] = useScopedState<PushPreview | null>(previewScope, null);
   const [pushing, setPushing] = useState(false);
   const [previewError, setPreviewError] = useScopedState<string | null>(previewScope, null);
-  const [expandedCommit, setExpandedCommit] = useState<string | null>(null);
-  const [expandedFile, setExpandedFile] = useState<string | null>(null);
-  const [versions, setVersions] = useState<FileVersions | null>(null);
-  const [loadingFile, setLoadingFile] = useState(false);
-  const [splitView, setSplitView] = useState(true);
   /** Commit list order — newest first by default, toggle to oldest first. */
   const [sortDir, setSortDir] = useState<'desc' | 'asc'>(loadSortDir);
   /** How many commits are shown before "Show more". */
@@ -82,37 +63,6 @@ export function PushCommitsScreen() {
       cancelled = true;
     };
   }, [headOid, repository?.localPath, repository?.currentBranch, reload, setPreview, setPreviewError]);
-
-  const openCompare = async (commit: PushPreviewCommit, file: PushPreviewCommitFile) => {
-    const isCurrent = fileGate.begin();
-    const key = `${commit.oid}:${file.path}`;
-    if (expandedFile === key) {
-      setExpandedFile(null);
-      setVersions(null);
-      return;
-    }
-    setExpandedFile(key);
-    setVersions(null);
-    setLoadingFile(true);
-    try {
-      const [before, after] = await Promise.all([
-        commit.parentOid ? readFileAtCommit(file.path, commit.parentOid) : null,
-        readFileAtCommit(file.path, commit.oid),
-      ]);
-      if (!isCurrent()) return;
-      setVersions({
-        before: before?.content ?? '',
-        after: after?.content ?? '',
-        language: after?.language || before?.language || 'plaintext',
-      });
-    } catch (error) {
-      if (!isCurrent()) return;
-      notify(error instanceof Error ? error.message : String(error), 'error');
-      setVersions(null);
-    } finally {
-      if (isCurrent()) setLoadingFile(false);
-    }
-  };
 
   const doPush = async () => {
     if (pushing || busy) return;
@@ -258,114 +208,7 @@ export function PushCommitsScreen() {
               setVisibleCount(PAGE_SIZE);
             }}
           />
-          <ul className="push__commits">
-            {shownCommits.map((commit) => {
-              const open = expandedCommit === commit.oid;
-              return (
-                <li key={commit.oid} className="push__commit">
-                  <button
-                    type="button"
-                    className={`push__commit-row${open ? ' is-open' : ''}`}
-                    title="Show commit detail"
-                    onClick={() => {
-                      setExpandedCommit(open ? null : commit.oid);
-                      if (!open) shareCommitWithChat({ oid: commit.oid, summary: commit.summary });
-                    }}
-                  >
-                    <span className="push__commit-sha">{commit.shortOid}</span>
-                    <span className="push__commit-summary">{commit.summary}</span>
-                    <span className="push__commit-meta">
-                      {commit.authorName} · {relativeTime(commit.timeSeconds)}
-                    </span>
-                  </button>
-                  {open && (
-                    <div className="push__commit-detail">
-                      {commit.body !== commit.summary && (
-                        <pre className="push__commit-body">{commit.body}</pre>
-                      )}
-                      {commit.files.length > 0 ? (
-                        <ul className="push__files">
-                          {commit.files.map((file) => {
-                            const fileOpen = expandedFile === `${commit.oid}:${file.path}`;
-                            return (
-                              <li key={`${file.path}:${file.status}`} className="push__file">
-                                <button
-                                  type="button"
-                                  className="push__file-row"
-                                  title={`Compare ${file.path} (parent vs this commit)`}
-                                  onClick={() => void openCompare(commit, file)}
-                                >
-                                  <span
-                                    className={`push__file-status push__file-status--${file.status}`}
-                                  >
-                                    {file.status}
-                                  </span>
-                                  <span className="push__file-path">{file.path}</span>
-                                  <span className="push__file-stats">
-                                    <span className="stats-add">+{file.additions}</span>
-                                    <span className="stats-del">−{file.deletions}</span>
-                                  </span>
-                                </button>
-                                {fileOpen && (
-                                  <>
-                                    {loadingFile && versions === null && (
-                                      <p className="push__empty">Loading versions…</p>
-                                    )}
-                                    <div className="push__file-view">
-                                      <div className="push__file-view-labels">
-                                        <span>
-                                          BEFORE — {commit.parentOid?.slice(0, 7) ?? '(new file)'}
-                                        </span>
-                                        <span>COMMIT — {commit.shortOid}</span>
-                                        <div className="push__view-mode" role="group" aria-label="Diff layout">
-                                          <button
-                                            type="button"
-                                            className={splitView ? 'is-active' : ''}
-                                            onClick={() => setSplitView(true)}
-                                          >
-                                            Split
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className={!splitView ? 'is-active' : ''}
-                                            onClick={() => setSplitView(false)}
-                                          >
-                                            Unified
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <ChatAwareDiffEditor
-                                        chatMeta={{ path: file.path, source: 'Push Commits' }}
-                                        key={`${commit.oid}:${file.path}`}
-                                        original={versions?.before ?? ''}
-                                        modified={versions?.after ?? ''}
-                                        language={versions?.language ?? 'plaintext'}
-                                        options={{
-                                          readOnly: true,
-                                          renderSideBySide: splitView,
-                                          fontSize: 11,
-                                          lineHeight: 18,
-                                          minimap: { enabled: false },
-                                          scrollBeyondLastLine: false,
-                                          automaticLayout: true,
-                                        }}
-                                      />
-                                    </div>
-                                  </>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p className="push__empty">No file changes (merge commit).</p>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <CommitPreviewList key={previewScope} commits={shownCommits} source="Push Commits" />
           {hasMore && (
             <button
               type="button"

@@ -981,6 +981,15 @@ pub fn pr_diff(repo_path: &Path, number: u64) -> Result<String, String> {
     run_gh(repo_path, &["pr", "diff", &number.to_string()])
 }
 
+/// Unified diff for a PR commit, including commits absent from the local clone.
+pub fn pr_commit_diff(repo_path: &Path, oid: &str) -> Result<String, String> {
+    if oid.len() != 40 || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Invalid GitHub commit SHA.".into());
+    }
+    let endpoint = format!("repos/{{owner}}/{{repo}}/commits/{oid}");
+    run_gh(repo_path, &["api", &endpoint, "-H", "Accept: application/vnd.github.diff"])
+}
+
 /// Posts a comment (body piped on stdin so newlines survive).
 pub fn pr_comment(repo_path: &Path, number: u64, body: &str) -> Result<(), String> {
     use std::io::Write;

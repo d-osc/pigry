@@ -322,14 +322,29 @@ pub struct PushPreview {
 
 /// Lists the local commits ahead of the upstream, each with its files.
 pub fn push_preview(repo_path: &Path) -> Result<PushPreview> {
+    sync_preview(repo_path, false)
+}
+
+/// Lists commits reachable from the current upstream but absent from HEAD.
+pub fn pull_preview(repo_path: &Path) -> Result<Vec<PushPreviewCommit>> {
+    Ok(sync_preview(repo_path, true)?.commits)
+}
+
+fn sync_preview(repo_path: &Path, incoming: bool) -> Result<PushPreview> {
     let repo = git2::Repository::discover(repo_path).map_err(err)?;
-    let head = repo.head().map_err(err)?.resolve().map_err(err)?;
+    let head = match repo.head() {
+        Ok(head) => head.resolve().map_err(err)?,
+        Err(error) if incoming && error.code() == git2::ErrorCode::UnbornBranch => {
+            return Ok(PushPreview { branch: String::new(), upstream: None, ahead: 0, commits: Vec::new() });
+        }
+        Err(error) => return Err(err(error)),
+    };
     let head_oid = head.target().ok_or_else(|| String::from("HEAD not found"))?;
     let branch = head.shorthand().unwrap_or_default().to_string();
 
     let mut upstream_name: Option<String> = None;
     let mut upstream_oid: Option<git2::Oid> = None;
-    if let Some(short) = head.shorthand() {
+    if let Some(short) = head.shorthand().filter(|_| head.is_branch()) {
         if let Ok(local) = repo.find_branch(short, git2::BranchType::Local) {
             if let Ok(upstream) = local.upstream() {
                 upstream_name = Some(
@@ -346,8 +361,9 @@ pub fn push_preview(repo_path: &Path) -> Result<PushPreview> {
     let mut commits: Vec<PushPreviewCommit> = Vec::new();
     if let Some(up) = upstream_oid {
         let mut walk = repo.revwalk().map_err(err)?;
-        walk.push(head_oid).map_err(err)?;
-        walk.hide(up).map_err(err)?;
+        let (tip, base) = if incoming { (up, head_oid) } else { (head_oid, up) };
+        walk.push(tip).map_err(err)?;
+        walk.hide(base).map_err(err)?;
         walk.set_sorting(git2::Sort::REVERSE | git2::Sort::TOPOLOGICAL).map_err(err)?;
         for oid in walk.flatten() {
             let Ok(commit) = repo.find_commit(oid) else { continue };

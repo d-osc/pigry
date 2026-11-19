@@ -359,6 +359,10 @@ export async function ghPrDiff(number: number): Promise<string> {
   return invoke<string>('gh_pr_diff', { number });
 }
 
+export async function ghPrCommitDiff(oid: string): Promise<string> {
+  return invoke('gh_pr_commit_diff', { oid });
+}
+
 export async function ghPrComment(number: number, body: string): Promise<void> {
   if (!isTauri()) throw new Error('Browser preview cannot post comments — run the desktop app');
   return invoke('gh_pr_comment', { number, body });
@@ -1154,6 +1158,11 @@ export async function pushPreview(): Promise<PushPreview> {
     throw new Error('Open the Pigry desktop app to preview and push commits from a local repository.');
   }
   return invoke('push_preview');
+}
+
+export async function pullPreview(): Promise<PushPreviewCommit[]> {
+  if (!isTauri()) return [];
+  return invoke('pull_preview');
 }
 
 export async function mergeStatus(): Promise<MergeStatusInfo> {

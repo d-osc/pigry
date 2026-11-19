@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Copy, KeyRound, Loader2, LogIn, LogOut, Search, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
+import { PigryMark } from '../../app/PigryMark';
 import { ghAccountList, ghAuthStatus, ghDeviceFlowPoll, ghDeviceFlowStart, ghInstall, ghLoginWithToken, ghOpenUrl, ghReleaseList, ghSwitchAccount, ghTokenScopes } from '../../lib/tauriClient';
 import { check as checkUpdater } from '@tauri-apps/plugin-updater';
 import { relaunch as relaunchApp } from '@tauri-apps/plugin-process';
@@ -1170,10 +1171,7 @@ export function AppSettingsScreen({
 
               <div className="app-settings__about-brand">
                 <span className="app-settings__about-logo">
-                  <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none" />
-                    <ellipse cx="12" cy="12" rx="9.5" ry="4.4" transform="rotate(-24 12 12)" />
-                  </svg>
+                  <PigryMark size={34} />
                 </span>
                 <div>
                   <strong>

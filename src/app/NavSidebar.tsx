@@ -23,6 +23,8 @@ export const laneColor = (index: number) =>
   `var(--lane-${(index % 4) + 1})`;
 
 interface NavSidebarProps {
+  ref?: React.Ref<HTMLElement>;
+  width?: number;
   activeScreen: NavId;
   onNavigate: (screen: NavId) => void;
   onOpenSettings: () => void;
@@ -59,7 +61,7 @@ function Section({
   );
 }
 
-export function NavSidebar({ activeScreen, onNavigate, onOpenSettings, onCollapse }: NavSidebarProps) {
+export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSettings, onCollapse }: NavSidebarProps) {
   const {
     repository,
     checkoutBranch,
@@ -110,7 +112,7 @@ export function NavSidebar({ activeScreen, onNavigate, onOpenSettings, onCollaps
   const clean = repository.files.length === 0;
 
   return (
-    <aside className="nav-sidebar">
+    <aside ref={ref} className="nav-sidebar" style={{ width }}>
       <div className="nav-sidebar__topbar">
         {onCollapse && (
           <button

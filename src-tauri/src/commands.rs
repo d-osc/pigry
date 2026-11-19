@@ -923,6 +923,18 @@ pub async fn gh_pr_diff(
 }
 
 #[tauri::command]
+pub async fn gh_pr_commit_diff(
+    state: State<'_, Mutex<AppState>>,
+    oid: String,
+) -> Result<String, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::pr_commit_diff(&repo_path, &oid)
+}
+
+#[tauri::command]
 pub async fn gh_pr_comment(
     state: State<'_, Mutex<AppState>>,
     number: u64,
@@ -1730,6 +1742,17 @@ pub async fn push_preview(
         repo_path_str(&state)?.to_path_buf()
     };
     ops::push_preview(&repo_path)
+}
+
+#[tauri::command]
+pub async fn pull_preview(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<ops::PushPreviewCommit>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::pull_preview(&repo_path)
 }
 
 #[tauri::command]

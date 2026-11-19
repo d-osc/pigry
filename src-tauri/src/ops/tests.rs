@@ -602,7 +602,7 @@ fn merge_preview_details_commits_and_files() {
 }
 
 #[test]
-fn push_preview_lists_unpushed_commits_with_files() {
+fn sync_previews_list_commits_with_files_in_both_directions() {
     let dir = std::env::temp_dir().join(format!("pigry-ops-pushprev-{}", std::process::id()));
     let remote_dir = std::env::temp_dir().join(format!("pigry-ops-pushprev-remote-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
@@ -645,6 +645,7 @@ fn push_preview_lists_unpushed_commits_with_files() {
     let preview = crate::ops::push_preview(&dir).unwrap();
     assert_eq!(preview.upstream, None, "branch without upstream");
     assert_eq!(preview.ahead, 0);
+    assert!(crate::ops::pull_preview(&dir).unwrap().is_empty());
     git_cli(&dir, &["checkout", "main"]);
 
     // One local commit ahead — the preview lists it with its files.
@@ -672,6 +673,18 @@ fn push_preview_lists_unpushed_commits_with_files() {
     git_cli(&dir, &["push", "origin", "main"]);
     let preview = crate::ops::push_preview(&dir).unwrap();
     assert_eq!(preview.ahead, 0, "all pushed");
+    assert!(crate::ops::pull_preview(&dir).unwrap().is_empty());
+
+    git_cli(&dir, &["checkout", "local-only"]);
+    git_cli(&dir, &["branch", "--set-upstream-to=origin/main"]);
+    commit_files(&dir, "local edit", &[("a.txt", "local\n")]);
+    let incoming = crate::ops::pull_preview(&dir).unwrap();
+    assert_eq!(incoming.len(), 1, "exclude local-only commits on divergence");
+    assert_eq!(incoming[0].oid, commit.oid);
+    assert_eq!(incoming[0].parent_oid, commit.parent_oid);
+    assert_eq!(incoming[0].files[0].path, "b.txt");
+    let content = crate::git_state::read_file_at_commit(&dir, "b.txt", &incoming[0].oid).unwrap();
+    assert_eq!(content.content, "b1\nb2\n");
 
     fs::remove_dir_all(&dir).unwrap();
     fs::remove_dir_all(&remote_dir).unwrap();

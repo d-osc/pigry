@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ChevronDown,
-  CircleDot,
   Clock,
   Copy,
   ExternalLink,
@@ -26,14 +25,13 @@ import {
   ghPrComment,
   ghPrCreate,
   ghPrDetail,
-  ghPrDiff,
   ghPrList,
   ghPrReview,
 } from '../../lib/tauriClient';
 import type { GhPrDetail, GhPullRequest } from '../../types/repository';
 import { colorOf, initialsOf, relativeTime, reviewDisplay } from '../../lib/ghData';
-import { PrDiffDialog } from './PrDiffDialog';
-import { parseUnifiedByFile, type PrDiffFile } from '../../lib/ghData';
+import { PrCommits } from './PrCommits';
+import { PrFiles } from './PrFiles';
 import { useRepository } from '../../hooks/useRepository';
 import './PullRequestsScreen.css';
 
@@ -117,9 +115,6 @@ export function PullRequestsScreen() {
   const [detail, setDetail] = useState<GhPrDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [diffFiles, setDiffFiles] = useState<PrDiffFile[] | null>(null);
-  const [diffDialog, setDiffDialog] = useState<{ title: string; path?: string } | null>(null);
-  const [diffLoading, setDiffLoading] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [commenting, setCommenting] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -174,12 +169,6 @@ export function PullRequestsScreen() {
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Clicking anywhere outside the ⋯ menu closes it (capture phase).
-  useEffect(() => {
-    const t = window.setTimeout(() => setDiffFiles(null), 0);
-    return () => window.clearTimeout(t);
-  }, [selected]);
 
   useEffect(() => {
     if (!prMenuOpen) return;
@@ -249,23 +238,6 @@ export function PullRequestsScreen() {
         : a.updatedAt.localeCompare(b.updatedAt),
     );
   }, [displayPrs, tab, query, authorFilter, reviewFilter, labelFilter, reviewRequestedOnly, sortDesc]);
-
-  const openDiff = async (path?: string) => {
-    if (selected === null) return;
-    setDiffLoading(true);
-    try {
-      let files = diffFiles;
-      if (!files) {
-        files = parseUnifiedByFile(await ghPrDiff(selected));
-        setDiffFiles(files);
-      }
-      setDiffDialog({ title: path ?? `Full diff · #${selected}`, path });
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    } finally {
-      setDiffLoading(false);
-    }
-  };
 
   const submitComment = async () => {
     const body = commentText.trim();
@@ -790,59 +762,17 @@ export function PullRequestsScreen() {
                       )}
 
                       {detailTab === 'files' && (
-                        <section className="pr-section">
-                          <div className="pr-section__head">
-                            <h3>{d!.files.length} files changed</h3>
-                            <span className="pr-section__diffstat">
-                              <span className="pr-diff--added">
-                                +{d!.files.reduce((sum, file) => sum + file.additions, 0)}
-                              </span>{' '}
-                              <span className="pr-diff--removed">
-                                −{d!.files.reduce((sum, file) => sum + file.deletions, 0)}
-                              </span>{' '}
-                              <button
-                                type="button"
-                                className="pr-section__link"
-                                onClick={() => void openDiff()}
-                              >
-                                {diffLoading ? 'Loading diff…' : 'View full diff →'}
-                              </button>
-                            </span>
-                          </div>
-                          {d!.files.map((file) => (
-                            <div
-                              key={file.path}
-                              className="pr-file pr-file--clickable"
-                              onClick={() => void openDiff(file.path)}
-                              title="Open compare view"
-                              role="button"
-                              tabIndex={0}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') void openDiff(file.path);
-                              }}
-                            >
-                              <CircleDot size={11} strokeWidth={1.25} className="pr-file__icon" />
-                              <span className="pr-file__path">{file.path}</span>
-                              <span className="pr-file__stat">
-                                <span className="pr-diff--added">+{file.additions}</span>{' '}
-                                <span className="pr-diff--removed">−{file.deletions}</span>
-                              </span>
-                            </div>
-                          ))}
-                        </section>
+                        <PrFiles
+                          key={JSON.stringify([repository?.localPath, selected, detailNonce])}
+                          detail={d!}
+                        />
                       )}
 
                       {detailTab === 'commits' && (
-                        <section className="pr-section">
-                          <h3>{d!.commits.length} commits</h3>
-                          {d!.commits.map((commit) => (
-                            <div key={commit.oid} className="pr-file">
-                              <CircleDot size={11} strokeWidth={1.25} className="pr-file__icon" />
-                              <span className="pr-file__path">{commit.message}</span>
-                              <span className="pr-file__stat">{commit.oid.slice(0, 7)}</span>
-                            </div>
-                          ))}
-                        </section>
+                        <PrCommits
+                          key={JSON.stringify([repository?.localPath, selected])}
+                          commits={d!.commits}
+                        />
                       )}
 
                       {detailTab === 'checks' && (
@@ -1067,16 +997,6 @@ export function PullRequestsScreen() {
           )}
         </section>
       </div>
-
-      {diffDialog && diffFiles && (
-        <PrDiffDialog
-          title={diffDialog.title}
-          files={diffFiles}
-          initialPath={diffDialog.path}
-          headRef={d?.headRef}
-          onClose={() => setDiffDialog(null)}
-        />
-      )}
 
       {reviewDialogOpen && (
         <div className="commit-history__overlay" onClick={() => setReviewDialogOpen(false)} role="presentation">
