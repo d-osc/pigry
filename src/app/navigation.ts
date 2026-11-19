@@ -13,12 +13,15 @@ import {
   Zap,
   type LucideIcon,
   GitMerge,
+  GitCompare,
   History,
   ArrowUpCircle,
   ArrowDownCircle,
   Archive,
   GitBranch,
   Cherry,
+  Copy,
+  Pencil,
 } from 'lucide-react';
 
 export type NavId =
@@ -26,11 +29,14 @@ export type NavId =
   | 'commit-graph'
   | 'working-changes'
   | 'merge-branch'
+  | 'compare-branch'
   | 'rebase-branch'
   | 'push-commits'
   | 'pull-commits'
   | 'stashes'
   | 'cherry-pick'
+  | 'duplicate-commit'
+  | 'edit-commit'
   | 'branches'
   | 'ai-agent'
   | 'pull-requests'
@@ -43,8 +49,10 @@ export type NavId =
   | 'insights'
   | 'app-settings';
 
+export type WorkspaceNavId = Exclude<NavId, 'app-settings'>;
+
 export interface NavItem {
-  id: NavId;
+  id: WorkspaceNavId;
   label: string;
   icon: LucideIcon;
   /** Badge count; undefined = no badge */
@@ -58,8 +66,11 @@ export const workspaceNav: NavItem[] = [
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
   { id: 'pull-commits', label: 'Pull commit', icon: ArrowDownCircle },
   { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
+  { id: 'compare-branch', label: 'Compare branch', icon: GitCompare },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },
+  { id: 'duplicate-commit', label: 'Duplicate commit', icon: Copy },
+  { id: 'edit-commit', label: 'Edit commit', icon: Pencil },
   { id: 'rebase-branch', label: 'Rebase Branch', icon: History },
   { id: 'pull-requests', label: 'Pull requests', icon: GitPullRequest, badge: 3 },
   { id: 'commit-graph', label: 'Commit graph', icon: Network },

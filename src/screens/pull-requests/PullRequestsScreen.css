@@ -544,6 +544,13 @@
   border-radius: var(--radius-sm);
 }
 
+.pr-show-more {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .pr-file__compare > :is(p, [role="alert"]) {
   padding: 8px 12px;
 }
@@ -559,6 +566,42 @@
   margin: 4px 0 10px 14px;
   min-width: 0;
 }
+
+.pr-commit__author {
+  min-width: 0;
+  max-width: 26%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pr-commit__account {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-commit__avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 16px;
+  height: 16px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.pr-commit__avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pr-commit__row time { color: var(--text-muted); white-space: nowrap; }
+.pr-commit__details { display: grid; gap: 4px; padding: 8px; overflow-wrap: anywhere; }
+.pr-commit__details p { white-space: pre-wrap; }
 
 .pr-file__path {
   flex: 1;

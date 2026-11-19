@@ -1,0 +1,63 @@
+.compare-branch__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-md);
+}
+
+.compare-branch__controls {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.compare-branch__controls > svg {
+  margin-bottom: 7px;
+  color: var(--text-muted);
+}
+
+.compare-branch__controls label {
+  display: grid;
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 300px;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.compare-branch__controls select {
+  width: 100%;
+}
+
+.compare-branch__commits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding-block: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.compare-branch__files {
+  min-width: 0;
+}
+
+.compare-branch__files .push__file-row {
+  padding: 6px 8px;
+}
+
+.compare-branch__files .push__file-row > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.compare-branch__diff {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}

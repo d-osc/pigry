@@ -37,16 +37,34 @@ test('PR summary renders Markdown and expandable release notes', async ({ page }
   await expect(summary.locator('li code')).toBeVisible();
 });
 
+test('full PR diff falls back to file patches when GitHub rejects the combined diff', async ({ page }) => {
+  await page.evaluate(() => { window.testBackend.failures.gh_pr_diff = 'HTTP 406: PullRequest.diff too_large'; });
+  await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
+  await page.getByRole('button', { name: /^Files changed/ }).click();
+  await page.getByRole('button', { name: /View full diff/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Full diff · #42' });
+  await expect(dialog.getByText('new feature', { exact: true }).first()).toBeVisible();
+  await dialog.getByRole('button', { name: /notes.txt/ }).click();
+  await expect(dialog.getByText('No text diff available for this file.')).toBeVisible();
+});
+
 test('PR commit opens its changed files and code compare', async ({ page }) => {
   await page.locator('.nav-item').filter({ hasText: 'Pull requests' }).click();
   await page.getByRole('button', { name: /^Commits/ }).click();
   const commit = page.getByRole('button', { name: /Update feature files/ });
+  await expect(commit).toContainText('fixture-author');
+  await expect(commit.locator('time')).toHaveAttribute('datetime', '2026-11-15T00:00:00Z');
+  await expect(commit.locator('.pr-commit__avatar img')).toHaveCount(1);
   await commit.click();
+  await expect(page.getByText('Document the feature changes.')).toBeVisible();
   await expect(commit).toHaveAttribute('aria-expanded', 'true');
   const inline = page.locator('.pr-file__compare');
   await expect(inline.getByText('new feature', { exact: true }).first()).toBeVisible();
   await expectDiffLayouts(inline);
-  await page.getByRole('button', { name: 'notes.txt' }).click();
+  await expect(page.getByRole('button', { name: /^feature\.txt/ })).toContainText('+1 −1');
+  const notes = page.getByRole('button', { name: /^notes\.txt/ });
+  await expect(notes).toContainText('+1 −0');
+  await notes.click();
   await expect(inline.getByText('release notes', { exact: true }).first()).toBeVisible();
   await commit.click();
   await expect(inline).toHaveCount(0);

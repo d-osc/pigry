@@ -1,14 +1,18 @@
 import { demoAppState, demoHistory, demoTree, demoFileContent, demoStats, demoCommitDetail } from '../../src/lib/demoWorkspace.ts';
 
 /** Test-only IPC boundary. No test hook or fake backend is shipped in the app. */
-export async function installBackend(page, { entries, incoming = [] } = {}) {
+export async function installBackend(page, { entries, incoming = [], branchComparison, branchHistory = demoHistory, duplicateMatches = {}, clean = false } = {}) {
   const state = structuredClone(demoAppState);
   state.activePath = '/fixtures/workspace';
   state.recent = [state.activePath];
   state.repository.localPath = state.activePath;
-  state.repository.files = [{ id: 'fixture.txt:unstaged', path: 'fixture.txt', name: 'fixture.txt', directory: '', status: 'M', additions: 1, deletions: 1, staged: false, untracked: false }];
+  for (const branch of state.repository.branches) {
+    branch.oid = demoHistory.commits.find(commit => commit.refs.includes(branch.name))?.oid ?? null;
+  }
+  const changedFile = { id: 'fixture.txt:unstaged', path: 'fixture.txt', name: 'fixture.txt', directory: '', status: 'M', additions: 1, deletions: 1, staged: false, untracked: false };
+  state.repository.files = clean ? [] : [changedFile];
   const detail = demoCommitDetail(demoHistory.commits[0].oid);
-  await page.addInitScript(({ state, history, tree, content, stats, detail, incoming }) => {
+  await page.addInitScript(({ state, history, tree, content, stats, detail, incoming, branchComparison, branchHistory, duplicateMatches, changedFile }) => {
     let opened = false;
     let incomingCommits = [];
     const callbacks = new Map();
@@ -29,6 +33,12 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
         if (control.failures[cmd]) throw control.failures[cmd];
         if (cmd.startsWith('plugin:')) return 1;
         switch (cmd) {
+          case 'ai_chat': return {
+            ok: true,
+            status: 200,
+            body: JSON.stringify({ choices: [{ message: { content: 'Test model reply' } }] }),
+            error: '',
+          };
           case 'pty_create_ssh': return { id: 271, label: `SSH · ${args.host}`, shellName: 'ssh' };
           case 'pty_kill': return null;
           case 'get_app_state': return opened ? state : { ...state, repository: null, activePath: null };
@@ -42,11 +52,30 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
             if (control.commitFails) throw 'Pre-commit hook rejected the commit';
             state.repository.files = [];
             return { oid: '1234567890', state: structuredClone(state) };
+          case 'start_commit_edit':
+            state.repository.commitEdit = { oid: args.oid, branch: args.branch, editing: true };
+            state.repository.rebaseInProgress = true;
+            state.repository.currentBranch = 'HEAD';
+            state.repository.headOid = args.oid;
+            return structuredClone(state);
+          case 'continue_commit_edit':
+            state.repository.currentBranch = state.repository.commitEdit.branch;
+            state.repository.commitEdit = null;
+            state.repository.rebaseInProgress = false;
+            state.repository.files = [];
+            state.repository.headOid = 'e'.repeat(40);
+            return structuredClone(state);
           case 'git_cli_status': return { found: true, version: 'git test' };
-          case 'get_commit_history': case 'get_branch_commits': return history;
+          case 'get_commit_history': return history;
+          case 'get_branch_commits': return branchHistory;
           case 'get_commit_detail': return { ...detail, oid: args.oid };
           case 'get_file_tree': return tree;
           case 'read_worktree_file': return { ...content, path: args.path };
+          case 'write_worktree_file':
+            if (state.repository.commitEdit) {
+              state.repository.files = [{ ...changedFile, path: args.path, name: args.path.split('/').at(-1) }];
+            }
+            return null;
           case 'get_repo_stats': return stats;
           case 'get_commit_file_diff': case 'get_file_diff': return { original: 'before\n', modified: 'after\n', binary: false, tooLarge: false, language: 'plaintext' };
           case 'verify_commit_sig': return 'unsigned';
@@ -64,7 +93,11 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
             '</details>',
             '',
             '[Unsafe link](javascript:alert%281%29)',
-          ].join('\n'), state: 'OPEN', draft: false, author: 'validation', baseRef: 'main', headRef: 'feature', updatedAt: '2026-11-15T00:00:00Z', url: '', reviewDecision: 'APPROVED', mergeable: 'MERGEABLE', labels: [], reviews: [], comments: [], files: [{ path: 'feature.txt', additions: 1, deletions: 1 }, { path: 'notes.txt', additions: 1, deletions: 0 }], commits: [{ oid: '1234567890123456789012345678901234567890', message: 'Update feature files' }], checks: [] };
+          ].join('\n'), state: 'OPEN', draft: false, author: 'validation', baseRef: 'main', headRef: 'feature', updatedAt: '2026-11-15T00:00:00Z', url: '', reviewDecision: 'APPROVED', mergeable: 'MERGEABLE', labels: [], reviews: [], comments: [], files: [{ path: 'feature.txt', additions: 1, deletions: 1 }, { path: 'notes.txt', additions: 1, deletions: 0 }], commits: [{ oid: '1234567890123456789012345678901234567890', message: 'Update feature files', body: 'Document the feature changes.', authorLogin: 'fixture-author', avatarUrl: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', date: '2026-11-15T00:00:00Z' }], checks: [] };
+          case 'gh_pr_file_patches': return [
+            { path: 'feature.txt', patch: '@@ -1 +1 @@\n-old feature\n+new feature' },
+            { path: 'notes.txt', patch: null },
+          ];
           case 'gh_pr_diff':
           case 'gh_pr_commit_diff': return [
             'diff --git a/feature.txt b/feature.txt',
@@ -85,6 +118,15 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
           case 'gh_run_logs': return 'CI completed successfully\n';
           case 'push_preview': return { commits: [], total: 0, canPublish: true, hasUpstream: false, branch: 'main', remote: 'origin' };
           case 'pull_preview': return incomingCommits;
+          case 'compare_branches': return branchComparison;
+          case 'duplicate_commit_candidates':
+            return branchHistory.commits.filter(row =>
+              !row.isMerge && !(duplicateMatches[args.destinationBranch] ?? []).includes(row.oid)).map(row => row.oid);
+          case 'duplicate_commit':
+            duplicateMatches[args.destinationBranch] ??= [];
+            duplicateMatches[args.destinationBranch].push(args.oid);
+            state.repository.branches.find(branch => branch.name === args.destinationBranch).oid = 'd'.repeat(40);
+            return structuredClone(state);
           case 'git_fetch':
             incomingCommits = incoming;
             state.repository.upstream.behind = incoming.length;
@@ -94,7 +136,7 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
             state.repository.upstream.behind = 0;
             return { summary: 'Pulled' };
           case 'read_file_at_commit':
-            return { ...content, content: args.oid === incoming[0]?.oid ? 'after\n' : 'before\n' };
+            return { ...content, content: [incoming[0]?.oid, branchComparison?.compareOid].includes(args.oid) ? 'after\n' : 'before\n' };
           case 'wiki_check': return { supported: false, hasWiki: false, url: '', cached: false };
           case 'cli_detect': return { claude: false, codex: false };
           case 'detect_zcode_glm': return null;
@@ -103,7 +145,7 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
         }
       },
     };
-  }, { state, history: demoHistory, tree: entries ? { ...demoTree, entries } : demoTree, content: demoFileContent, stats: demoStats, detail, incoming });
+  }, { state, history: demoHistory, tree: entries ? { ...demoTree, entries } : demoTree, content: demoFileContent, stats: demoStats, detail, incoming, branchComparison, branchHistory, duplicateMatches, changedFile });
 }
 
 export async function openFixture(page) {

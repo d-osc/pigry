@@ -18,6 +18,256 @@ fn git_cli(dir: &PathBuf, args: &[&str]) {
 }
 
 #[test]
+fn compare_branches_reports_divergence_and_tip_to_tip_file_changes() {
+    let dir = std::env::temp_dir().join(format!("pigry-ops-compare-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    fs::write(dir.join("common.txt"), "common\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Common history"]);
+    git_cli(&dir, &["branch", "feature/work"]);
+    fs::write(dir.join("base.txt"), "base\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Base change"]);
+    git_cli(&dir, &["checkout", "feature/work"]);
+    fs::write(dir.join("feature.txt"), "feature\nfeature line two\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Feature change"]);
+    git_cli(&dir, &["update-ref", "refs/remotes/origin/feature/work", "HEAD"]);
+    fs::write(dir.join("uncommitted.txt"), "working tree only\n").unwrap();
+
+    let comparison = super::compare_branches(&dir, "refs/heads/main", "refs/remotes/origin/feature/work").unwrap();
+    assert_eq!((comparison.base_only, comparison.compare_only), (1, 1));
+    assert_ne!(comparison.base_oid, comparison.compare_oid);
+    let files: Vec<_> = comparison
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file.status.as_str(), file.additions, file.deletions))
+        .collect();
+    assert_eq!(files, [("base.txt", "D", 0, 1), ("feature.txt", "A", 2, 0)]);
+    assert!(super::compare_branches(&dir, "HEAD", "refs/heads/main").is_err());
+    assert!(dir.join("uncommitted.txt").is_file());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+fn duplicate_commit_fixture(name: &str) -> (PathBuf, String, String) {
+    let dir = std::env::temp_dir().join(format!("pigry-duplicate-{name}-{}", std::process::id()));
+    fs::create_dir(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "destination"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    git_cli(&dir, &["config", "commit.gpgsign", "false"]);
+    fs::write(dir.join("shared.txt"), "original\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Common history"]);
+    git_cli(&dir, &["branch", "feature/source"]);
+    fs::write(dir.join("destination.txt"), "destination work\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Destination work"]);
+    let destination_tip = crate::gitcli::run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    git_cli(&dir, &["checkout", "feature/source"]);
+    fs::write(dir.join("earlier.txt"), "keep on source\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Earlier source work"]);
+    fs::write(dir.join("shared.txt"), "copy this change\n").unwrap();
+    git_cli(&dir, &["add", "shared.txt"]);
+    git_cli(&dir, &["commit", "--author=Original Author <author@example.com>", "-m", "Copy just this commit"]);
+    let source_tip = crate::gitcli::run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    (dir, source_tip, destination_tip)
+}
+
+#[test]
+fn duplicate_commit_preserves_the_source_branch_and_local_work() {
+    use crate::gitcli::run_git;
+    let (dir, source_tip, destination_tip) = duplicate_commit_fixture("inactive");
+    fs::write(dir.join("staged.txt"), "staged WIP\n").unwrap();
+    git_cli(&dir, &["add", "staged.txt"]);
+    fs::write(dir.join("shared.txt"), "unstaged WIP\n").unwrap();
+    fs::write(dir.join("untracked.txt"), "untracked WIP\n").unwrap();
+    let status_before = run_git(&dir, &["status", "--porcelain=v1"]).unwrap();
+
+    let common = run_git(&dir, &["rev-parse", "feature/source~2"]).unwrap();
+    let candidates = super::duplicate_commit_candidates(&dir, "feature/source", "destination").unwrap();
+    assert!(!candidates.contains(&common));
+    assert!(candidates.contains(&source_tip));
+    let existing = super::duplicate_commit(&dir, "feature/source", "destination", &common);
+    assert!(existing.unwrap_err().contains("already contains this commit"));
+
+    super::duplicate_commit(&dir, "feature/source", "destination", &source_tip).unwrap();
+
+    assert_eq!(run_git(&dir, &["symbolic-ref", "--short", "HEAD"]).unwrap(), "feature/source");
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), source_tip);
+    assert_eq!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap(), status_before);
+    assert_eq!(fs::read_to_string(dir.join("shared.txt")).unwrap(), "unstaged WIP\n");
+    assert_eq!(run_git(&dir, &["rev-parse", "destination^"]).unwrap(), destination_tip);
+    assert_eq!(run_git(&dir, &["show", "destination:shared.txt"]).unwrap(), "copy this change");
+    assert_eq!(run_git(&dir, &["show", "destination:destination.txt"]).unwrap(), "destination work");
+    assert!(run_git(&dir, &["show", "destination:earlier.txt"]).is_err());
+    assert_eq!(run_git(&dir, &["log", "-1", "--format=%an: %s", "destination"]).unwrap(), "Original Author: Copy just this commit");
+    let replay = super::duplicate_commit(&dir, "feature/source", "destination", &source_tip);
+    assert!(replay.unwrap_err().contains("already contains an equivalent change"));
+    let candidates = super::duplicate_commit_candidates(&dir, "feature/source", "destination").unwrap();
+    assert!(!candidates.contains(&source_tip));
+
+    git_cli(&dir, &["branch", "linked-destination", &destination_tip]);
+    git_cli(&dir, &["worktree", "add", "linked", "linked-destination"]);
+    let linked = super::duplicate_commit(&dir, "feature/source", "linked-destination", &source_tip);
+    assert!(linked.unwrap_err().contains("in use in another worktree"));
+    assert_eq!(run_git(&dir, &["rev-parse", "linked-destination"]).unwrap(), destination_tip);
+    git_cli(&dir, &["worktree", "remove", "linked"]);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn duplicate_commit_handles_a_checked_out_destination_and_conflicts() {
+    use crate::gitcli::run_git;
+    let (dir, source_tip, destination_tip) = duplicate_commit_fixture("active");
+    git_cli(&dir, &["checkout", "destination"]);
+    fs::write(dir.join("shared.txt"), "dirty destination\n").unwrap();
+    let dirty = super::duplicate_commit(&dir, "feature/source", "destination", &source_tip);
+    assert!(dirty.unwrap_err().contains("commit or stash"));
+    assert_eq!(run_git(&dir, &["rev-parse", "destination"]).unwrap(), destination_tip);
+    assert_eq!(fs::read_to_string(dir.join("shared.txt")).unwrap(), "dirty destination\n");
+
+    git_cli(&dir, &["checkout", "-b", "conflict"]);
+    git_cli(&dir, &["add", "shared.txt"]);
+    git_cli(&dir, &["commit", "-m", "Conflicting work"]);
+    let conflict_tip = run_git(&dir, &["rev-parse", "conflict"]).unwrap();
+    let conflict = super::duplicate_commit(&dir, "feature/source", "conflict", &source_tip);
+    assert!(conflict.unwrap_err().contains("conflicts with changes"));
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), conflict_tip);
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+
+    git_cli(&dir, &["checkout", "destination"]);
+    super::duplicate_commit(&dir, "feature/source", "destination", &source_tip).unwrap();
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD^"]).unwrap(), destination_tip);
+    assert_eq!(fs::read_to_string(dir.join("shared.txt")).unwrap().trim(), "copy this change");
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+    git_cli(&dir, &["revert", "--no-edit", "HEAD"]);
+    let replay = super::duplicate_commit(&dir, "feature/source", "destination", &source_tip);
+    assert!(replay.unwrap_err().contains("already contains an equivalent change"));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+fn edit_commit_fixture(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("pigry-edit-{name}-{}", std::process::id()));
+    fs::create_dir(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    git_cli(&dir, &["config", "commit.gpgsign", "false"]);
+    fs::write(dir.join("base.txt"), "base\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Base"]);
+    dir
+}
+
+#[test]
+fn edit_commit_amends_only_the_selected_commit_and_replays_later_work() {
+    use crate::gitcli::run_git;
+    let dir = edit_commit_fixture("replay");
+    fs::write(dir.join("feature.txt"), "first version\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Original feature"]);
+    let selected = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    fs::write(dir.join("later.txt"), "later work\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Later work"]);
+    let tip = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    git_cli(&dir, &["branch", "unchanged-tip"]);
+    git_cli(&dir, &["config", "rebase.updateRefs", "true"]);
+    fs::write(dir.join("base.txt"), "uncommitted\n").unwrap();
+    let dirty = super::start_commit_edit(&dir, "main", &tip, &selected).unwrap_err();
+    assert!(dirty.contains("Commit or stash"));
+    assert_eq!(fs::read_to_string(dir.join("base.txt")).unwrap(), "uncommitted\n");
+    git_cli(&dir, &["restore", "base.txt"]);
+
+    super::start_commit_edit(&dir, "main", &tip, &selected).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let edit = crate::git_state::build_state(&dir).unwrap().commit_edit.unwrap();
+    assert!(edit.editing);
+    assert_eq!(edit.oid, selected);
+    assert_eq!(edit.branch, "main");
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), selected);
+    fs::write(dir.join("feature.txt"), "edited version\n").unwrap();
+    let unstaged = super::continue_commit_edit(&dir).unwrap_err();
+    assert!(unstaged.contains("unstaged changes"));
+    git_cli(&dir, &["add", "feature.txt"]);
+    super::continue_commit_edit(&dir).unwrap();
+    assert!(super::commit_edit_state(&repo).is_none());
+    assert_eq!(run_git(&dir, &["symbolic-ref", "--short", "HEAD"]).unwrap(), "main");
+    assert_eq!(run_git(&dir, &["show", "HEAD^:feature.txt"]).unwrap(), "edited version");
+    assert_eq!(run_git(&dir, &["log", "-2", "--format=%s"]).unwrap().lines().collect::<Vec<_>>(), ["Later work", "Original feature"]);
+    assert_eq!(run_git(&dir, &["show", "HEAD:later.txt"]).unwrap(), "later work");
+    assert_eq!(run_git(&dir, &["rev-parse", "unchanged-tip"]).unwrap(), tip);
+    drop(repo);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn edit_commit_merge_preserves_parents_and_root_edit_can_be_aborted() {
+    use crate::gitcli::run_git;
+    let dir = edit_commit_fixture("merge-root");
+    let root = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    git_cli(&dir, &["checkout", "-b", "side"]);
+    fs::write(dir.join("side.txt"), "side\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Side"]);
+    git_cli(&dir, &["checkout", "main"]);
+    git_cli(&dir, &["merge", "--no-ff", "--no-edit", "side"]);
+    let merge = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    let parents = run_git(&dir, &["show", "-s", "--format=%P", "HEAD"]).unwrap();
+    super::start_commit_edit(&dir, "main", &merge, &merge).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    assert!(super::commit_edit_state(&repo).unwrap().editing);
+    fs::write(dir.join("side.txt"), "edited merge file\n").unwrap();
+    git_cli(&dir, &["add", "side.txt"]);
+    super::continue_commit_edit(&dir).unwrap();
+    assert_eq!(run_git(&dir, &["show", "-s", "--format=%P", "HEAD"]).unwrap(), parents);
+    let amended_merge = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    assert_ne!(amended_merge, merge);
+
+    super::start_commit_edit(&dir, "main", &amended_merge, &root).unwrap();
+    assert!(super::commit_edit_state(&repo).unwrap().editing);
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), root);
+    super::abort_rebase(&dir).unwrap();
+    assert!(super::commit_edit_state(&repo).is_none());
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), amended_merge);
+    drop(repo);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn edit_commit_replay_conflicts_can_be_staged_and_continued() {
+    use crate::gitcli::run_git;
+    let dir = edit_commit_fixture("conflict");
+    let selected = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    fs::write(dir.join("base.txt"), "later change\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Later change"]);
+    let tip = run_git(&dir, &["rev-parse", "HEAD"]).unwrap();
+    super::start_commit_edit(&dir, "main", &tip, &selected).unwrap();
+    fs::write(dir.join("base.txt"), "edited root\n").unwrap();
+    git_cli(&dir, &["add", "base.txt"]);
+    super::continue_commit_edit(&dir).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    assert!(!super::commit_edit_state(&repo).unwrap().editing);
+    assert!(super::has_conflicts(&dir).unwrap());
+    assert!(super::continue_commit_edit(&dir).unwrap_err().contains("Resolve and stage"));
+    fs::write(dir.join("base.txt"), "conflict resolved\n").unwrap();
+    git_cli(&dir, &["add", "base.txt"]);
+    super::continue_commit_edit(&dir).unwrap();
+    assert_eq!(run_git(&dir, &["show", "HEAD^:base.txt"]).unwrap(), "edited root");
+    assert_eq!(run_git(&dir, &["show", "HEAD:base.txt"]).unwrap(), "conflict resolved");
+    assert!(super::commit_edit_state(&repo).is_none());
+    drop(repo);
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn revert_commit_creates_undo_commit() {
     let dir = std::env::temp_dir().join(format!("pigry-ops-revert-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

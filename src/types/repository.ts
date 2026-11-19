@@ -17,6 +17,7 @@ export interface UpstreamInfo {
 export interface BranchInfo {
   name: string;
   isHead: boolean;
+  oid?: string | null;
 }
 
 export interface RemoteGroup {
@@ -67,6 +68,7 @@ export interface RepositoryState {
   headOid: string | null;
   /** True while an interactive/regular rebase is mid-flight. */
   rebaseInProgress: boolean;
+  commitEdit?: { oid: string; branch: string; editing: boolean } | null;
   submodules: SubmoduleInfo[];
   worktrees: WorktreeInfo[];
 }
@@ -112,8 +114,10 @@ export interface AiModelEntry {
   context?: string;
   /** Context window in tokens. */
   contextWindow?: number;
-  /** Max output tokens — sent as the request's max_tokens when set. */
+  /** Maximum tokens requested for the model's response. */
   maxOutputTokens?: number;
+  /** Preferred language for assistant replies. */
+  textOutputLanguage?: string;
   /** Supports image attachments. */
   vision: boolean;
   /** Input kinds the model accepts: 'text' (always) | 'image' | 'video' | 'pdf'. */
@@ -124,7 +128,9 @@ export interface AiModelEntry {
   reasoningLevels?: string[];
   /** JSON mapping reasoning level → provider parameter value. */
   reasoningMapping?: string;
-  /** Currently selected reasoning/effort level for chat. */
+  /** Model's configured fallback effort when chat has no override. */
+  defaultEffort?: string;
+  /** Currently selected reasoning/effort override for chat. */
   effort?: string;
   /** Metadata auto-filled from the built-in model registry. */
   smartConfig?: boolean;
@@ -325,6 +331,7 @@ export interface RemoteEntry {
 
 export interface CommitFileEntry {
   path: string;
+  previousPath?: string;
   name: string;
   directory: string;
   /** M | A | D | R */
@@ -565,6 +572,11 @@ export interface GhPrFile {
 export interface GhPrCommit {
   oid: string;
   message: string;
+  body?: string;
+  authorName?: string;
+  authorLogin?: string;
+  avatarUrl?: string;
+  date?: string;
 }
 
 export interface GhCheck {

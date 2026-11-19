@@ -446,6 +446,28 @@ select.prov-mgr__control {
   opacity: 0.45;
 }
 
+.prov-mgr__model-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.prov-mgr__model-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.prov-mgr__model-metadata strong {
+  color: var(--text-secondary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .prov-mgr__model-name {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -472,6 +494,7 @@ select.prov-mgr__control {
 
 .prov-mgr__model-actions {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
   margin-left: auto;

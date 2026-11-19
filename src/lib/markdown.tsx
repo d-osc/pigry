@@ -173,6 +173,7 @@ export function renderMarkdown(source: string): ReactNode[] {
     }
   };
 
+  const headingPattern = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
   while (index < lines.length) {
     const line = lines[index];
     const trimmed = line.trim();
@@ -189,7 +190,7 @@ export function renderMarkdown(source: string): ReactNode[] {
       continue;
     }
 
-    const heading = trimmed.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    const heading = trimmed.match(headingPattern);
     if (heading) {
       const level = heading[1].length;
       const text = heading[2];
@@ -260,14 +261,15 @@ export function renderMarkdown(source: string): ReactNode[] {
     }
 
     // Paragraph: gather until a blank line or a block-starting line.
-    const paragraph: string[] = [];
+    const paragraph = [trimmed];
+    index += 1;
     while (index < lines.length) {
       const current = lines[index];
       const t = current.trim();
       if (
         !t ||
         t.startsWith('```') ||
-        t.startsWith('#') ||
+        headingPattern.test(t) ||
         t.startsWith('>') ||
         /^([-*+]|\d+[.)])\s+/.test(t) ||
         /^(-{3,}|\*{3,}|_{3,})$/.test(t)

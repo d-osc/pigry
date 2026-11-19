@@ -5,48 +5,9 @@
 
 use serde::Serialize;
 use std::path::Path;
-use std::process::Command;
-use crate::CommandNoWindow;
+use crate::gh::run_gh;
 
 const DAY: i64 = 86_400;
-
-/// Spawns gh via PATH when available; after a fresh install the parent
-/// process PATH is stale, so fall back to the known install locations.
-fn gh_command() -> Command {
-    let mut candidates: Vec<String> = Vec::new();
-    if let Ok(pf) = std::env::var("ProgramFiles") {
-        candidates.push(format!(r"{pf}\GitHub CLI\gh.exe"));
-    }
-    if let Ok(la) = std::env::var("LOCALAPPDATA") {
-        candidates.push(format!(r"{la}\Programs\GitHub CLI\gh.exe"));
-    }
-    if let Ok(up) = std::env::var("USERPROFILE") {
-        candidates.push(format!(r"{up}\scoop\shims\gh.exe"));
-    }
-    for candidate in &candidates {
-        if Path::new(candidate).exists() {
-            let mut cmd = Command::new(candidate);
-            cmd.no_window();
-            return cmd;
-        }
-    }
-    let mut cmd = Command::new("gh");
-    cmd.no_window();
-    cmd
-}
-
-fn run_gh(repo_path: &Path, args: &[&str]) -> Result<String, String> {
-    let output = gh_command()
-        .args(args)
-        .current_dir(repo_path)
-        .output()
-        .map_err(|e| format!("gh not available: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(stderr.trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
 
 fn jstr(value: &serde_json::Value, key: &str) -> String {
     value

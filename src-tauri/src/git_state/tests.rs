@@ -678,7 +678,7 @@ fn commit_file_diff_returns_parent_vs_commit_content() {
     let head = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
     drop(repo);
 
-    let diff = read_commit_file_diff(&dir, &head, "doc.txt").unwrap();
+    let diff = read_commit_file_diff(&dir, &head, "doc.txt", None).unwrap();
     assert_eq!(diff.original.unwrap(), "old\n");
     assert_eq!(diff.modified.unwrap(), "old\nnew line\n");
     assert!(!diff.binary && !diff.too_large);
@@ -689,8 +689,17 @@ fn commit_file_diff_returns_parent_vs_commit_content() {
     let repo = Repository::open(&dir).unwrap();
     let head2 = repo.head().unwrap().peel_to_commit().unwrap().id().to_string();
     drop(repo);
-    let diff2 = read_commit_file_diff(&dir, &head2, "added.txt").unwrap();
+    let diff2 = read_commit_file_diff(&dir, &head2, "added.txt", None).unwrap();
     assert_eq!(diff2.original.unwrap(), "");
+
+    fs::rename(dir.join("doc.txt"), dir.join("renamed.txt")).unwrap();
+    commit_all(&dir, "rename file");
+    let detail = build_commit_detail(&dir, "HEAD").unwrap();
+    let renamed = detail.files.iter().find(|file| file.path == "renamed.txt").unwrap();
+    assert_eq!(renamed.previous_path.as_deref(), Some("doc.txt"));
+    let diff = read_commit_file_diff(&dir, &detail.oid, &renamed.path, renamed.previous_path.as_deref()).unwrap();
+    assert_eq!(diff.original.unwrap(), "old\nnew line\n");
+    assert_eq!(diff.modified.unwrap(), "old\nnew line\n");
 
     let _ = fs::remove_dir_all(&dir);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type React from 'react';
 import {
   ArrowDown,
@@ -619,83 +619,93 @@ export function CommitGraphScreen({
             rows.slice(0, visibleCount).map((row) => {
               const selected = row.oid === selectedCommit;
               const tone = avatarTone(row.authorInitials);
+              const toggleCommit = () => {
+                setSelectedCommit(selected ? null : row.oid);
+                if (!selected) shareCommitWithChat({ oid: row.oid, summary: row.summary });
+              };
               return (
-                <div
-                  key={row.oid}
-                  className={`commit-row commit-row--clickable${selected ? ' commit-row--selected' : ''}`}
-                  style={{ gridTemplateColumns: rowTemplate }}
-                  onClick={() => {
-                    setSelectedCommit(row.oid);
-                    shareCommitWithChat({ oid: row.oid, summary: row.summary });
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      setSelectedCommit(row.oid);
-                      shareCommitWithChat({ oid: row.oid, summary: row.summary });
-                    }
-                  }}
-                >
-                  <span className="commit-row__graph">
-                    <CommitGraphColumn row={row} laneNames={laneNames} />
-                  </span>
-                  <span className="commit-row__message">
-                    {row.refs.map((ref) => (
-                      <span
-                        key={ref}
-                        className="ref-pill"
-                        style={{
-                          color: refColor(ref),
-                          background: 'color-mix(in srgb, currentColor 9%, transparent)',
-                          borderColor: 'color-mix(in srgb, currentColor 25%, transparent)',
-                        }}
-                      >
-                        <RefIcon name={ref} />
-                        {ref}
-                      </span>
-                    ))}
-                    {row.summary}
-                  </span>
-                  {columns.author && (
-                    <span className="commit-row__author">
-                      {avatarMap[row.authorEmail ?? ''] ? (
-                        <img
-                          className="commit-row__avatar commit-row__avatar--img"
-                          src={avatarMap[row.authorEmail ?? '']}
-                          alt={row.authorName}
-                        />
-                      ) : (
+                <Fragment key={row.oid}>
+                  <div
+                    className={`commit-row commit-row--clickable${selected ? ' commit-row--selected' : ''}`}
+                    style={{ gridTemplateColumns: rowTemplate }}
+                    onClick={toggleCommit}
+                    role="button"
+                    aria-expanded={selected}
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleCommit();
+                      }
+                    }}
+                  >
+                    <span className="commit-row__graph">
+                      <CommitGraphColumn row={row} laneNames={laneNames} />
+                    </span>
+                    <span className="commit-row__message">
+                      {row.refs.map((ref) => (
                         <span
-                          className="commit-row__avatar"
-                          style={{ background: tone.bg, color: tone.fg }}
+                          key={ref}
+                          className="ref-pill"
+                          style={{
+                            color: refColor(ref),
+                            background: 'color-mix(in srgb, currentColor 9%, transparent)',
+                            borderColor: 'color-mix(in srgb, currentColor 25%, transparent)',
+                          }}
                         >
-                          {row.authorInitials}
+                          <RefIcon name={ref} />
+                          {ref}
                         </span>
-                      )}
-                      {row.authorName}
+                      ))}
+                      {row.summary}
                     </span>
-                  )}
-                  {columns.commit && (
-                    <span
-                      className="commit-row__sha"
-                      style={selected ? { color: 'var(--accent)' } : undefined}
-                    >
-                      {row.shortOid}
-                      <span
-                        className={`commit-row__pushed${row.pushed ? ' commit-row__pushed--on' : ''}`}
-                        title={row.pushed ? 'Pushed to a remote (cloud)' : 'Local only — not pushed yet'}
-                      >
-                        {row.pushed ? <CloudCheck size={11} /> : <CloudOff size={11} />}
+                    {columns.author && (
+                      <span className="commit-row__author">
+                        {avatarMap[row.authorEmail ?? ''] ? (
+                          <img
+                            className="commit-row__avatar commit-row__avatar--img"
+                            src={avatarMap[row.authorEmail ?? '']}
+                            alt={row.authorName}
+                          />
+                        ) : (
+                          <span
+                            className="commit-row__avatar"
+                            style={{ background: tone.bg, color: tone.fg }}
+                          >
+                            {row.authorInitials}
+                          </span>
+                        )}
+                        {row.authorName}
                       </span>
-                    </span>
+                    )}
+                    {columns.commit && (
+                      <span
+                        className="commit-row__sha"
+                        style={selected ? { color: 'var(--accent)' } : undefined}
+                      >
+                        {row.shortOid}
+                        <span
+                          className={`commit-row__pushed${row.pushed ? ' commit-row__pushed--on' : ''}`}
+                          title={row.pushed ? 'Pushed to a remote (cloud)' : 'Local only — not pushed yet'}
+                        >
+                          {row.pushed ? <CloudCheck size={11} /> : <CloudOff size={11} />}
+                        </span>
+                      </span>
+                    )}
+                    {columns.time && (
+                      <span className="commit-row__time">
+                        {relativeTime(row.timeSeconds)}
+                      </span>
+                    )}
+                  </div>
+                  {selected && (
+                    <CommitDetailPanel
+                      oid={row.oid}
+                      onClose={() => setSelectedCommit(null)}
+                      onStartRebase={onStartRebase}
+                    />
                   )}
-                  {columns.time && (
-                    <span className="commit-row__time">
-                      {relativeTime(row.timeSeconds)}
-                    </span>
-                  )}
-                </div>
+                </Fragment>
               );
             })
           )}
@@ -709,7 +719,7 @@ export function CommitGraphScreen({
             Show more — {rows.length - visibleCount} older commits
           </button>
         )}
-        {selectedCommit && (
+        {selectedCommit && !rows.slice(0, visibleCount).some((row) => row.oid === selectedCommit) && (
           <CommitDetailPanel
             key={selectedCommit}
             oid={selectedCommit}

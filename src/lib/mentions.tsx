@@ -218,7 +218,7 @@ export function detectSkillToken(value: string, caret: number): SkillTokenState 
   return { start: caret - match[2].length - 1, query: match[2].toLowerCase() };
 }
 
-/** Replaces the active #token with the picked `#<name> ` (trailing space). */
+/** Replaces the active #token with the picked `#<id> ` (trailing space). */
 export function applySkillToken(
   value: string,
   state: SkillTokenState,

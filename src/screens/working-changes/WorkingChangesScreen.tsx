@@ -209,7 +209,7 @@ export function WorkingChangesScreen() {
               selectedFileId={selectedFileId}
               onSelect={setSelectedFileId}
             />
-            <CommitComposer />
+            {!repository?.commitEdit && <CommitComposer />}
           </div>
           <ResizeHandle
             orientation="v"

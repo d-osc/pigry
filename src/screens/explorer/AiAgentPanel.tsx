@@ -37,17 +37,17 @@ import { aiChat,
   openInBrowser, cliAgentRun, cliDetect, getCommitDetail, getFileTree, memoryAdd, memoryRemove, memorySearch, readFileAtCommit, readWorktreeFile, writeWorktreeFile, agentShellRun } from '../../lib/tauriClient';
 import {
   AGENT_TEAMS, allAgents, builtinAgents, setAgentOverride } from '../../lib/agentExtras';
-import { effortPayloadFragment, providerStatus, resolveContextWindow } from '../../lib/aiProviders';
 import { CtxRing } from '../../lib/CtxRing';
 import { detectSkillToken, applySkillToken, skillCandidates, SkillMenu, type SkillEntry, type SkillTokenState } from '../../lib/mentions';
-import { listSkills, getSkillContent } from '../../lib/skills';
+import { buildSkillContext, listSkills } from '../../lib/skills';
 import { webSearch, browserPage, readBinaryFile } from '../../lib/tauriClient';
 import { browserDevtools, type DevtoolsAction } from '../../lib/tauriClient';
 import { normalizeUrl } from '../../lib/browserWebview';
 import { readPdfText } from '../../lib/tauriClient';
 import { subscribeGhProfile } from '../../lib/ghProfile';
 import { detectZcodeGlm } from '../../lib/zcode';
-import { enabledToolsSummary, loadEnabledTools } from '../../lib/agentTools';
+import { selectAgentTools, type ToolSpec } from '../../lib/agentTools';
+import { WORKSPACE_AGENT_TOOLS } from '../../lib/workspaceAgentTools';
 import { loadMcpServers } from '../../lib/mcpServers';
 import { loadAgents, readInstructions, runEventHooks, type AgentEntry } from '../../lib/agentExtras';
 import {
@@ -87,6 +87,13 @@ import {
 import {
   activeProviderId,
   anthropicEndpoint,
+  configuredModelEffort,
+  effortPayloadFragment,
+  matchModelSpec,
+  maxOutputTokenPayload,
+  providerStatus,
+  resolveContextWindow,
+  textOutputLanguageInstruction,
   isCliProvider,
   loadProviders as loadProviderStore,
   resolveEndpoint,
@@ -156,6 +163,14 @@ const ANALYSIS_TOOLS = new Set([
   'read_file',
   'read_diff',
   'read_history',
+  'git_status',
+  'read_commit',
+  'compare_branches',
+  'preview_sync_commits',
+  'preview_merge',
+  'preview_stash',
+  'check_duplicate_commit',
+  'repo_insights',
   'search_code',
   'read_image',
   'read_pdf',
@@ -223,16 +238,6 @@ function ActivityIndicator({ activity }: { activity: ActivityState | null }) {
 }
 
 /* ---------- agent file tools (real tool-use loop) ---------- */
-
-/** A file tool the model may call. `id` matches the Agents-tab checkbox so
- * each agent's allowlist gates what it can actually do. */
-interface ToolSpec {
-  id: string;
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-  run: (input: Record<string, unknown>) => Promise<string>;
-}
 
 const FILE_TOOLS: ToolSpec[] = [
   {
@@ -326,33 +331,16 @@ function setImageGate(spec: { inputTypes?: string[] } | null | undefined) {
   imageGate = !spec?.inputTypes || spec.inputTypes.includes('image');
 }
 
-/** max_tokens for the current turn's model (model metadata wins over 4096). */
-function maxTokensFor(spec: { maxOutputTokens?: number } | null | undefined): number {
-  return spec?.maxOutputTokens ?? 4096;
-}
-
-/** Resolves the AiModelEntry matching the provider's active model name. */
-function modelSpecOf(provider: {
-  model?: string;
-  models?: Array<{
-    name?: string;
-    inputTypes?: string[];
-    maxOutputTokens?: number;
-    effort?: string;
-    reasoningMapping?: string;
-  }>;
-}):
-  | { inputTypes?: string[]; maxOutputTokens?: number; effort?: string; reasoningMapping?: string }
-  | null {
-  const entry = provider.models?.find((m) => m.name === provider.model);
-  return entry
-    ? {
-        inputTypes: entry.inputTypes,
-        maxOutputTokens: entry.maxOutputTokens,
-        effort: entry.effort,
-        reasoningMapping: entry.reasoningMapping,
-      }
-    : null;
+/** Resolves the saved settings for the model selected for this turn. */
+function modelSpecOf(provider: AiProviderEntry) {
+  const entry = provider.models.find((model) => model.name === provider.model);
+  return {
+    inputTypes: entry?.inputTypes,
+    maxOutputTokens: entry?.maxOutputTokens ?? matchModelSpec(provider.model)?.maxOutputTokens,
+    effort: configuredModelEffort(entry),
+    reasoningMapping: entry?.reasoningMapping,
+    textOutputLanguage: entry?.textOutputLanguage,
+  };
 }
 
 /** Vendor effort params for the current turn (thinking/effort/thinkingConfig). */
@@ -488,7 +476,7 @@ const AGENT_CONTACTS_TOOL: ToolSpec = {
   run: async () => {
     const agents = allAgents().filter((agent) => agent.enabled && agent.username);
     if (agents.length === 0) return '(no agents registered)';
-    const teamOrder: string[] = AGENT_TEAMS as unknown as string[];
+    const teamOrder = AGENT_TEAMS;
     const grouped = new Map<string, typeof agents>();
     for (const agent of agents) {
       const key = agent.team ?? '';
@@ -1037,6 +1025,11 @@ const BROWSER_EXTRAS: ToolSpec[] = [
   },
 ];
 
+const RUNTIME_AGENT_TOOLS = [
+  ...FILE_TOOLS, ...WORKSPACE_AGENT_TOOLS, SHELL_TOOL, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS,
+  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
+];
+
 /** Short label shown as a tool-activity chip in the chat bubble. */
 function toolLabel(name: string, input: Record<string, unknown>, output: string): string {
   if (name === 'write_file') return `write_file → ${String(input.path ?? '?')}`;
@@ -1267,7 +1260,6 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
     // Project knowledge lives in the repo (.pigry/) — ride along every send.
     // Memory is a vector database: pick the semantically relevant entries.
     let memoryText = '';
-    let skillsText = '';
     try {
       // The answering agent reads its OWN private memory when one is
       // targeted; the team store backs teamless turns.
@@ -1278,27 +1270,7 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
     } catch {
       // vector store unavailable
     }
-    try {
-      const tree = await getFileTree();
-      const skillPaths = tree.entries
-        .filter((p) => p.startsWith('.pigry/skills/') && p.endsWith('.md'))
-        .slice(0, 8);
-      const parts: string[] = [];
-      for (const skillPath of skillPaths) {
-        try {
-          parts.push(
-            (await readWorktreeFile(skillPath)).content.trim().slice(0, 1200),
-          );
-        } catch {
-          // skip unreadable skill
-        }
-      }
-      skillsText = parts.join('\n\n').slice(0, 4000);
-    } catch {
-      // no skills folder yet
-    }
     if (memoryText) context += `\n\n[Relevant project memories]\n${memoryText}`;
-    if (skillsText) context += `\n\n[Project skills]\n${skillsText}`;
     // Browser rail assistant: keep "open this page" requests on the in-app
     // panel — the headless readers are invisible to the user.
     if (team === 'Browser') {
@@ -1313,33 +1285,6 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
         `headless automation session (goto first, then snapshot → click/type → asserts).\n` +
         `RULE 4 — browser_screenshot captures YOUR headless session (invisible to the user), not their browser.\n` +
         `For captured network requests use browser_network_requests. A PDF export is not supported.`;
-    }
-    // #tagged skills ride along in FULL — `#<id|name>` in the message calls
-    // that skill explicitly.
-    try {
-      const tagTokens = [
-        ...new Set(
-          [...text.matchAll(/(?:^|\s)#([\w-]+)/g)].map((match) => match[1].toLowerCase()),
-        ),
-      ];
-      if (tagTokens.length > 0) {
-        const all = await listSkills();
-        const matches = all.filter(
-          (skill) =>
-            tagTokens.includes(skill.id.toLowerCase()) ||
-            tagTokens.includes(skill.name.toLowerCase()),
-        );
-        for (const skill of matches) {
-          try {
-            const md = await getSkillContent(skill.id);
-            context += `\n\n[Skill: ${skill.name || skill.id}]\n${md.slice(0, 4000)}`;
-          } catch {
-            // unreadable skill file — skip
-          }
-        }
-      }
-    } catch {
-      // skill listing unavailable
     }
     // Project instructions (.pigry/instructions.md) — always ride along.
     try {
@@ -1382,24 +1327,12 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
     } catch {
       // hook execution must never block a send
     }
-    // Announce the tool surface the user allows (Settings → Tools / MCP).
+    // Each turn sends its callable tool schemas separately for the answering agent.
     try {
-      const enabled = loadEnabledTools();
-      const toolsText = enabledToolsSummary(enabled);
       const mcpServers = loadMcpServers().filter((server) => server.enabled);
-      const mcpNames = mcpServers.map((server) => server.name);
-      const toolBlocks: string[] = [];
-      if (toolsText) {
-        toolBlocks.push(
-          `[Available tools — the CURRENT set, you may reference these; ignore any other tool names that appear in earlier turns of this conversation]\n${toolsText}`,
-        );
+      if (mcpServers.length > 0) {
+        context += `\n\n[MCP servers enabled]\n${mcpServers.map(({ name }) => `- ${name}`).join('\n')}`;
       }
-      if (mcpNames.length > 0) {
-        toolBlocks.push(
-          `[MCP servers enabled]\n${mcpNames.map((name) => `- ${name}`).join('\n')}`,
-        );
-      }
-      if (toolBlocks.length > 0) context += `\n\n${toolBlocks.join('\n\n')}`;
     } catch {
       // tool registry unavailable
     }
@@ -1634,13 +1567,15 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     })();
     const baseSpec = modelSpecOf(provider);
     // The agent's own effort selection wins over the model entry's.
-    const spec = baseSpec ? { ...baseSpec, effort: target.effort || baseSpec.effort } : null;
+    const spec = { ...baseSpec, effort: target.effort || baseSpec.effort };
     setImageGate(spec);
+    const languageInstruction = textOutputLanguageInstruction(spec.textOutputLanguage);
     // What this turn actually used — shown on the reply bubble.
     const usedLabel = provider.model
       ? `${provider.model}${spec?.effort ? ' · ' + spec.effort : ''}`
       : '';
     const repliedAs = target.username;
+    const skillContext = await buildSkillContext(last.text, target.skills);
     if (isCliProvider(provider)) {
       // The provider type IS the CLI binary (claude-code → claude,
       // zcode-cli → zcode).
@@ -1650,7 +1585,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
           : provider.type === 'zcode-cli'
             ? 'zcode'
             : provider.type;
-      const output = await cliAgentRun(cli, last.text, provider.model || undefined);
+      const output = await cliAgentRun(cli, last.text + skillContext + languageInstruction, provider.model || undefined);
       return {
         role: 'assistant',
         text: output || '(no output)',
@@ -1663,22 +1598,14 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const isAnthropic = provider.apiFormat === 'anthropic';
     const rawEndpoint = resolveEndpoint(provider);
     const endpoint = isAnthropic ? anthropicEndpoint(rawEndpoint) : rawEndpoint;
+    const tokenLimit = maxOutputTokenPayload(provider.apiFormat, endpoint, spec.maxOutputTokens);
     const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
     const mediaTypeOf = (dataUrl: string) =>
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
-    let skillContext = '';
-    try {
-      for (const skillId of target.skills ?? []) {
-        const content = await getSkillContent(skillId);
-        skillContext += '\n\n[Skill: ' + skillId + ']\n' + content.slice(0, 2000);
-      }
-    } catch {
-      // skill content unavailable
-    }
-    const profile = '\n\n[Your agent profile]\n' + agentProfileText(target) + skillContext;
+    const profile = '\n\n[Your agent profile]\n' + agentProfileText(target);
     const toolNudge =
-      '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
-    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge;
+      '\n\n[Tool use]\nUse the tools supplied for this turn. If write_file is available, use it to make requested file edits in the working tree.';
+    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge + languageInstruction;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0
@@ -1813,16 +1740,10 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
         return 'forgot ' + hits.length + ' note(s) matching ' + query;
       },
     };
-    const agentAllowed = target.tools ?? [];
-    const tools = [...FILE_TOOLS, SHELL_TOOL, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
-      (tool) => {
-        if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
-        // The Browser team assistant must show pages through the in-app
-        // panel only — hard-drop the headless/external openers here so
-        // stale overrides can never hand them back to the model.
-        if (target.team === 'Browser' && (tool.id === 'playwright' || tool.id === 'browser')) return false;
-        return true;
-      },
+    const tools = selectAgentTools(
+      [...RUNTIME_AGENT_TOOLS, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool],
+      target.tools,
+      target.team,
     );
     const anthropicTools = tools.map((tool) => ({
       name: tool.name,
@@ -1853,8 +1774,8 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     for (let iter = 0; iter < 8; iter++) {
       setActivity({ kind: 'thinking', label: '' });
       const payload = isAnthropic
-        ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
-        : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
+        ? { model: provider.model || 'claude-sonnet', ...tokenLimit, tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
+        : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...tokenLimit, ...effortFor(spec), stream: false };
       const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
       const parsed = safeParse(result.body);
       turnTokens = usageFromParsed(parsed);
@@ -1986,13 +1907,15 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     })();
     const baseSpec = modelSpecOf(provider);
     // A tagged agent's own effort selection wins over the model entry's.
-    const spec = baseSpec ? { ...baseSpec, effort: target?.effort || baseSpec.effort } : null;
+    const spec = { ...baseSpec, effort: target?.effort || baseSpec.effort };
     setImageGate(spec);
+    const languageInstruction = textOutputLanguageInstruction(spec.textOutputLanguage);
     // What this turn actually used — shown on the reply bubble.
     const usedLabel = provider.model
       ? `${provider.model}${spec?.effort ? ' · ' + spec.effort : ''}`
       : '';
     const repliedAs = target?.username ?? agentUsername;
+    const skillContext = await buildSkillContext(last.text, target?.skills ?? []);
     setReplyingAs(repliedAs);
 
     if (isCliProvider(provider)) {
@@ -2012,7 +1935,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
       }
       let working = history;
       try {
-        const output = await cliAgentRun(cli, last.text, provider.model || undefined);
+        const output = await cliAgentRun(cli, last.text + skillContext + languageInstruction, provider.model || undefined);
         working = [...history, { role: 'assistant', text: output || '(no output)', time: now(), agent: repliedAs, owner: ownerName, ...(usedLabel ? { used: usedLabel } : {}) }];
         setMessages(working);
       } catch (error) {
@@ -2025,25 +1948,16 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const isAnthropic = provider.apiFormat === 'anthropic';
     const rawEndpoint = resolveEndpoint(provider);
     const endpoint = isAnthropic ? anthropicEndpoint(rawEndpoint) : rawEndpoint;
+    const tokenLimit = maxOutputTokenPayload(provider.apiFormat, endpoint, spec.maxOutputTokens);
     // Anthropic image blocks carry base64 without the data: URL prefix.
     const base64Of = (dataUrl: string) => dataUrl.slice(dataUrl.indexOf(',') + 1);
     const mediaTypeOf = (dataUrl: string) =>
       dataUrl.slice(5, dataUrl.indexOf(';')) || 'image/png';
     // The tagged agent's identity rides along so it answers in character.
     const profile = target ? `\n\n[Your agent profile]\n${agentProfileText(target)}` : '';
-    // The answering agent's assigned skills ride along as full instructions.
-    let skillContext = '';
-    try {
-      for (const skillId of target?.skills ?? []) {
-        const content = await getSkillContent(skillId);
-        skillContext += `\n\n[Skill: ${skillId}]\n${content.slice(0, 2000)}`;
-      }
-    } catch {
-      // skill content unavailable
-    }
     const toolNudge =
-      '\n\n[Tool use]\nYou have file tools for this repository. When asked to create or change files, actually call write_file — do not only print code. Changes land in the working tree and are visible to git.';
-    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge;
+      '\n\n[Tool use]\nUse the tools supplied for this turn. If write_file is available, use it to make requested file edits in the working tree.';
+    const fullText = last.text + (last.context ?? '') + profile + skillContext + toolNudge + languageInstruction;
     const turnImages = (last.images ?? []).map((dataUrl) => ({ dataUrl }));
     const content = isAnthropic
       ? turnImages.length > 0
@@ -2159,16 +2073,10 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
         return 'forgot ' + hits.length + ' note(s) matching ' + query;
       },
     };
-    const agentAllowed = target?.tools ?? [];
-    const tools = [...FILE_TOOLS, SHELL_TOOL, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS, ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool].filter(
-      (tool) => {
-        if (agentAllowed.length > 0 && !agentAllowed.includes(tool.id)) return false;
-        // The Browser team assistant must show pages through the in-app
-        // panel only — hard-drop the headless/external openers here so
-        // stale overrides can never hand them back to the model.
-        if (target?.team === 'Browser' && (tool.id === 'playwright' || tool.id === 'browser')) return false;
-        return true;
-      },
+    const tools = selectAgentTools(
+      [...RUNTIME_AGENT_TOOLS, memoryTool, memoryRecallTool, memoryForgetTool, agentMessageTool],
+      target?.tools ?? [],
+      target?.team,
     );
     const anthropicTools = tools.map((tool) => ({
       name: tool.name,
@@ -2191,8 +2099,8 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
       if (tools.length === 0) {
         // No tools allowed — plain single-shot reply (legacy path).
         const payload = isAnthropic
-          ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), messages: [{ role: 'user', content }], ...effortFor(spec) }
-        : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
+          ? { model: provider.model || 'claude-sonnet', ...tokenLimit, messages: [{ role: 'user', content }], ...effortFor(spec) }
+        : { model: provider.model || 'glm-4.6', messages: [{ role: 'user', content }], ...tokenLimit, ...effortFor(spec), stream: false };
         const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
         const parsed = safeParse(result.body);
         turnTokens = usageFromParsed(parsed);
@@ -2216,8 +2124,8 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
         for (let iter = 0; iter < 8; iter++) {
           setActivity({ kind: 'thinking', label: '' });
           const payload = isAnthropic
-            ? { model: provider.model || 'claude-sonnet', max_tokens: maxTokensFor(spec), tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
-            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...(spec?.maxOutputTokens ? { max_tokens: spec.maxOutputTokens } : {}), ...effortFor(spec), stream: false };
+            ? { model: provider.model || 'claude-sonnet', ...tokenLimit, tools: anthropicTools, messages: apiMessages, ...effortFor(spec) }
+            : { model: provider.model || 'glm-4.6', tools: openaiTools, messages: apiMessages, ...tokenLimit, ...effortFor(spec), stream: false };
           const result = await aiChat(endpoint, provider.apiKey, JSON.stringify(payload), isAnthropic ? 'anthropic' : 'bearer');
           const parsed = safeParse(result.body);
           turnTokens = usageFromParsed(parsed);
@@ -2635,7 +2543,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const pickSkill = (skill: SkillEntry) => {
     if (!skillTok) return;
     const caret = textareaRef.current?.selectionStart ?? input.length;
-    const next = applySkillToken(input, skillTok, caret, skill.name || skill.id);
+    const next = applySkillToken(input, skillTok, caret, skill.id);
     setInput(next.value);
     closeSkill();
     requestAnimationFrame(() => {
@@ -2644,8 +2552,11 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     });
   };
 
-  // Load skill metadata once for the picker.
+  // Refresh when the active project changes or the skills editor closes.
+  const skillsDialogOpen = knowDialog === 'skills';
+  const projectPath = repository?.localPath;
   useEffect(() => {
+    if (skillsDialogOpen) return;
     let cancelled = false;
     listSkills()
       .then((list) => {
@@ -2657,7 +2568,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectPath, skillsDialogOpen]);
 
   const closeMention = () => {
     setMention(null);
@@ -3143,7 +3054,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     ? `${pointedProvider.name || pointedProvider.type}${pointedModel ? ' · ' + pointedModel : ''}`
     : 'No provider';
   // Selected effort level of the pointed model (composer pill chip).
-  const activeEffort = pointedProvider?.models.find((m) => m.name === pointedModel)?.effort ?? '';
+  const activeEffort = configuredModelEffort(pointedProvider?.models.find((m) => m.name === pointedModel)) ?? '';
 
   // Live context usage of this session — shown as a % chip beside the model
   // pill. The default agent owns the thread, so this is its context window
@@ -4105,8 +4016,8 @@ function ModelPickerDialog({
                     <span className="model-dlg__model-name">{model.name}</span>
                     {model.context && <span className="model-dlg__badge">{model.context}</span>}
                     {model.vision && <span className="model-dlg__badge">Vision</span>}
-                    {model.effort && (
-                      <span className="model-dlg__badge model-dlg__badge--effort">{model.effort}</span>
+                    {configuredModelEffort(model) && (
+                      <span className="model-dlg__badge model-dlg__badge--effort">{configuredModelEffort(model)}</span>
                     )}
                     <span className="model-dlg__row-gap" />
                     {levels.length > 0 && (
@@ -4141,7 +4052,7 @@ function ModelPickerDialog({
                       <button
                         type="button"
                         className={`model-dlg__effort-pill${!model.effort ? ' model-dlg__effort-pill--on' : ''}`}
-                        title="No effort parameter — provider default"
+                        title={model.defaultEffort ? `Use model default (${model.defaultEffort})` : 'Use provider default'}
                         onClick={() => onEffort(viewed.id, model.id, undefined)}
                       >
                         default

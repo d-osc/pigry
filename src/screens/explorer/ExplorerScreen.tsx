@@ -61,6 +61,7 @@ interface ExplorerScreenProps {
   onToggleTerminal?: () => void;
   /** Reports the focused editor's live info for the merged status bar. */
   onEditorStatus?: (status: EditorStatusInfo | null) => void;
+  onUnsavedFilesChange?: (unsaved: boolean) => void;
 }
 
 function languageTag(path: string): string {
@@ -79,7 +80,7 @@ function languageTag(path: string): string {
   }
 }
 
-export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal, onEditorStatus }: ExplorerScreenProps) {
+export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal, onEditorStatus, onUnsavedFilesChange }: ExplorerScreenProps) {
   const { repository, stage, unstage, discard, notify } = useRepository();
   const [treeError, setTreeError] = useState<string | null>(null);
   const [treeAttempt, setTreeAttempt] = useState(0);
@@ -108,6 +109,11 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
   const [revealTarget, setRevealTarget] = useState<{ path: string; line: number; column: number } | null>(null);
   const [dirtyTabs, setDirtyTabs] = useState<Set<string>>(new Set());
+  const hasUnsavedFiles = dirtyTabs.size > 0;
+  useEffect(() => {
+    onUnsavedFilesChange?.(hasUnsavedFiles);
+    return () => onUnsavedFilesChange?.(false);
+  }, [hasUnsavedFiles, onUnsavedFilesChange]);
   const filterInputRef = useRef<HTMLInputElement | null>(null);
   // Right-click context menu over the file tree.
   const [contextMenu, setContextMenu] = useState<{

@@ -95,11 +95,14 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
         enabled: item.enabled !== false,
       };
       if (typeof item.context === 'string' && item.context) model.context = item.context;
-      if (typeof item.contextWindow === 'number' && item.contextWindow > 0) {
+      if (typeof item.contextWindow === 'number' && Number.isSafeInteger(item.contextWindow) && item.contextWindow > 0) {
         model.contextWindow = item.contextWindow;
       }
-      if (typeof item.maxOutputTokens === 'number' && item.maxOutputTokens > 0) {
+      if (typeof item.maxOutputTokens === 'number' && Number.isSafeInteger(item.maxOutputTokens) && item.maxOutputTokens > 0) {
         model.maxOutputTokens = item.maxOutputTokens;
+      }
+      if (typeof item.textOutputLanguage === 'string' && item.textOutputLanguage.trim()) {
+        model.textOutputLanguage = item.textOutputLanguage.trim();
       }
       if (Array.isArray(item.inputTypes)) {
         model.inputTypes = item.inputTypes.map(String).filter(Boolean);
@@ -114,6 +117,7 @@ function migrate(raw: Partial<AiProviderEntry> & Record<string, unknown>): AiPro
         model.reasoningMapping = item.reasoningMapping;
       }
       if (typeof item.effort === 'string' && item.effort) model.effort = item.effort;
+      if (typeof item.defaultEffort === 'string' && item.defaultEffort) model.defaultEffort = item.defaultEffort;
       if (item.smartConfig === true) model.smartConfig = true;
       return model;
     })
@@ -151,9 +155,12 @@ function writeLegacyMirror(providers: AiProviderEntry[], activeId: string) {
 function applyRegistryDefaults(list: AiProviderEntry[]): AiProviderEntry[] {
   for (const entry of list) {
     entry.models = entry.models.map((model) => {
-      if (model.reasoningLevels?.length) return model;
       const spec = matchModelSpec(model.name);
       if (!spec?.reasoningLevels?.length) return model;
+      const obsoleteMapping =
+        (model.reasoningMapping === GLM_THINKING && spec.providerDefaultEffort === 'max') ||
+        (model.reasoningMapping === CLAUDE_THINKING && spec.reasoningMapping !== CLAUDE_THINKING);
+      if (model.reasoningLevels && !obsoleteMapping) return model;
       return {
         ...model,
         reasoningLevels: spec.reasoningLevels,
@@ -372,6 +379,7 @@ export interface KnownModelSpec {
   capabilities?: string[];
   reasoningLevels?: string[];
   reasoningMapping?: string;
+  providerDefaultEffort?: string;
 }
 
 /** Zhipu GLM — thinking on/off switch. */
@@ -385,12 +393,52 @@ const CLAUDE_THINKING = JSON.stringify({
   medium: { thinking: { type: 'enabled', budget_tokens: 16384 } },
   high: { thinking: { type: 'enabled', budget_tokens: 32768 } },
 });
-/** OpenAI o-series — native reasoning_effort levels. */
-const OPENAI_EFFORT = JSON.stringify({
-  low: { reasoning_effort: 'low' },
-  medium: { reasoning_effort: 'medium' },
-  high: { reasoning_effort: 'high' },
-});
+function reasoningPreset(
+  levels: string[],
+  providerDefaultEffort: string | undefined,
+  payload: (level: string) => Record<string, unknown>,
+): KnownModelSpec {
+  return {
+    reasoningLevels: levels,
+    providerDefaultEffort,
+    reasoningMapping: JSON.stringify(Object.fromEntries(levels.map((level) => [level, payload(level)]))),
+  };
+}
+
+const STANDARD_EFFORT = ['low', 'medium', 'high'];
+const EXTENDED_EFFORT = [...STANDARD_EFFORT, 'xhigh', 'max'];
+const OPENAI_OPT_IN_EFFORT = ['none', ...EXTENDED_EFFORT];
+
+function openAiSpec(contextWindow: number, levels: string[], defaultEffort?: string, maxOutputTokens = 128_000): KnownModelSpec {
+  return {
+    contextWindow,
+    maxOutputTokens,
+    inputTypes: ['text', 'image'],
+    ...reasoningPreset(levels, defaultEffort, (level) => ({ reasoning_effort: level })),
+  };
+}
+
+function claudeEffort(levels: string[], defaultEffort: string): KnownModelSpec {
+  return {
+    contextWindow: 1_000_000,
+    maxOutputTokens: 128_000,
+    inputTypes: ['text', 'image', 'pdf'],
+    capabilities: ['structured-output'],
+    ...reasoningPreset(levels, defaultEffort, (level) => ({ output_config: { effort: level } })),
+  };
+}
+
+const GLM_53 = {
+  contextWindow: 1_000_000,
+  maxOutputTokens: 128_000,
+  inputTypes: ['text'],
+  ...reasoningPreset(['low', 'high', 'max'], 'max', (level) => ({ reasoning_effort: level })),
+};
+const GLM_53_FLASH = { ...GLM_53, inputTypes: ['text', 'image', 'video'] };
+const GLM_DYNAMIC_THINKING = { reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING, providerDefaultEffort: 'dynamic thinking' };
+const CLAUDE_HIGH = claudeEffort([...STANDARD_EFFORT, 'max'], 'high');
+const CLAUDE_XHIGH = claudeEffort(EXTENDED_EFFORT, 'high');
+const OPENAI_56 = openAiSpec(1_050_000, OPENAI_OPT_IN_EFFORT, 'medium');
 /** Qwen3 hybrid thinking — toggle + budget. */
 const QWEN_THINKING = JSON.stringify({
   low: { enable_thinking: false },
@@ -402,46 +450,123 @@ const GEMINI_THINKING = JSON.stringify({
   high: { thinkingConfig: { thinkingBudget: 24576 } },
 });
 
-/** Best-effort registry of common model families — matched by substring. */
-const KNOWN_MODEL_SPECS: Array<[pattern: string, spec: KnownModelSpec]> = [
-  ['glm-5.3', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
-  ['glm-5', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
-  ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
+/** Built-in model metadata, keyed by API model ID. Provider deployments may differ. */
+const KNOWN_MODEL_SPECS: Array<[id: string, spec: KnownModelSpec]> = [
+  ['glm-5.3-flashx-legal', GLM_53_FLASH],
+  ['glm-5.3-flashx', GLM_53_FLASH],
+  ['glm-5.3-flash', GLM_53_FLASH],
+  ['glm-5.3', GLM_53],
+  ['glm-5.2', {
+    ...GLM_53,
+    ...reasoningPreset(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'], 'max', (level) => ({
+      reasoning_effort: level,
+    })),
+  }],
+  ['glm-5.1', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], ...GLM_DYNAMIC_THINKING }],
+  ['glm-5', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], ...GLM_DYNAMIC_THINKING }],
+  ['glm-4.6', { contextWindow: 200_000, maxOutputTokens: 128_000, inputTypes: ['text'], ...GLM_DYNAMIC_THINKING }],
   ['glm-4.5-air', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4.5', { contextWindow: 128_000, maxOutputTokens: 96_000, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: GLM_THINKING }],
   ['glm-4-flash', { contextWindow: 128_000, maxOutputTokens: 4_096, inputTypes: ['text'] }],
+  ['claude-opus-5-5', claudeEffort(EXTENDED_EFFORT, 'medium')],
+  ['claude-opus-5', CLAUDE_XHIGH],
+  ['claude-sonnet-5-5', CLAUDE_XHIGH],
+  ['claude-sonnet-5', CLAUDE_XHIGH],
+  ['claude-haiku-5-5', claudeEffort(EXTENDED_EFFORT, 'medium')],
+  ['claude-fable-5-2', CLAUDE_XHIGH],
+  ['claude-fable-5-1', CLAUDE_XHIGH],
+  ['claude-fable-5', CLAUDE_XHIGH],
+  ['claude-opus-4-8', CLAUDE_XHIGH],
+  ['claude-opus-4-7', CLAUDE_XHIGH],
+  ['claude-opus-4-6', CLAUDE_HIGH],
+  ['claude-sonnet-4-6', CLAUDE_HIGH],
+  ['claude-opus-4-5', { ...CLAUDE_HIGH, contextWindow: 200_000, maxOutputTokens: 64_000, ...reasoningPreset(STANDARD_EFFORT, 'high', (level) => ({ output_config: { effort: level } })) }],
+  ['claude-sonnet-4-5', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: STANDARD_EFFORT, reasoningMapping: CLAUDE_THINKING }],
+  ['claude-haiku-4-5', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: STANDARD_EFFORT, reasoningMapping: CLAUDE_THINKING }],
   ['claude-opus-4', { contextWindow: 200_000, maxOutputTokens: 32_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
   ['claude-sonnet-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
-  ['claude-haiku-4', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
-  ['claude-3-7', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: CLAUDE_THINKING }],
-  ['claude-3-5', { contextWindow: 200_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image', 'pdf'], capabilities: ['structured-output'] }],
-  ['gpt-4.1', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['claude-3-7-sonnet', { contextWindow: 200_000, maxOutputTokens: 64_000, inputTypes: ['text', 'image', 'pdf'], reasoningLevels: STANDARD_EFFORT, reasoningMapping: CLAUDE_THINKING }],
+  ['claude-3-5-sonnet', { contextWindow: 200_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image', 'pdf'] }],
+  ['claude-3-5-haiku', { contextWindow: 200_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
+  ['gpt-6.2-astra', openAiSpec(1_050_000, EXTENDED_EFFORT)],
+  ['gpt-6.2-sol', openAiSpec(1_050_000, EXTENDED_EFFORT)],
+  ['gpt-6.1-sol', openAiSpec(1_050_000, EXTENDED_EFFORT, 'medium')],
+  ['gpt-6.1-terra', OPENAI_56],
+  ['gpt-6-astra', openAiSpec(1_050_000, EXTENDED_EFFORT)],
+  ['gpt-6-sol', openAiSpec(1_050_000, OPENAI_OPT_IN_EFFORT, 'medium')],
+  ['gpt-6-luna', OPENAI_56],
+  ['gpt-5.6', OPENAI_56],
+  ['gpt-5.6-sol', OPENAI_56],
+  ['gpt-5.6-terra', OPENAI_56],
+  ['gpt-5.6-luna', OPENAI_56],
+  ['gpt-5.5', openAiSpec(1_050_000, OPENAI_OPT_IN_EFFORT.slice(0, -1), 'medium')],
+  ['gpt-5.4', openAiSpec(1_050_000, OPENAI_OPT_IN_EFFORT.slice(0, -1), 'none')],
+  ['gpt-5.4-mini', openAiSpec(400_000, OPENAI_OPT_IN_EFFORT.slice(0, -1), 'none')],
+  ['gpt-5.4-nano', openAiSpec(400_000, OPENAI_OPT_IN_EFFORT.slice(0, -1), 'none')],
+  ['gpt-5.2', openAiSpec(400_000, OPENAI_OPT_IN_EFFORT.slice(0, -1), 'none')],
+  ['gpt-5.1', openAiSpec(400_000, ['none', ...STANDARD_EFFORT], 'none')],
+  ['gpt-5.1-codex', openAiSpec(400_000, STANDARD_EFFORT)],
+  ['gpt-5', openAiSpec(400_000, ['minimal', ...STANDARD_EFFORT], 'medium')],
+  ['gpt-5-mini', openAiSpec(400_000, ['minimal', ...STANDARD_EFFORT], 'medium')],
+  ['gpt-5-nano', openAiSpec(400_000, ['minimal', ...STANDARD_EFFORT], 'medium')],
+  ['gpt-4.1', { contextWindow: 1_047_576, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['gpt-4.1-mini', { contextWindow: 1_047_576, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['gpt-4.1-nano', { contextWindow: 1_047_576, maxOutputTokens: 32_768, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
   ['gpt-4o', { contextWindow: 128_000, maxOutputTokens: 16_384, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
-  ['o4-mini', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: OPENAI_EFFORT }],
-  ['o3', { contextWindow: 200_000, maxOutputTokens: 100_000, inputTypes: ['text', 'image'], reasoningLevels: ['low', 'medium', 'high'], reasoningMapping: OPENAI_EFFORT }],
+  ['gpt-4o-mini', { contextWindow: 128_000, maxOutputTokens: 16_384, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
+  ['o4-mini', openAiSpec(200_000, STANDARD_EFFORT, 'medium', 100_000)],
+  ['o3', openAiSpec(200_000, STANDARD_EFFORT, 'medium', 100_000)],
+  ['o3-mini', { ...openAiSpec(200_000, STANDARD_EFFORT, 'medium', 100_000), inputTypes: ['text'] }],
+  ['o1', openAiSpec(200_000, STANDARD_EFFORT, 'medium', 100_000)],
+  ['qwen3.5-plus', { contextWindow: 1_000_000, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video'], reasoningLevels: ['low', 'high'], reasoningMapping: QWEN_THINKING }],
   ['qwen3-coder', { contextWindow: 1_000_000, maxOutputTokens: 65_536, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: QWEN_THINKING }],
   ['qwen3', { contextWindow: 262_144, maxOutputTokens: 32_768, inputTypes: ['text'], reasoningLevels: ['low', 'high'], reasoningMapping: QWEN_THINKING }],
   ['qwen-max', { contextWindow: 1_000_000, maxOutputTokens: 32_768, inputTypes: ['text'] }],
   ['qwen-plus', { contextWindow: 1_000_000, maxOutputTokens: 16_384, inputTypes: ['text'] }],
   // DeepSeek R1 reasons on every turn — no effort knob to expose.
   ['deepseek-r1', { contextWindow: 128_000, maxOutputTokens: 32_768, inputTypes: ['text'] }],
-  ['deepseek', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
+  ['deepseek-flash', { contextWindow: 1_000_000, maxOutputTokens: 384_000, inputTypes: ['text', 'image'] }],
+  ['deepseek-v4-pro', { contextWindow: 1_000_000, maxOutputTokens: 384_000, inputTypes: ['text'] }],
+  ['gemini-3.1-pro-preview', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], providerDefaultEffort: 'high' }],
   ['gemini-2.5-pro', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'], reasoningLevels: ['low', 'high'], reasoningMapping: GEMINI_THINKING }],
   ['gemini-2.5-flash', { contextWindow: 1_048_576, maxOutputTokens: 65_536, inputTypes: ['text', 'image', 'video', 'pdf'], capabilities: ['structured-output', 'native-web-search'], reasoningLevels: ['low', 'high'], reasoningMapping: GEMINI_THINKING }],
-  ['gemini', { contextWindow: 1_000_000, maxOutputTokens: 8_192, inputTypes: ['text', 'image'], capabilities: ['structured-output'] }],
-  ['llama', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
-  ['mistral', { contextWindow: 128_000, maxOutputTokens: 8_192, inputTypes: ['text'] }],
 ];
 
-/** Looks up known-model metadata for a model id (longest pattern wins). */
+const MODEL_SPECS_BY_ID = new Map(KNOWN_MODEL_SPECS);
+export const KNOWN_MODEL_IDS = [...MODEL_SPECS_BY_ID.keys()].sort();
+
+/** Resolves API aliases, provider namespaces, and dated snapshots. */
 export function matchModelSpec(name: string): KnownModelSpec | null {
-  const lower = name.trim().toLowerCase();
-  if (!lower) return null;
-  let hit: [string, KnownModelSpec] | null = null;
-  for (const entry of KNOWN_MODEL_SPECS) {
-    if (lower.includes(entry[0]) && (!hit || entry[0].length > hit[0].length)) hit = entry;
-  }
-  return hit ? { ...hit[1] } : null;
+  const modelId = name.trim().toLowerCase();
+  const id = modelId.slice(modelId.lastIndexOf('/') + 1)
+    .replace(/^(claude-(?:opus|sonnet|haiku|fable)-\d+)\.(\d+)/, '$1-$2');
+  return MODEL_SPECS_BY_ID.get(id)
+    ?? MODEL_SPECS_BY_ID.get(id.replace(/-(?:\d{4}-\d{2}-\d{2}|\d{8})$/, ''))
+    ?? null;
+}
+
+export function configuredModelEffort(model?: Pick<AiModelEntry, 'effort' | 'defaultEffort'> | null): string | undefined {
+  return model?.effort || model?.defaultEffort;
+}
+
+export function maxOutputTokenPayload(
+  apiFormat: AiApiFormat,
+  endpoint: string,
+  limit?: number,
+): Record<string, number> {
+  if (apiFormat === 'anthropic') return { max_tokens: limit ?? 4096 };
+  if (!limit) return {};
+  // OpenAI's Chat Completions endpoint uses max_completion_tokens for
+  // reasoning models. Compatible endpoints can still expect max_tokens.
+  return /^https:\/\/api\.openai\.com(?:\/|$)/i.test(endpoint)
+    ? { max_completion_tokens: limit }
+    : { max_tokens: limit };
+}
+
+export function textOutputLanguageInstruction(language?: string): string {
+  return language
+    ? `\n\n[Model language preference]\nWrite your response in ${JSON.stringify(language)} unless the user explicitly requests another language. Preserve code, identifiers, and quoted source text as appropriate.`
+    : '';
 }
 
 /** Context window of a model, best-effort: the provider catalog's exact

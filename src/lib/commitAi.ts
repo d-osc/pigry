@@ -9,6 +9,7 @@ import {
   loadProviders,
   providerStatus,
   resolveEndpoint,
+  textOutputLanguageInstruction,
 } from './aiProviders';
 import { builtinAgents, teamForScreen } from './agentExtras';
 import { aiChat, cliAgentRun, getStagedDiffPreview } from './tauriClient';
@@ -53,7 +54,7 @@ function chatTarget(): ChatTarget | null {
   };
 }
 
-function promptFor(diff: string): string {
+function promptFor(diff: string, language?: string): string {
   return [
     'You are writing a git commit message for the staged changes below.',
     'Rules:',
@@ -64,7 +65,7 @@ function promptFor(diff: string): string {
     '',
     'Staged diff:',
     diff,
-  ].join('\n');
+  ].join('\n') + textOutputLanguageInstruction(language);
 }
 
 /** Strips fences, wrapping quotes and excess whitespace from model output. */
@@ -101,6 +102,7 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
   const { provider, model, used } = target;
 
   const diff = await getStagedDiffPreview(MAX_DIFF_CHARS);
+  const prompt = promptFor(diff, provider.models.find((entry) => entry.name === model)?.textOutputLanguage);
 
   let text = '';
   if (isCliProvider(provider)) {
@@ -111,7 +113,7 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
         : provider.type === 'zcode-cli'
           ? 'zcode'
           : provider.type;
-    text = await cliAgentRun(cli, promptFor(diff), model || undefined);
+    text = await cliAgentRun(cli, prompt, model || undefined);
   } else {
     const isAnthropic = provider.apiFormat === 'anthropic';
     const endpoint = isAnthropic
@@ -121,11 +123,11 @@ export async function aiCommitMessage(): Promise<AiCommitResult | null> {
       ? {
           model,
           max_tokens: 400,
-          messages: [{ role: 'user', content: promptFor(diff) }],
+          messages: [{ role: 'user', content: prompt }],
         }
       : {
           model,
-          messages: [{ role: 'user', content: promptFor(diff) }],
+          messages: [{ role: 'user', content: prompt }],
           temperature: 0.2,
           stream: false,
         };

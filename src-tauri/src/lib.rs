@@ -40,6 +40,7 @@ mod ai;
 mod browser;
 mod busybox;
 mod gh;
+mod gh_cache;
 mod busybox3;
 mod busybox_extra;
 mod commands;
@@ -169,7 +170,10 @@ pub fn run() {
             commands::gh_pr_comment,
             commands::gh_pr_create,
             commands::gh_pr_detail,
+            commands::gh_invalidate_cache,
+            commands::gh_pr_items_page,
             commands::gh_pr_diff,
+            commands::gh_pr_file_patches,
             commands::gh_pr_commit_diff,
             commands::gh_pr_review,
             commands::gh_release_create,
@@ -271,9 +275,12 @@ pub fn run() {
             commands::verify_commit_sig,
             commands::revert_commit,
             commands::cherry_pick,
+            commands::duplicate_commit,
+            commands::duplicate_commit_candidates,
             commands::merge_branch,
             commands::merge_abort,
             commands::merge_preview,
+            commands::compare_branches,
             commands::push_preview,
             commands::pull_preview,
             commands::stash_preview,
@@ -289,6 +296,8 @@ pub fn run() {
             commands::remove_remote,
             commands::set_remote_url,
             commands::interactive_rebase,
+            commands::start_commit_edit,
+            commands::continue_commit_edit,
             commands::abort_rebase,
             commands::stage_lines,
             commands::compose_commit_message,

@@ -1,13 +1,36 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useRequestGate } from '../../hooks/useRequestGate';
-import { parseUnifiedByFile, type PrDiffFile } from '../../lib/ghData';
-import { ghPrDiff } from '../../lib/tauriClient';
+import { languageForPath, parseUnifiedByFile, type PrDiffFile } from '../../lib/ghData';
+import { ghPrDiff, ghPrFilePatches } from '../../lib/tauriClient';
 import type { GhPrDetail } from '../../types/repository';
 import { PrDiffDialog } from './PrDiffDialog';
 import { PrInlineDiff } from './PrInlineDiff';
+import { PrShowMore, usePrItems } from './PrShowMore';
+
+async function fetchDiffs(number: number): Promise<PrDiffFile[]> {
+  try {
+    return parseUnifiedByFile(await ghPrDiff(number));
+  } catch (error) {
+    if (!/HTTP 406|PullRequest\.diff too_large/i.test(String(error))) throw error;
+  }
+  const patches = await ghPrFilePatches(number);
+  return patches.map(({ path, patch }) => {
+    const parsed = patch ? parseUnifiedByFile(`diff --git a/file b/file\n${patch}`)[0] : null;
+    return {
+      path,
+      original: parsed?.original ?? '',
+      modified: parsed?.modified ?? '',
+      language: languageForPath(path),
+      additions: parsed?.additions ?? 0,
+      deletions: parsed?.deletions ?? 0,
+    };
+  });
+}
 
 export function PrFiles({ detail }: { detail: GhPrDetail }) {
+  const page = usePrItems(detail.number, 'files', detail.files, (file) => file.path);
+  const files = page.items;
   const request = useRequestGate();
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
   const [diffs, setDiffs] = useState<PrDiffFile[] | null>(null);
@@ -26,7 +49,7 @@ export function PrFiles({ detail }: { detail: GhPrDetail }) {
     setLoading(true);
     setError(null);
     try {
-      const result = parseUnifiedByFile(await ghPrDiff(detail.number));
+      const result = await fetchDiffs(detail.number);
       if (!isCurrent()) return;
       setDiffs(result);
       if (showFullDiff) setFullDiffOpen(true);
@@ -40,10 +63,10 @@ export function PrFiles({ detail }: { detail: GhPrDetail }) {
   return (
     <section className="pr-section">
       <div className="pr-section__head">
-        <h3>{detail.files.length} {detail.files.length === 1 ? 'file' : 'files'} changed</h3>
+        <h3>{files.length} {files.length === 1 ? 'file' : 'files'} changed</h3>
         <span className="pr-section__diffstat">
-          <span className="pr-diff--added">+{detail.files.reduce((sum, file) => sum + file.additions, 0)}</span>{' '}
-          <span className="pr-diff--removed">−{detail.files.reduce((sum, file) => sum + file.deletions, 0)}</span>{' '}
+          <span className="pr-diff--added">+{files.reduce((sum, file) => sum + file.additions, 0)}</span>{' '}
+          <span className="pr-diff--removed">−{files.reduce((sum, file) => sum + file.deletions, 0)}</span>{' '}
           <button type="button" className="pr-section__link" disabled={loading} onClick={() => void loadDiff(true)}>
             View full diff →
           </button>
@@ -51,7 +74,7 @@ export function PrFiles({ detail }: { detail: GhPrDetail }) {
       </div>
       {loading && !expandedPath && <p className="pr-section__muted" role="status">Loading diff…</p>}
       {error && !expandedPath && <p className="pr-section__muted" role="alert">{error}</p>}
-      {detail.files.map((file) => {
+      {files.map((file) => {
         const expanded = expandedPath === file.path;
         const Icon = expanded ? ChevronDown : ChevronRight;
         const diff = expanded ? diffs?.find(({ path }) => path === file.path) : null;
@@ -89,6 +112,7 @@ export function PrFiles({ detail }: { detail: GhPrDetail }) {
           </div>
         );
       })}
+      <PrShowMore kind="files" {...page} />
       {fullDiffOpen && diffs && (
         <PrDiffDialog
           title={`Full diff · #${detail.number}`}

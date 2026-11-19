@@ -69,6 +69,8 @@ export interface PrDiffFile {
   original: string;
   modified: string;
   language: string;
+  additions: number;
+  deletions: number;
 }
 
 const EXT_LANGUAGE: Record<string, string> = {
@@ -104,6 +106,8 @@ interface ParsedFile {
   path: string;
   originalLines: string[];
   modifiedLines: string[];
+  additions: number;
+  deletions: number;
 }
 
 /**
@@ -122,6 +126,8 @@ export function parseUnifiedByFile(diff: string): PrDiffFile[] {
         path: match ? match[2] : '',
         originalLines: [],
         modifiedLines: [],
+        additions: 0,
+        deletions: 0,
       };
       files.push(current);
       continue;
@@ -133,10 +139,12 @@ export function parseUnifiedByFile(diff: string): PrDiffFile[] {
     }
     if (!inHunk) continue;
     if (raw.startsWith('+')) {
+      current.additions += 1;
       current.modifiedLines.push(raw.slice(1));
       continue;
     }
     if (raw.startsWith('-')) {
+      current.deletions += 1;
       current.originalLines.push(raw.slice(1));
       continue;
     }
@@ -152,5 +160,7 @@ export function parseUnifiedByFile(diff: string): PrDiffFile[] {
       original: file.originalLines.join('\n'),
       modified: file.modifiedLines.join('\n'),
       language: languageForPath(file.path),
+      additions: file.additions,
+      deletions: file.deletions,
     }));
 }

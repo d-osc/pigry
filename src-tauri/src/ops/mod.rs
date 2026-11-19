@@ -7,6 +7,9 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
 
+mod commit_edit;
+pub use commit_edit::{commit_edit_state, continue_commit_edit, start_commit_edit, CommitEditState};
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 type Result<T> = std::result::Result<T, String>;
@@ -62,6 +65,134 @@ pub fn revert_commit(repo_path: &Path, oid: &str) -> Result<String> {
 /// Cherry-picks a commit onto the current branch (stages the changes).
 pub fn cherry_pick(repo_path: &Path, oid: &str) -> Result<String> {
     run_git_timed(repo_path, &["cherry-pick", "--no-commit", oid])
+}
+
+fn unique_commit_patches(
+    repo_path: &Path,
+    source_tip: git2::Oid,
+    destination_tip: git2::Oid,
+) -> Result<Vec<String>> {
+    let output = crate::gitcli::run_git(
+        repo_path,
+        &["cherry", "--no-abbrev", &destination_tip.to_string(), &source_tip.to_string()],
+    )?;
+    // Git lists source-only commits with + and patch-equivalent commits with -.
+    // Commits reachable from both branches are omitted.
+    Ok(output
+        .lines()
+        .filter_map(|line| line.strip_prefix("+ "))
+        .map(str::to_owned)
+        .collect())
+}
+
+pub fn duplicate_commit_candidates(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+) -> Result<Vec<String>> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let tip = |branch: &str| {
+        repo.find_branch(branch, git2::BranchType::Local)
+            .and_then(|branch| branch.get().peel_to_commit())
+            .map(|commit| commit.id())
+            .map_err(err)
+    };
+    unique_commit_patches(repo_path, tip(source_branch)?, tip(destination_branch)?)
+}
+
+/// Replay one commit on a local destination branch without switching branches.
+pub fn duplicate_commit(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+) -> Result<()> {
+    use crate::gitcli::run_git;
+    use git2::{BranchType, Oid, Repository, RepositoryState};
+
+    if source_branch == destination_branch {
+        return Err("Choose different source and destination branches.".into());
+    }
+
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let source = repo.find_branch(source_branch, BranchType::Local).map_err(err)?;
+    let destination = repo
+        .find_branch(destination_branch, BranchType::Local)
+        .map_err(err)?;
+    let source_tip = source.get().peel_to_commit().map_err(err)?.id();
+    let destination_tip = destination.get().peel_to_commit().map_err(err)?;
+    let commit = repo.find_commit(Oid::from_str(oid).map_err(err)?).map_err(err)?;
+    if source_tip != commit.id()
+        && !repo.graph_descendant_of(source_tip, commit.id()).map_err(err)?
+    {
+        return Err(format!("Commit {oid} is not in {source_branch}."));
+    }
+    if destination_tip.id() == commit.id()
+        || repo.graph_descendant_of(destination_tip.id(), commit.id()).map_err(err)?
+    {
+        return Err(format!("{destination_branch} already contains this commit."));
+    }
+    if commit.parent_count() > 1 {
+        return Err("Merge commits require choosing a mainline parent.".into());
+    }
+    if !unique_commit_patches(repo_path, source_tip, destination_tip.id())?
+        .contains(&commit.id().to_string())
+    {
+        return Err(format!("{destination_branch} already contains an equivalent change."));
+    }
+
+    // The cherry-pick index is in memory, so conflicts cannot affect either branch.
+    let mut picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    if picked.has_conflicts() {
+        return Err(format!("This commit conflicts with changes in {destination_branch}."));
+    }
+    let tree_id = picked.write_tree_to(&repo).map_err(err)?;
+    if tree_id == destination_tip.tree_id() {
+        return Err(format!("This commit has no changes to apply to {destination_branch}."));
+    }
+    let tree = repo.find_tree(tree_id).map_err(err)?;
+    let message = commit.message_raw().ok_or("The original commit message is not UTF-8.")?;
+    let committer = repo.signature().map_err(err)?;
+    let new_oid = repo
+        .commit(None, &commit.author(), &committer, message, &tree, &[&destination_tip])
+        .map_err(err)?
+        .to_string();
+
+    let destination_ref = format!("refs/heads/{destination_branch}");
+    let current_destination = repo
+        .find_branch(destination_branch, BranchType::Local)
+        .map_err(err)?;
+    if current_destination.get().target() != Some(destination_tip.id()) {
+        return Err(format!("{destination_branch} changed during the copy. Try again."));
+    }
+    if current_destination.is_head() {
+        if repo.state() != RepositoryState::Clean
+            || !run_git(repo_path, &[
+                "status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none",
+            ])?.is_empty()
+        {
+            return Err("Finish the current Git operation or commit or stash changes on the destination first.".into());
+        }
+        let head = repo.head().map_err(err)?;
+        if head.name() != Some(destination_ref.as_str()) || head.target() != Some(destination_tip.id()) {
+            return Err("The destination changed during the copy. Try again.".into());
+        }
+        // Let Git update the current branch, index, and working tree together.
+        run_git(repo_path, &["merge", "--ff-only", "--no-autostash", "--no-overwrite-ignore", &new_oid])?;
+    } else {
+        let worktree = run_git(repo_path, &["branch", "--list", "--format=%(worktreepath)", "--", destination_branch])?;
+        if !worktree.is_empty() {
+            return Err(format!("{destination_branch} is in use in another worktree. Open that worktree to duplicate the commit there."));
+        }
+        // Compare the old value under Git's ref lock so a concurrent update is preserved.
+        run_git(repo_path, &[
+            "update-ref", "-m", &format!("duplicate commit {oid}"),
+            &destination_ref, &new_oid, &destination_tip.id().to_string(),
+        ])?;
+    }
+    Ok(())
 }
 
 /// Aborts an in-progress cherry-pick, restoring the branch state.
@@ -165,7 +296,11 @@ fn tree_diff_stats(
     old: Option<&git2::Tree>,
     new: &git2::Tree,
 ) -> Result<Vec<(String, char, usize, usize)>> {
-    let mut diff = repo.diff_tree_to_tree(old, Some(new), None).map_err(err)?;
+    let diff = repo.diff_tree_to_tree(old, Some(new), None).map_err(err)?;
+    diff_file_stats(&diff)
+}
+
+fn diff_file_stats(diff: &git2::Diff) -> Result<Vec<(String, char, usize, usize)>> {
     let mut adds: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut dels: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     let mut order: Vec<(String, char)> = Vec::new();
@@ -214,6 +349,56 @@ fn tree_diff_stats(
             )
         })
         .collect())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BranchComparison {
+    pub base_oid: String,
+    pub compare_oid: String,
+    pub base_only: usize,
+    pub compare_only: usize,
+    pub files: Vec<MergePreviewCommitFile>,
+}
+
+/// Compare the tips of two branches without touching the index or working tree.
+pub fn compare_branches(repo_path: &Path, base_ref: &str, compare_ref: &str) -> Result<BranchComparison> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let resolve = |name: &str| {
+        if !name.starts_with("refs/heads/") && !name.starts_with("refs/remotes/") {
+            return Err(format!("Invalid branch reference: {name}"));
+        }
+        repo.find_reference(name)
+            .and_then(|reference| reference.peel_to_commit())
+            .map_err(|error| format!("Could not resolve {name}: {}", error.message()))
+    };
+    let base = resolve(base_ref)?;
+    let compare = resolve(compare_ref)?;
+    let (base_only, compare_only) = repo.graph_ahead_behind(base.id(), compare.id()).map_err(err)?;
+    let base_tree = base.tree().map_err(err)?;
+    let compare_tree = compare.tree().map_err(err)?;
+    let mut options = git2::DiffOptions::new();
+    options.include_typechange(true);
+    let diff = repo
+        .diff_tree_to_tree(Some(&base_tree), Some(&compare_tree), Some(&mut options))
+        .map_err(err)?;
+    let files = diff_file_stats(&diff)?
+        .into_iter()
+        .map(|(path, status, additions, deletions)| MergePreviewCommitFile {
+            path,
+            status: status.to_string(),
+            additions,
+            deletions,
+        })
+        .collect();
+
+    Ok(BranchComparison {
+        base_oid: base.id().to_string(),
+        compare_oid: compare.id().to_string(),
+        base_only,
+        compare_only,
+        files,
+    })
 }
 
 /// Computes what merging 'branch' into HEAD would bring in.

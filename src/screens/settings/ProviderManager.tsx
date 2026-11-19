@@ -29,8 +29,11 @@ import {
   anthropicEndpoint,
   isCliProvider,
   loadProviders,
+  matchModelSpec,
+  maxOutputTokenPayload,
   newId,
   providerStatus,
+  resolveContextWindow,
   resolveEndpoint,
   saveProviders,
   setActiveProvider,
@@ -194,13 +197,14 @@ export function ProviderManager() {
   /** Dialog Save — appends a new model or replaces the edited one in place. */
   const saveModelDialog = (model: AiModelEntry) => {
     if (!selected) return;
-    const exists = selected.models.some((m) => m.id === model.id);
-    const models = exists
+    const previous = selected.models.find((m) => m.id === model.id);
+    const models = previous
       ? selected.models.map((m) => (m.id === model.id ? model : m))
       : [...selected.models, model];
-    patch(selected.id, { models, model: selected.model || model.name });
+    const activeModel = !selected.model || previous?.name === selected.model ? model.name : selected.model;
+    patch(selected.id, { models, model: activeModel });
     setModelDialog(null);
-    notify(`Model "${model.name}" ${exists ? 'updated' : 'added'}`, 'success');
+    notify(`Model "${model.name}" ${previous ? 'updated' : 'added'}`, 'success');
   };
 
   /** Sends a 1-token ping with this model through the provider's wire format. */
@@ -211,9 +215,12 @@ export function ProviderManager() {
       const isAnthropic = selected.apiFormat === 'anthropic';
       const raw = resolveEndpoint(selected);
       const endpoint = isAnthropic ? anthropicEndpoint(raw) : raw;
-      const payload = isAnthropic
-        ? { model: model.name, max_tokens: 8, messages: [{ role: 'user', content: 'ping' }] }
-        : { model: model.name, messages: [{ role: 'user', content: 'ping' }], max_tokens: 8, stream: false };
+      const payload = {
+        model: model.name,
+        messages: [{ role: 'user', content: 'ping' }],
+        ...maxOutputTokenPayload(selected.apiFormat, endpoint, 8),
+        ...(isAnthropic ? {} : { stream: false }),
+      };
       const result = await aiChat(
         endpoint,
         selected.apiKey,
@@ -605,12 +612,22 @@ export function ProviderManager() {
               ))}
             {selected.models.map((model) => {
               const test = tests[model.id];
+              const spec = matchModelSpec(model.name);
+              const context = resolveContextWindow(model.name, model);
+              const output = model.maxOutputTokens ?? spec?.maxOutputTokens;
+              const effort = model.defaultEffort ?? spec?.providerDefaultEffort ?? 'Provider default';
               return (
                 <div key={model.id} className={`prov-mgr__model${model.enabled ? '' : ' prov-mgr__model--off'}`}>
-                  <span className="prov-mgr__model-name">{model.name}</span>
-                  {model.context && <span className="prov-mgr__badge">{model.context}</span>}
-                  {model.vision && <span className="prov-mgr__badge">Vision</span>}
-                  {model.effort && <span className="prov-mgr__badge">Effort: {model.effort}</span>}
+                  <div className="prov-mgr__model-info">
+                    <span className="prov-mgr__model-name" title={model.name}>{model.name}</span>
+                    <div className="prov-mgr__model-metadata">
+                      <span>Context window <strong>{context?.toLocaleString() ?? 'Unknown'}</strong></span>
+                      <span>Max output tokens <strong>{output?.toLocaleString() ?? 'Unknown'}</strong></span>
+                      <span>Default effort <strong>{effort}</strong></span>
+                      {model.textOutputLanguage && <span>Text output <strong>{model.textOutputLanguage}</strong></span>}
+                      {model.vision && <span className="prov-mgr__badge">Vision</span>}
+                    </div>
+                  </div>
                   <span className="prov-mgr__model-actions">
                     <button
                       type="button"

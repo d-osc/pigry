@@ -11,11 +11,20 @@ export interface AgentTool {
   description: string;
 }
 
+export interface ToolSpec {
+  id: string;
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  run: (input: Record<string, unknown>) => Promise<string>;
+}
+
 export const AGENT_TOOLS: AgentTool[] = [
   // Files (read/write/delete/rename_worktree_file, get_file_tree)
   { id: 'files-read', name: 'read_file', group: 'Files', description: 'Read a file from the working tree' },
+  { id: 'files-image', name: 'read_image', group: 'Files', description: 'Read an image from the working tree and attach it to the next model turn' },
   { id: 'files-write', name: 'write_file', group: 'Files', description: 'Create or overwrite a file in the working tree' },
-  { id: 'files-delete', name: 'delete_file', group: 'Files', description: 'Delete a file from the working tree' },
+  { id: 'files-delete', name: 'delete_file', group: 'Files', description: 'Delete a specific working-tree file when the user asks to remove it' },
   { id: 'files-rename', name: 'rename_file', group: 'Files', description: 'Rename or move a file' },
   { id: 'files-list', name: 'list_files', group: 'Files', description: 'List the repository file tree' },
   { id: 'files-diff', name: 'read_diff', group: 'Files', description: 'Read staged/unstaged diffs of a file' },
@@ -27,12 +36,20 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'git-stage', name: 'stage_changes', group: 'Git', description: 'Stage or unstage working-tree changes' },
   { id: 'git-commit', name: 'commit', group: 'Git', description: 'Commit staged changes' },
   { id: 'git-stash', name: 'stash', group: 'Git', description: 'Stash, apply or pop changes' },
-  { id: 'git-history', name: 'read_history', group: 'Git', description: 'Browse commit history of the repository' },
+  { id: 'git-history', name: 'read_history', group: 'Git', description: 'Browse local commit history or the history of a specific ref' },
+  { id: 'git-status', name: 'git_status', group: 'Git', description: 'Inspect working changes, branch refs, upstream status and an active commit edit' },
+  { id: 'git-commit-detail', name: 'read_commit', group: 'Git', description: 'Read a commit and its file changes or compare a file with its first parent' },
+  { id: 'git-compare-branches', name: 'compare_branches', group: 'Git', description: 'Compare two branch tips and inspect their per-file changes' },
+  { id: 'git-preview-sync', name: 'preview_sync_commits', group: 'Git', description: 'Preview fetched upstream commits or commits waiting to be pushed' },
+  { id: 'git-preview-merge', name: 'preview_merge', group: 'Git', description: 'Preview the commits and files a merge into the current branch would bring in' },
+  { id: 'git-preview-stash', name: 'preview_stash', group: 'Git', description: 'Inspect a stash entry and its changed files' },
+  { id: 'git-check-duplicate', name: 'check_duplicate_commit', group: 'Git', description: 'Check a source commit for duplicate eligibility on a local destination branch' },
+  { id: 'repo-insights', name: 'repo_insights', group: 'Git', description: 'Read repository activity, GitHub delivery metrics or traffic' },
   // GitHub (gh CLI)
-  { id: 'gh-pr', name: 'github_pull_requests', group: 'GitHub', description: 'List, create, review and check out pull requests' },
-  { id: 'gh-issue', name: 'github_issues', group: 'GitHub', description: 'List, create and manage issues' },
-  { id: 'gh-release', name: 'github_releases', group: 'GitHub', description: 'Read and publish releases' },
-  { id: 'gh-actions', name: 'github_actions', group: 'GitHub', description: 'Inspect and trigger workflow runs' },
+  { id: 'gh-pr', name: 'github_pull_requests', group: 'GitHub', description: 'List pull requests and inspect their details, file patches or a commit diff' },
+  { id: 'gh-issue', name: 'github_issues', group: 'GitHub', description: 'List issues or read an issue and its comments' },
+  { id: 'gh-release', name: 'github_releases', group: 'GitHub', description: 'List releases or inspect release notes and assets' },
+  { id: 'gh-actions', name: 'github_actions', group: 'GitHub', description: 'List workflow runs or read a run, job logs or artifacts' },
   { id: 'gh-projects', name: 'github_projects', group: 'GitHub', description: 'Read GitHub Projects boards and items' },
   { id: 'gh-security', name: 'github_security', group: 'GitHub', description: 'Read code scanning, Dependabot and secret alerts' },
   // Web (web_search + headless browser)
@@ -52,8 +69,15 @@ export const AGENT_TOOLS: AgentTool[] = [
   // Agents (agent_lookup — registry introspection for the agent itself)
   { id: 'agents-lookup', name: 'agent_lookup', group: 'Agents', description: "Look up agent profiles — list every agent or read one agent's full details by @username" },
   { id: 'agents-contacts', name: 'agent_contacts', group: 'Agents', description: 'The workspace contact book — every enabled agent grouped by team, one line each' },
-  { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'Read and edit the repository wiki' },
+  { id: 'gh-wiki', name: 'github_wiki', group: 'GitHub', description: 'List wiki pages or read a page and its history' },
 ];
+
+const toolIdsByName = new Map(AGENT_TOOLS.map(({ name, id }) => [name, id]));
+
+/** Existing agent profiles may store callable names or settings IDs. */
+export function agentToolId(key: string): string {
+  return toolIdsByName.get(key) ?? key;
+}
 
 const TOOLS_KEY = 'pigry:agent-tools';
 
@@ -101,10 +125,17 @@ export function saveEnabledTools(enabled: Set<string>) {
 /** Groups in display order. */
 export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Agents'];
 
-/** One-line-per-tool block announced to the model on every agent send. */
-export function enabledToolsSummary(enabled: Set<string>): string {
-  const lines = AGENT_TOOLS.filter((tool) => enabled.has(tool.id)).map(
-    (tool) => `- ${tool.name}: ${tool.description}`,
-  );
-  return lines.join('\n');
+export function selectAgentTools(
+  tools: ToolSpec[],
+  allowlist: string[],
+  team?: string,
+): ToolSpec[] {
+  const enabled = loadEnabledTools();
+  const allowed = new Set(allowlist.map(agentToolId));
+  return tools.filter(tool => {
+    const registeredId = toolIdsByName.get(tool.name);
+    return (!registeredId || enabled.has(registeredId))
+      && (allowed.size === 0 || allowed.has(registeredId ?? tool.id))
+      && (team !== 'Browser' || (tool.name !== 'playwright' && tool.name !== 'browser'));
+  });
 }

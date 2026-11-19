@@ -59,9 +59,12 @@ export interface RepositoryContextValue {
   cloneRepo: (url: string, target: string) => Promise<boolean | void>;
   rebaseOnto: (base: string) => Promise<boolean | void>;
   interactiveRebase: (base: string, steps: RebaseStep[]) => Promise<boolean | void>;
+  startCommitEdit: (branch: string, headOid: string, oid: string) => Promise<boolean>;
+  continueCommitEdit: () => Promise<boolean>;
   abortRebase: () => Promise<boolean | void>;
   revertCommit: (oid: string) => Promise<boolean | void>;
   cherryPick: (oid: string) => Promise<boolean | void>;
+  duplicateCommit: (sourceBranch: string, destinationBranch: string, oid: string) => Promise<boolean>;
   mergeBranch: (branch: string, strategy?: string) => Promise<boolean>;
   mergeAbort: () => Promise<boolean | void>;
   stashApply: (index: number) => Promise<boolean | void>;
@@ -237,9 +240,18 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
           (p) => p,
           `Rebase applied: ${steps.length} commit${steps.length === 1 ? '' : 's'} replayed`,
         ),
+      startCommitEdit: (branch, headOid, oid) =>
+        run(() => client.startCommitEdit(branch, headOid, oid), (payload) => payload),
+      continueCommitEdit: () =>
+        run(() => client.continueCommitEdit(), (payload) => {
+          if (!payload.repository?.commitEdit) notifyAndLog('Commit edit complete', 'success');
+          return payload;
+        }),
       abortRebase: () => run(() => client.abortRebase(), (p) => p, 'Rebase aborted'),
       revertCommit: (oid) => run(() => client.revertCommit(oid), (p) => p, 'Commit reverted'),
       cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p, 'Commit cherry-picked'),
+      duplicateCommit: (source, destination, oid) =>
+        run(() => client.duplicateCommit(source, destination, oid), (p) => p, `Duplicated ${oid.slice(0, 7)} onto ${destination}`),
       mergeBranch: (branch, strategy) => run(() => client.mergeBranch(branch, strategy), (p) => p, `Merged ${branch}`),
       mergeAbort: () => run(() => client.mergeAbort(), (p) => p, 'Merge aborted'),
       stashApply: (index) => run(() => client.stashApply(index), (p) => p, 'Stash applied'),

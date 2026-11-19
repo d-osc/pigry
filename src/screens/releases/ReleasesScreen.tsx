@@ -24,6 +24,7 @@ import {
   ghReleaseDelete,
   ghReleaseEdit,
   ghReleaseList,
+  invalidateGhCache,
   ghReleaseView,
 } from '../../lib/tauriClient';
 import type { GhRelease, GhReleaseDetail } from '../../types/repository';
@@ -120,11 +121,12 @@ export function ReleasesScreen() {
 
   const { history } = useCommitHistory(false, 0, repository?.headOid ?? null);
 
-  const loadList = async () => {
+  const loadList = async (force = false) => {
     const isCurrent = listGate.begin();
     setListLoading(true);
     setListError(null);
     try {
+      if (force) await invalidateGhCache();
       const list = await ghReleaseList();
       if (!isCurrent()) return;
       setReleases(list);
@@ -348,7 +350,7 @@ export function ReleasesScreen() {
         <button
           type="button"
           className="outline-button"
-          onClick={() => void loadList()}
+          onClick={() => void loadList(true)}
           disabled={listLoading}
         >
           <RefreshCw size={12} strokeWidth={1.25} className={listLoading ? 'spin' : ''} />
@@ -431,7 +433,7 @@ export function ReleasesScreen() {
                 <span className="pr-empty__hint">
                   Make sure the GitHub CLI (gh) is installed and signed in.
                 </span>
-                <button type="button" className="outline-button" onClick={() => void loadList()}>
+                <button type="button" className="outline-button" onClick={() => void loadList(true)}>
                   <RefreshCw size={12} strokeWidth={1.25} />
                   Retry
                 </button>

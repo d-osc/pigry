@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import {
   AGENT_TOOLS,
+  agentToolId,
   loadEnabledTools,
   saveEnabledTools,
   TOOL_GROUPS,
@@ -934,7 +935,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   const pickDescSkill = (skill: SkillEntry) => {
     if (!draft || !descSkill) return;
     const caret = descRef.current?.selectionStart ?? draft.description.length;
-    const next = applySkillToken(draft.description, descSkill, caret, skill.name || skill.id);
+    const next = applySkillToken(draft.description, descSkill, caret, skill.id);
     setDraft({ ...draft, description: next.value });
     setDescSkill(null);
     setDescSkillIdx(0);
@@ -1034,7 +1035,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
   /** Toggles a checkbox member list in the draft. */
   const toggleDraftMember = (kind: 'tools' | 'skills' | 'mcpServers', value: string) => {
     if (!draft) return;
-    const ids = new Set(draft[kind]);
+    const ids = new Set(kind === 'tools' ? draft.tools.map(agentToolId) : draft[kind]);
     if (ids.has(value)) ids.delete(value);
     else ids.add(value);
     setDraft({ ...draft, [kind]: [...ids] });
@@ -1567,7 +1568,7 @@ export function AgentsTab({ defaultTeam }: { defaultTeam?: string } = {}) {
                   <label key={tool.id} className="apanel__member">
                     <input
                       type="checkbox"
-                      checked={draft.tools.includes(tool.id)}
+                      checked={draft.tools.some(key => agentToolId(key) === tool.id)}
                       onChange={() => toggleDraftMember('tools', tool.id)}
                     />
                     {tool.name}

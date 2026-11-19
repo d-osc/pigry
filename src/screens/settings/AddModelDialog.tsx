@@ -5,9 +5,9 @@
  * window, max output tokens) and a collapsible Advanced settings section
  * (input types, capabilities, reasoning levels, reasoning parameter mapping).
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Lock, Plus, X } from 'lucide-react';
-import { matchModelSpec, newId } from '../../lib/aiProviders';
+import { KNOWN_MODEL_IDS, matchModelSpec, newId, resolveContextWindow } from '../../lib/aiProviders';
 import type { AiModelEntry } from '../../types/repository';
 
 const INPUT_TYPE_OPTIONS: Array<[id: string, label: string]> = [
@@ -64,14 +64,15 @@ interface Props {
 }
 
 export function AddModelDialog({ initial, onCancel, onSave }: Props) {
+  const initialSpec = initial ? matchModelSpec(initial.name) : null;
+  const initialContext = initial ? resolveContextWindow(initial.name, initial) : null;
+  const initialMaxOutput = initial?.maxOutputTokens ?? initialSpec?.maxOutputTokens;
   const [smart, setSmart] = useState(true);
   const [modelId, setModelId] = useState(initial?.name ?? '');
-  const [contextWindow, setContextWindow] = useState(
-    initial?.contextWindow ? String(initial.contextWindow) : '',
-  );
-  const [maxOutputTokens, setMaxOutputTokens] = useState(
-    initial?.maxOutputTokens ? String(initial.maxOutputTokens) : '',
-  );
+  const [contextWindow, setContextWindow] = useState(String(initialContext ?? ''));
+  const [maxOutputTokens, setMaxOutputTokens] = useState(String(initialMaxOutput ?? ''));
+  const [defaultEffort, setDefaultEffort] = useState(initial?.defaultEffort ?? '');
+  const [outputLanguage, setOutputLanguage] = useState(initial?.textOutputLanguage ?? '');
   const [advancedOpen, setAdvancedOpen] = useState(
     Boolean(initial && (initial.inputTypes?.length || initial.capabilities?.length || initial.reasoningLevels?.length || initial.reasoningMapping)),
   );
@@ -83,38 +84,38 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
   const [capabilities, setCapabilities] = useState<string[]>(initial?.capabilities ?? []);
   /** Editable effort types — each vendor's known models come prefilled. */
   const [effortRows, setEffortRows] = useState<EffortRow[]>(() =>
-    mappingToRows(initial?.reasoningLevels ?? [], initial?.reasoningMapping),
+    mappingToRows(initial?.reasoningLevels ?? initialSpec?.reasoningLevels ?? [], initial?.reasoningMapping ?? initialSpec?.reasoningMapping),
   );
   const [error, setError] = useState('');
   const idInputRef = useRef<HTMLInputElement | null>(null);
+  const catalogId = useId();
+  const languageListId = useId();
+  const spec = matchModelSpec(modelId);
+  const levels = [...new Set(effortRows.map(({ level }) => level.trim()).filter(Boolean))];
+  const defaultEffortLabel = spec?.providerDefaultEffort
+    ? `Provider default (${spec.providerDefaultEffort})`
+    : 'Provider default';
 
   useEffect(() => {
     idInputRef.current?.focus();
   }, []);
 
-  const specHint = useMemo(() => {
-    if (!smart || !modelId.trim()) return '';
-    return matchModelSpec(modelId)
-      ? `Recognized "${modelId.trim()}" — defaults filled automatically.`
-      : 'Unknown model — fields stay as entered.';
-  }, [smart, modelId]);
-
   // Smart configuration: re-apply known-model metadata on every id change.
-  const applySmart = (id: string) => {
+  const applySmart = (id: string, clearMissing = false) => {
     const spec = matchModelSpec(id);
-    if (!spec) return;
-    if (spec.contextWindow) setContextWindow(String(spec.contextWindow));
-    if (spec.maxOutputTokens) setMaxOutputTokens(String(spec.maxOutputTokens));
-    setInputTypes(spec.inputTypes ? spec.inputTypes.filter((t) => t !== 'text') : []);
-    setCapabilities(spec.capabilities ?? []);
-    // Vendor default effort types come prefilled and stay editable.
-    setEffortRows(mappingToRows(spec.reasoningLevels ?? [], spec.reasoningMapping));
+    if (!spec && !clearMissing) return;
+    setContextWindow(String(spec?.contextWindow ?? ''));
+    setMaxOutputTokens(String(spec?.maxOutputTokens ?? ''));
+    setInputTypes(spec?.inputTypes?.filter((t) => t !== 'text') ?? []);
+    setCapabilities(spec?.capabilities ?? []);
+    setEffortRows(mappingToRows(spec?.reasoningLevels ?? [], spec?.reasoningMapping));
+    setDefaultEffort((value) => spec?.reasoningLevels?.includes(value) ? value : '');
   };
 
   const changeModelId = (value: string) => {
     setModelId(value);
     setError('');
-    if (smart) applySmart(value.trim());
+    if (smart && matchModelSpec(value) !== spec) applySmart(value, Boolean(spec));
   };
 
   const toggleListValue = (list: string[], setList: (next: string[]) => void, id: string) => {
@@ -124,13 +125,15 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
   const resetForm = () => {
     // Editing: reset back to the model's saved values; adding: clear everything.
     setModelId(initial?.name ?? '');
-    setContextWindow(initial?.contextWindow ? String(initial.contextWindow) : '');
-    setMaxOutputTokens(initial?.maxOutputTokens ? String(initial.maxOutputTokens) : '');
+    setContextWindow(String(initialContext ?? ''));
+    setMaxOutputTokens(String(initialMaxOutput ?? ''));
+    setDefaultEffort(initial?.defaultEffort ?? '');
+    setOutputLanguage(initial?.textOutputLanguage ?? '');
     setInputTypes(
       initial?.inputTypes ? initial.inputTypes.filter((t) => t !== 'text') : initial?.vision ? ['image'] : [],
     );
     setCapabilities(initial?.capabilities ?? []);
-    setEffortRows(mappingToRows(initial?.reasoningLevels ?? [], initial?.reasoningMapping));
+    setEffortRows(mappingToRows(initial?.reasoningLevels ?? initialSpec?.reasoningLevels ?? [], initial?.reasoningMapping ?? initialSpec?.reasoningMapping));
     setError('');
     idInputRef.current?.focus();
   };
@@ -142,20 +145,30 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
       idInputRef.current?.focus();
       return;
     }
-    const ctx = Number(contextWindow.replace(/[,\s_]/g, ''));
-    const maxOut = Number(maxOutputTokens.replace(/[,\s_]/g, ''));
+    const ctx = contextWindow.replace(/[,\s_]/g, '');
+    const maxOut = maxOutputTokens.replace(/[,\s_]/g, '');
+    for (const [label, value] of [['Context window', ctx], ['Max output tokens', maxOut]]) {
+      if (value && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1)) {
+        setError(`${label} must be a positive whole number or left blank.`);
+        return;
+      }
+    }
     const types = ['text', ...inputTypes];
     // Build effort levels + the level→parameters mapping from the rows.
     const rows = effortRows.filter((r) => r.level.trim());
-    const levels = rows.map((r) => r.level.trim());
     let mapping: string | undefined;
     if (rows.length > 0) {
-      const obj: Record<string, unknown> = {};
+      const obj: Record<string, unknown> = Object.create(null);
       for (const row of rows) {
         const raw = row.params.trim();
         if (!raw) continue;
         try {
-          obj[row.level.trim()] = JSON.parse(raw);
+          const params: unknown = JSON.parse(raw);
+          if (!params || typeof params !== 'object' || Array.isArray(params)) {
+            setError(`Effort parameters for "${row.level.trim()}" must be a JSON object.`);
+            return;
+          }
+          obj[row.level.trim()] = params;
         } catch {
           setError(`Effort parameters for "${row.level.trim()}" are not valid JSON.`);
           return;
@@ -169,16 +182,19 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
       vision: types.includes('image'),
       enabled: initial?.enabled ?? true,
     };
-    if (ctx > 0) {
-      model.contextWindow = ctx;
-      model.context = contextBadge(ctx);
+    if (ctx) {
+      model.contextWindow = Number(ctx);
+      model.context = contextBadge(model.contextWindow);
     }
-    if (maxOut > 0) model.maxOutputTokens = maxOut;
+    if (maxOut) model.maxOutputTokens = Number(maxOut);
+    if (outputLanguage.trim()) model.textOutputLanguage = outputLanguage.trim();
     if (inputTypes.length > 0) model.inputTypes = types;
     if (capabilities.length > 0) model.capabilities = capabilities;
-    if (levels.length > 0) model.reasoningLevels = levels;
+    model.reasoningLevels = levels;
     if (mapping) model.reasoningMapping = mapping;
-    if (smart && matchModelSpec(name)) model.smartConfig = true;
+    if (levels.includes(defaultEffort)) model.defaultEffort = defaultEffort;
+    if (name === initial?.name && initial.effort && levels.includes(initial.effort)) model.effort = initial.effort;
+    if (smart && spec) model.smartConfig = true;
     onSave(model);
   };
 
@@ -196,7 +212,7 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
           <div className="amdlg__smart">
             <span className="amdlg__label">
               Smart configuration
-              <span className="amdlg__help" title="Auto-fills context window, max output tokens, input types and capabilities for known models.">
+              <span className="amdlg__help" title="Fills published limits and effort options for known models.">
                 ?
               </span>
             </span>
@@ -208,7 +224,9 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
               <span />
             </label>
           </div>
-          {specHint && <p className="amdlg__hint">{specHint}</p>}
+          {smart && modelId.trim() && !spec && (
+            <p className="amdlg__hint">No built-in limits for this ID. Enter the values from your provider.</p>
+          )}
 
           <label className="amdlg__field">
             <span className="amdlg__label">Model ID</span>
@@ -220,8 +238,12 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
               onKeyDown={(event) => event.key === 'Enter' && save()}
               placeholder="Model ID"
               aria-label="Model ID"
+              list={catalogId}
               spellCheck={false}
             />
+            <datalist id={catalogId}>
+              {KNOWN_MODEL_IDS.map((id) => <option key={id} value={id} />)}
+            </datalist>
           </label>
 
           <label className="amdlg__field">
@@ -245,7 +267,7 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
           <label className="amdlg__field">
             <span className="amdlg__label">
               Max output tokens
-              <span className="amdlg__help" title="Upper bound on reply length — sent as the request's max_tokens.">
+              <span className="amdlg__help" title="Upper bound on tokens generated per request.">
                 ?
               </span>
             </span>
@@ -258,6 +280,36 @@ export function AddModelDialog({ initial, onCancel, onSave }: Props) {
               aria-label="Max output tokens"
               spellCheck={false}
             />
+          </label>
+
+          <label className="amdlg__field">
+            <span className="amdlg__label">Default effort</span>
+            <select
+              className="prov-mgr__control"
+              value={levels.includes(defaultEffort) ? defaultEffort : ''}
+              onChange={(event) => setDefaultEffort(event.target.value)}
+              disabled={levels.length === 0}
+            >
+              <option value="">{defaultEffortLabel}</option>
+              {levels.map((level) => <option key={level} value={level}>{level}</option>)}
+            </select>
+          </label>
+
+          <label className="amdlg__field">
+            <span className="amdlg__label">Text output language</span>
+            <input
+              className="prov-mgr__control"
+              value={outputLanguage}
+              onChange={(event) => setOutputLanguage(event.target.value)}
+              placeholder="Automatic"
+              list={languageListId}
+              maxLength={80}
+            />
+            <datalist id={languageListId}>
+              {['Thai', 'English', 'Chinese', 'Japanese', 'Korean', 'Vietnamese', 'French', 'German', 'Spanish'].map((language) =>
+                <option key={language} value={language} />,
+              )}
+            </datalist>
           </label>
 
           <button

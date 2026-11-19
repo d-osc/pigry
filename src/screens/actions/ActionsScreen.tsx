@@ -28,6 +28,7 @@ import {
   ghRunView,
   ghWorkflowDispatch,
   ghWorkflowList,
+  invalidateGhCache,
   readWorktreeFile,
 } from '../../lib/tauriClient';
 import type {
@@ -333,12 +334,13 @@ export function ActionsScreen() {
     return match?.path ?? '';
   }, [detail, workflows]);
 
-  const loadAll = useCallback(async (silent = false) => {
+  const loadAll = useCallback(async (silent = false, force = false) => {
     const isCurrent = listGate.begin();
     if (silent) setRefreshing(true);
     else setLoading(true);
     setError(null);
     try {
+      if (force) await invalidateGhCache();
       const [wfs, page] = await Promise.all([ghWorkflowList(), ghRunList(50)]);
       if (!isCurrent()) return;
       setWorkflows(wfs);
@@ -719,7 +721,7 @@ export function ActionsScreen() {
           type="button"
           className="actions-screen__refresh"
           aria-label="Refresh runs"
-          onClick={() => void loadAll(true)}
+          onClick={() => void loadAll(true, true)}
         >
           <RefreshCw size={13} strokeWidth={1.25} className={refreshing ? 'actions-spin' : ''} />
         </button>
@@ -744,7 +746,7 @@ export function ActionsScreen() {
                 Make sure the GitHub CLI (gh) is installed, signed in, and the
                 repository has a GitHub remote.
               </span>
-              <button type="button" className="outline-button" onClick={() => void loadAll()}>
+              <button type="button" className="outline-button" onClick={() => void loadAll(false, true)}>
                 <RefreshCw size={12} strokeWidth={1.25} />
                 Retry
               </button>

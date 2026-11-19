@@ -24,6 +24,7 @@ import {
   ghIssueComment,
   ghIssueCreate,
   ghIssueList,
+  invalidateGhCache,
   ghIssueReopen,
   ghIssueView,
   ghOpenUrl,
@@ -122,12 +123,13 @@ export function IssuesScreen() {
     [displayIssues],
   );
 
-  const loadList = useCallback(async () => {
+  const loadList = useCallback(async (force = false) => {
     const isCurrent = listGate.begin();
     setRefreshing(true);
     setListLoading(true);
     setListError(null);
     try {
+      if (force) await invalidateGhCache();
       const list = await ghIssueList();
       if (!isCurrent()) return;
       setIssues(list);
@@ -318,7 +320,7 @@ export function IssuesScreen() {
         <button
           type="button"
           className="outline-button"
-          onClick={() => void loadList()}
+          onClick={() => void loadList(true)}
           disabled={refreshing}
         >
           <RefreshCw size={12} strokeWidth={1.25} className={refreshing ? 'spin' : ''} />
@@ -478,7 +480,7 @@ export function IssuesScreen() {
               <span className="issue-empty__hint">
                 Make sure the GitHub CLI (gh) is installed and signed in.
               </span>
-              <button type="button" className="outline-button" onClick={() => void loadList()}>
+              <button type="button" className="outline-button" onClick={() => void loadList(true)}>
                 <RefreshCw size={12} strokeWidth={1.25} />
                 Retry
               </button>

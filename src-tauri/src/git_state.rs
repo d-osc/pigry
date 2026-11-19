@@ -47,6 +47,7 @@ pub struct UpstreamInfo {
 pub struct BranchInfo {
     pub name: String,
     pub is_head: bool,
+    pub oid: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -100,6 +101,7 @@ pub struct RepositoryState {
     pub head_oid: Option<String>,
     /// True while an interactive/regular rebase is mid-flight.
     pub rebase_in_progress: bool,
+    pub commit_edit: Option<crate::ops::CommitEditState>,
     /// Registered git submodules.
     pub submodules: Vec<SubmoduleInfo>,
     /// Linked worktrees (main worktree included).
@@ -170,6 +172,7 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         let git_dir = repo.path();
         git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
     };
+    let commit_edit = crate::ops::commit_edit_state(&repo);
     let head_oid = repo
         .head()
         .ok()
@@ -194,6 +197,7 @@ pub fn build_state(path: &Path) -> Result<RepositoryState> {
         stashes,
         head_oid,
         rebase_in_progress,
+        commit_edit,
         submodules,
         worktrees,
     })
@@ -506,7 +510,8 @@ fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>> {
             continue;
         }
         let is_head = branch.is_head();
-        branches.push(BranchInfo { name, is_head });
+        let oid = branch.get().target().map(|id| id.to_string());
+        branches.push(BranchInfo { name, is_head, oid });
     }
     branches.sort_by(|a, b| b.is_head.cmp(&a.is_head).then(a.name.cmp(&b.name)));
     Ok(branches)
@@ -519,6 +524,9 @@ fn remote_branches(repo: &Repository) -> Result<Vec<RemoteGroup>> {
         let Ok(reference) = reference else {
             continue;
         };
+        if !reference.is_remote() {
+            continue;
+        }
         if let Some(shorthand) = reference.shorthand() {
             shorthands.push(shorthand.to_string());
         }
@@ -994,6 +1002,10 @@ fn diff_touches_path(diff: &mut git2::Diff, path: &str) -> Result<bool> {
 /// Recent commits of one branch/ref (newest first) — a plain list, no
 /// graph lanes. Powers the Branches screen's commit pane.
 pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHistory> {
+    build_ref_commits(repo_path, ref_name, false)
+}
+
+pub fn build_ref_commits(repo_path: &Path, ref_name: &str, first_parent: bool) -> Result<CommitHistory> {
     let repo = Repository::discover(repo_path).map_err(err)?;
     let tip = repo
         .revparse_single(ref_name)
@@ -1002,6 +1014,9 @@ pub fn build_branch_commits(repo_path: &Path, ref_name: &str) -> Result<CommitHi
         .map_err(err)?;
     let pushed_set = remote_pushed_oids(&repo);
     let mut revwalk = repo.revwalk().map_err(err)?;
+    if first_parent {
+        revwalk.simplify_first_parent().map_err(err)?;
+    }
     revwalk.push(tip.id()).map_err(err)?;
     revwalk.set_sorting(git2::Sort::TIME | git2::Sort::TOPOLOGICAL).map_err(err)?;
     let mut commits: Vec<CommitRow> = Vec::new();
@@ -1729,6 +1744,8 @@ pub fn read_file_at_commit(
 #[serde(rename_all = "camelCase")]
 pub struct CommitFileEntry {
     pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub previous_path: Option<String>,
     pub name: String,
     pub directory: String,
     /// M | A | D | R
@@ -1803,6 +1820,11 @@ pub fn build_commit_detail(repo_path: &Path, oid: &str) -> Result<CommitDetail> 
         }
         files.push(CommitFileEntry {
             path,
+            previous_path: if status == "R" {
+                delta.old_file().path().map(|path| path.to_string_lossy().into_owned())
+            } else {
+                None
+            },
             name,
             directory,
             status: status.to_string(),
@@ -1839,6 +1861,7 @@ pub fn read_commit_file_diff(
     repo_path: &Path,
     oid: &str,
     path: &str,
+    previous_path: Option<&str>,
 ) -> Result<FileDiffContent> {
     let repo = Repository::discover(repo_path).map_err(err)?;
     let commit_oid = resolve_commit_oid(&repo, oid)?;
@@ -1846,7 +1869,7 @@ pub fn read_commit_file_diff(
     let tree = commit.tree().map_err(err)?;
     let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
 
-    let blob_at = |tree: Option<&git2::Tree>| -> Option<Vec<u8>> {
+    let blob_at = |tree: Option<&git2::Tree>, path: &str| -> Option<Vec<u8>> {
         let tree = tree?;
         let entry = tree.get_path(Path::new(path)).ok()?;
         repo.find_object(entry.id(), Some(ObjectType::Blob))
@@ -1856,8 +1879,8 @@ pub fn read_commit_file_diff(
             .map(|blob| blob.content().to_vec())
     };
 
-    let original = blob_at(parent_tree.as_ref());
-    let modified = blob_at(Some(&tree));
+    let original = blob_at(parent_tree.as_ref(), previous_path.unwrap_or(path));
+    let modified = blob_at(Some(&tree), path);
     let language = language_for(path);
 
     let too_large = original.as_ref().is_some_and(|b| b.len() > MAX_DIFF_BYTES)

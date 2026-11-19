@@ -3,6 +3,7 @@
  * (lib consumers in AiAgentPanel.send) and runs real hook commands through
  * the integrated terminal.
  */
+import { workspaceNav, type WorkspaceNavId } from '../app/navigation';
 import { newId } from './aiProviders';
 import {
   deleteWorktreeFile,
@@ -69,53 +70,11 @@ export interface AgentEntry {
 const AGENTS_KEY = 'pigry:agents';
 
 /** The workspace agent teams — offered in the Add agent form. */
-export const AGENT_TEAMS = [
-  'Explorer',
-  'Commit graph',
-  'Merge branch',
-  'Push Commits',
-  'Stashes Code',
-  'Cherry Pick',
-  'Branches',
-  'Working changes',
-  'Copilot',
-  'Pull requests',
-  'Releases',
-  'Issues',
-  'Actions',
-  'Projects',
-  'Wiki',
-  'Security and quality',
-  'Insights',
-  'Browser',
-] as const;
-
-/** Workspace screen id -> the team agents created there belong to. */
-const SCREEN_TEAM: Record<string, string> = {
-  explorer: 'Explorer',
-  'commit-graph': 'Commit graph',
-  'working-changes': 'Working changes',
-  'merge-branch': 'Merge branch',
-  'rebase-branch': 'Rebase Branch',
-  'push-commits': 'Push Commits',
-  stashes: 'Stashes Code',
-  'cherry-pick': 'Cherry Pick',
-  branches: 'Branches',
-  'ai-agent': 'Copilot',
-  'pull-requests': 'Pull requests',
-  releases: 'Releases',
-  issues: 'Issues',
-  actions: 'Actions',
-  projects: 'Projects',
-  wiki: 'Wiki',
-  security: 'Security and quality',
-  insights: 'Insights',
-};
+export const AGENT_TEAMS = [...workspaceNav.map(({ label }) => label), 'Browser'];
 
 /** Default team for an agent created while `screen` is the active menu. */
 export function teamForScreen(screen: string | null | undefined): string | undefined {
-  if (!screen) return undefined;
-  return SCREEN_TEAM[screen];
+  return workspaceNav.find(({ id }) => id === screen)?.label;
 }
 
 export function normalizeAgents(list: unknown[]): AgentEntry[] {
@@ -330,195 +289,416 @@ interface BuiltinSpec {
   skills?: string[];
 }
 
-/** Tier 1 — one default agent per workspace menu/team. Answers every
- * untagged turn in that menu. */
-const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
-  {
+const GIT_REVIEW_TOOLS = [
+  'git_status', 'read_history', 'read_commit', 'read_diff', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts',
+];
+
+/** Tier 1 defaults for untagged turns in every workspace menu. */
+const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | 'team' | 'tier'>> = {
+  explorer: {
     username: 'explorer',
-    name: 'Explorer',
-    team: 'Explorer',
     role: 'Code explorer',
     description: 'Helps browse files, edit code and understand the workspace.',
-    tier: 'default',
     emoji: '🔍',
-    tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
+    tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'git_status', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
     skills: ['file-navigation'],
   },
-  {
+  'commit-graph': {
     username: 'commit-graph',
-    name: 'Commit graph',
-    team: 'Commit graph',
     role: 'History analyst',
     description: 'Reads the commit graph and explains history and relationships.',
-    tier: 'default',
     emoji: '📈',
-    tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
+    tools: [...GIT_REVIEW_TOOLS, 'read_image', 'web_search', 'playwright'],
     skills: ['history-analysis', 'bug-triage'],
   },
-  {
+  'merge-branch': {
     username: 'merge-branch',
-    name: 'Merge branch',
-    team: 'Merge branch',
     role: 'Merge planner',
     description: 'Plans merges and walks through conflicts and resolution.',
-    tier: 'default',
     emoji: '🌿',
-    tools: ['read_diff', 'read_file', 'list_files', 'read_history', 'search_code', 'stage_changes', 'read_image', 'agent_lookup', 'agent_contacts'],
+    tools: [...GIT_REVIEW_TOOLS, 'preview_merge', 'stage_changes', 'read_image'],
     skills: ['merge-conflict', 'git-commit-style'],
   },
-  {
+  'compare-branch': {
+    username: 'compare-branch',
+    role: 'Branch comparison reviewer',
+    description: 'Explains differences between Base and Compare branch tips, including commits unique to each side, changed files, and Split or Unified diffs.',
+    emoji: '🔎',
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches'],
+    skills: ['branch-comparison', 'code-review'],
+  },
+  'rebase-branch': {
+    username: 'rebase-branch',
+    role: 'Rebase planner',
+    description: 'Reviews the selected rebase base and the pick, squash, and drop plan. Explains which commits will be replayed and helps resolve and stage conflicts before continuing the rebase.',
+    emoji: '🔄',
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches', 'stage_changes'],
+    skills: ['rebase-plan', 'history-analysis'],
+  },
+  'push-commits': {
     username: 'push-commits',
-    name: 'Push Commits',
-    team: 'Push Commits',
     role: 'Push reviewer',
     description: 'Reviews unpushed commits and prepares pushes.',
-    tier: 'default',
     emoji: '🚀',
-    tools: ['stage_changes', 'commit', 'read_diff', 'read_history', 'list_files', 'read_image', 'agent_lookup', 'agent_contacts'],
+    tools: [...GIT_REVIEW_TOOLS, 'preview_sync_commits', 'stage_changes', 'commit', 'read_image'],
     skills: ['push-review', 'git-commit-style'],
   },
-  {
+  'pull-commits': {
+    username: 'pull-commits',
+    role: 'Incoming commit reviewer',
+    description: 'Reviews fetched upstream commits and their per-file diffs. Explains whether a fast-forward pull is possible or the branches have diverged.',
+    emoji: '⬇️',
+    tools: [...GIT_REVIEW_TOOLS, 'preview_sync_commits'],
+    skills: ['pull-review', 'code-review'],
+  },
+  stashes: {
     username: 'stashes-code',
-    name: 'Stashes Code',
-    team: 'Stashes Code',
     role: 'Stash keeper',
     description: 'Manages stashes — view, apply, pop and drop.',
-    tier: 'default',
     emoji: '📦',
-    tools: ['stash', 'list_files', 'read_diff', 'read_file', 'agent_lookup', 'agent_contacts'],
+    tools: [...GIT_REVIEW_TOOLS, 'preview_stash', 'stash'],
     skills: ['stash-management'],
   },
-  {
+  'cherry-pick': {
     username: 'cherry-pick',
-    name: 'Cherry Pick',
-    team: 'Cherry Pick',
     role: 'Commit picker',
-    description: 'Cherry-picks commits between branches.',
-    tier: 'default',
+    description: 'Reviews a selected commit and guides cherry-picking its changes into the staged files on the checked-out branch.',
     emoji: '🍒',
-    tools: ['read_history', 'read_diff', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    tools: GIT_REVIEW_TOOLS,
     skills: ['cherry-pick-flow'],
   },
-  {
+  'duplicate-commit': {
+    username: 'duplicate-commit',
+    role: 'Commit transfer reviewer',
+    description: 'Helps choose a source commit and local destination branch. Reviews file changes and explains why commits already present by SHA or equivalent patch are marked ineligible.',
+    emoji: '📑',
+    tools: [...GIT_REVIEW_TOOLS, 'check_duplicate_commit', 'compare_branches'],
+    skills: ['duplicate-commit', 'code-review'],
+  },
+  'edit-commit': {
+    username: 'edit-commit',
+    role: 'Commit editing assistant',
+    description: 'Helps edit the selected commit on the current local branch. Guides saving files in Explorer, staging changes, and using Save and continue to replay later commits.',
+    emoji: '📝',
+    tools: [...GIT_REVIEW_TOOLS, 'write_file', 'stage_changes'],
+    skills: ['edit-commit', 'working-changes-review'],
+  },
+  branches: {
     username: 'branches',
-    name: 'Branches',
-    team: 'Branches',
     role: 'Branch navigator',
     description: 'Oversees local and remote branches and checkouts.',
-    tier: 'default',
     emoji: '🌳',
-    tools: ['list_files', 'read_history', 'read_file', 'read_image', 'agent_lookup', 'agent_contacts'],
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches', 'read_image'],
     skills: ['branch-ops'],
   },
-  {
+  'working-changes': {
     username: 'working-changes',
-    name: 'Working changes',
-    team: 'Working changes',
     role: 'Staging assistant',
     description: 'Stages, commits and reviews working changes.',
-    tier: 'default',
     emoji: '✏️',
-    tools: ['stage_changes', 'commit', 'read_diff', 'read_file', 'list_files', 'read_image', 'search_code', 'agent_lookup', 'agent_contacts'],
-    skills: ['git-commit-style', 'code-review'],
+    tools: [...GIT_REVIEW_TOOLS, 'stage_changes', 'commit', 'read_image'],
+    skills: ['working-changes-review', 'git-commit-style', 'code-review'],
   },
-  {
+  'ai-agent': {
     username: 'copilot',
-    name: 'Copilot',
-    team: 'Copilot',
     role: 'General assistant',
     description: 'General-purpose assistant for the Copilot chat.',
-    tier: 'default',
     emoji: '✨',
-    skills: ['web-research', 'docs-writing'],
+    skills: ['workspace-tool-use', 'web-research', 'docs-writing'],
   },
-  {
+  'pull-requests': {
     username: 'pull-requests',
-    name: 'Pull requests',
-    team: 'Pull requests',
     role: 'PR assistant',
-    description: 'Drafts and reviews pull requests.',
-    tier: 'default',
+    description: 'Drafts and reviews pull requests using the overview, checks, and per-file and per-commit diffs.',
     emoji: '🔀',
-    tools: ['github_pull_requests', 'github_issues', 'read_diff', 'read_file', 'list_files', 'web_search', 'read_image', 'agent_lookup', 'agent_contacts'],
-    skills: ['pr-writing', 'code-review'],
+    tools: ['github_pull_requests', 'github_issues', 'github_actions', 'read_diff', 'read_file', 'list_files', 'web_search', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['pr-review', 'pr-writing'],
   },
-  {
+  releases: {
     username: 'releases',
-    name: 'Releases',
-    team: 'Releases',
     role: 'Release manager',
     description: 'Prepares releases and release notes.',
-    tier: 'default',
     emoji: '🏷️',
     tools: ['github_releases', 'github_actions', 'read_file', 'list_files', 'read_pdf', 'agent_lookup', 'agent_contacts'],
     skills: ['release-notes'],
   },
-  {
+  issues: {
     username: 'issues',
-    name: 'Issues',
-    team: 'Issues',
     role: 'Issue triage',
     description: 'Triages and drafts issues.',
-    tier: 'default',
     emoji: '🎯',
     tools: ['github_issues', 'github_projects', 'search_code', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
     skills: ['issue-triage'],
   },
-  {
+  actions: {
     username: 'actions',
-    name: 'Actions',
-    team: 'Actions',
     role: 'CI assistant',
     description: 'Watches and explains GitHub Actions runs.',
-    tier: 'default',
     emoji: '⚙️',
     tools: ['github_actions', 'read_file', 'run_command', 'list_files', 'agent_lookup', 'agent_contacts'],
     skills: ['ci-debugging'],
   },
-  {
+  projects: {
     username: 'projects',
-    name: 'Projects',
-    team: 'Projects',
     role: 'Board assistant',
     description: 'Manages project boards.',
-    tier: 'default',
     emoji: '📋',
     tools: ['github_projects', 'github_issues', 'agent_lookup', 'agent_contacts'],
     skills: ['project-board'],
   },
-  {
+  wiki: {
     username: 'wiki',
-    name: 'Wiki',
-    team: 'Wiki',
     role: 'Docs writer',
     description: 'Maintains the repository wiki.',
-    tier: 'default',
     emoji: '📚',
     tools: ['github_wiki', 'read_file', 'write_file', 'list_files', 'agent_lookup', 'agent_contacts'],
-    skills: ['docs-writing'],
+    skills: ['wiki-workflow', 'docs-writing'],
   },
-  {
+  security: {
     username: 'security-and-quality',
-    name: 'Security and quality',
-    team: 'Security and quality',
     role: 'Security analyst',
     description: 'Reviews security and code quality.',
-    tier: 'default',
     emoji: '🛡️',
     tools: ['github_security', 'search_code', 'read_file', 'list_files', 'read_diff', 'agent_lookup', 'agent_contacts'],
     skills: ['security-review'],
   },
-  {
+  insights: {
     username: 'insights',
-    name: 'Insights',
-    team: 'Insights',
     role: 'Analytics',
     description: 'Explains repository insights and stats.',
-    tier: 'default',
     emoji: '📊',
-    tools: ['read_history', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
+    tools: ['repo_insights', 'read_history', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
     skills: ['repo-insights'],
   },
+};
+
+type WorkspaceBaseAgentSpec = Omit<BuiltinSpec, 'team' | 'tier'>;
+
+/** Every workspace menu has at least one specialist available via @mention. */
+const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec, ...WorkspaceBaseAgentSpec[]]> = {
+  explorer: [{
+    username: 'refactorer',
+    name: 'Refactorer',
+    role: 'Refactoring specialist',
+    description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.',
+    emoji: '🛠️',
+    tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['refactor-safety'],
+  }],
+  'ai-agent': [{
+    username: 'workspace-guide',
+    name: 'Workspace Guide',
+    role: 'Repository workflow guide',
+    description: 'Breaks down repository tasks and points to the relevant menu and specialist. Uses the workspace agent directory to find the right person to tag.',
+    emoji: '🧭',
+    tools: ['git_status', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
+    skills: ['workspace-tool-use', 'file-navigation'],
+  }],
+  'working-changes': [{
+    username: 'code-reviewer',
+    name: 'Code Reviewer',
+    role: 'Code reviewer',
+    description: 'Reviews the working changes for bugs, edge cases and style.',
+    emoji: '🧐',
+    tools: ['git_status', 'read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['working-changes-review', 'code-review'],
+  }, {
+    username: 'test-writer',
+    name: 'Test Writer',
+    role: 'Test engineer',
+    description: 'Writes unit tests for the changes and features you stage.',
+    emoji: '🧪',
+    tools: ['read_file', 'write_file', 'list_files', 'search_code', 'run_command', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['run-tests'],
+  }],
+  'push-commits': [{
+    username: 'push-checklist',
+    name: 'Push Checklist',
+    role: 'Pre-push reviewer',
+    description: 'Reviews outgoing commits for unintended files, missing tests and branch or upstream mismatches. Summarizes checks to run before publishing.',
+    emoji: '📤',
+    tools: [...GIT_REVIEW_TOOLS, 'preview_sync_commits'],
+    skills: ['push-review', 'code-review'],
+  }],
+  'pull-commits': [{
+    username: 'incoming-impact',
+    name: 'Incoming Impact',
+    role: 'Upstream change reviewer',
+    description: 'Reviews fetched commit diffs for changes to APIs, configuration and migrations. Identifies what to test after pulling.',
+    emoji: '📥',
+    tools: [...GIT_REVIEW_TOOLS, 'preview_sync_commits'],
+    skills: ['pull-review', 'code-review'],
+  }],
+  'merge-branch': [{
+    username: 'merge-conflict-helper',
+    name: 'Merge Conflict Helper',
+    role: 'Merge conflict reviewer',
+    description: 'Compares the intent of each side of a merge conflict and suggests a combined resolution with targeted tests.',
+    emoji: '🔀',
+    tools: [...GIT_REVIEW_TOOLS, 'preview_merge', 'compare_branches'],
+    skills: ['merge-conflict', 'code-review'],
+  }],
+  'compare-branch': [{
+    username: 'branch-diff-reviewer',
+    name: 'Branch Diff Reviewer',
+    role: 'Branch diff reviewer',
+    description: 'Reviews selected diffs from Base to Compare and groups behavior changes, regressions and tests by file.',
+    emoji: '🔍',
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches'],
+    skills: ['branch-comparison', 'code-review'],
+  }],
+  stashes: [{
+    username: 'stash-inspector',
+    name: 'Stash Inspector',
+    role: 'Stash recovery reviewer',
+    description: 'Helps identify the relevant stash and review its changed files before applying or popping it onto the current branch.',
+    emoji: '📦',
+    tools: [...GIT_REVIEW_TOOLS, 'preview_stash'],
+    skills: ['stash-management', 'code-review'],
+  }],
+  'cherry-pick': [{
+    username: 'pick-reviewer',
+    name: 'Pick Reviewer',
+    role: 'Cherry-pick dependency reviewer',
+    description: 'Checks a selected commit for prerequisites, related commits and likely overlap with the checked-out branch before the changes are staged.',
+    emoji: '🍒',
+    tools: GIT_REVIEW_TOOLS,
+    skills: ['cherry-pick-flow', 'history-analysis'],
+  }],
+  'duplicate-commit': [{
+    username: 'transfer-check',
+    name: 'Transfer Check',
+    role: 'Commit transfer reviewer',
+    description: 'Checks the selected source commit and destination branch for missing dependencies or equivalent changes. Reviews the intended file diff before transfer.',
+    emoji: '📑',
+    tools: [...GIT_REVIEW_TOOLS, 'check_duplicate_commit', 'compare_branches'],
+    skills: ['duplicate-commit', 'history-analysis'],
+  }],
+  'edit-commit': [{
+    username: 'amend-reviewer',
+    name: 'Amend Reviewer',
+    role: 'Commit edit reviewer',
+    description: 'Reviews which files should be staged for the selected commit. Checks the staged diff before Save and continue and identifies later commits that may conflict.',
+    emoji: '✏️',
+    tools: GIT_REVIEW_TOOLS,
+    skills: ['edit-commit', 'working-changes-review', 'code-review'],
+  }],
+  'rebase-branch': [{
+    username: 'rebase-plan-reviewer',
+    name: 'Rebase Plan Reviewer',
+    role: 'Rebase sequence reviewer',
+    description: 'Checks the oldest-first replay order, dependencies between commits and the effect of each pick, squash or drop on the selected branch.',
+    emoji: '🔄',
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches'],
+    skills: ['rebase-plan', 'history-analysis'],
+  }],
+  'pull-requests': [{
+    username: 'pr-reviewer',
+    name: 'PR Reviewer',
+    role: 'Pull request reviewer',
+    description: 'Reviews PR files, commits and checks. Reports actionable findings with file and line references when available and identifies gaps in test coverage.',
+    emoji: '🧐',
+    tools: [...GIT_REVIEW_TOOLS, 'github_pull_requests', 'github_actions'],
+    skills: ['pr-review', 'code-review'],
+  }],
+  'commit-graph': [{
+    username: 'bug-hunter',
+    name: 'Bug Hunter',
+    role: 'Debugger',
+    description: 'Root-causes bugs from history, logs and code reading.',
+    emoji: '🐞',
+    tools: ['read_file', 'search_code', 'read_diff', 'read_history', 'run_command', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['bug-triage'],
+  }, {
+    username: 'git-expert',
+    name: 'Git Expert',
+    role: 'Git specialist',
+    description: 'Git workflows — history, rebase, merge and recovery.',
+    emoji: '🔧',
+    tools: ['read_history', 'read_diff', 'list_files', 'read_file', 'run_command', 'agent_lookup', 'agent_contacts'],
+    skills: ['git-commit-style', 'history-analysis'],
+  }],
+  branches: [{
+    username: 'upstream-checker',
+    name: 'Upstream Checker',
+    role: 'Branch tracking reviewer',
+    description: 'Identifies a local branch and its tracking branch, explains ahead and behind counts and checks the intended branch before checkout.',
+    emoji: '🌿',
+    tools: [...GIT_REVIEW_TOOLS, 'compare_branches'],
+    skills: ['branch-ops', 'history-analysis'],
+  }],
+  releases: [{
+    username: 'release-notes-writer',
+    name: 'Release Notes Writer',
+    role: 'Changelog editor',
+    description: 'Drafts release notes from commits and pull requests. Groups user-visible changes, migration steps and fixes and checks which artifacts are listed.',
+    emoji: '📝',
+    tools: ['github_releases', 'github_pull_requests', 'read_history', 'read_file', 'agent_lookup', 'agent_contacts'],
+    skills: ['release-notes', 'docs-writing'],
+  }],
+  actions: [{
+    username: 'ci-log-reviewer',
+    name: 'CI Log Reviewer',
+    role: 'Workflow diagnostics reviewer',
+    description: 'Locates the first failing job or step in GitHub Actions logs, summarizes the relevant error and suggests the smallest check that would confirm the cause.',
+    emoji: '🧪',
+    tools: ['github_actions', 'read_file', 'search_code', 'agent_lookup', 'agent_contacts'],
+    skills: ['ci-debugging', 'bug-triage'],
+  }],
+  security: [{
+    username: 'security-auditor',
+    name: 'Security Auditor',
+    role: 'Security reviewer',
+    description: 'Security and vulnerability review of code and configs.',
+    emoji: '🛡️',
+    tools: ['read_file', 'search_code', 'list_files', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['security-review'],
+  }],
+  issues: [{
+    username: 'issue-triage-helper',
+    name: 'Issue Triage Helper',
+    role: 'Issue intake reviewer',
+    description: 'Turns reports into concise issues with expected and actual behavior. Finds related issues and suggests labels and missing information to request.',
+    emoji: '🎯',
+    tools: ['github_issues', 'github_pull_requests', 'search_code', 'read_file', 'agent_lookup', 'agent_contacts'],
+    skills: ['issue-triage', 'bug-triage'],
+  }],
+  projects: [{
+    username: 'board-planner',
+    name: 'Board Planner',
+    role: 'Project board planner',
+    description: 'Groups related issues and pull requests, identifies blockers and dependencies, and suggests clear next actions for the project board.',
+    emoji: '📋',
+    tools: ['github_projects', 'github_issues', 'github_pull_requests', 'agent_lookup', 'agent_contacts'],
+    skills: ['project-board', 'issue-triage'],
+  }],
+  wiki: [{
+    username: 'docs-writer',
+    name: 'Docs Writer',
+    role: 'Technical writer',
+    description: 'Writes and updates documentation and the wiki.',
+    emoji: '📝',
+    tools: ['github_wiki', 'read_file', 'write_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['wiki-workflow', 'docs-writing'],
+  }],
+  insights: [{
+    username: 'activity-analyst',
+    name: 'Activity Analyst',
+    role: 'Repository trends analyst',
+    description: 'Summarizes repository activity and contributor trends over the selected period and calls out gaps in the available data.',
+    emoji: '📊',
+    tools: ['repo_insights', 'read_history', 'github_pull_requests', 'github_issues', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['repo-insights', 'history-analysis'],
+  }],
+};
+
+const BUILTIN_AGENT_SPECS: BuiltinSpec[] = [
+  ...workspaceNav.map(({ id, label }): BuiltinSpec => ({
+    ...WORKSPACE_AGENT_SPECS[id],
+    name: label,
+    team: label,
+    tier: 'default',
+  })),
   {
     username: 'browser',
     name: 'Browser',
@@ -530,83 +710,13 @@ const DEFAULT_AGENT_SPECS: BuiltinSpec[] = [
     tools: ['browser_panel', 'browser_e2e', 'browser_screenshot', 'browser_pdf', 'browser_network_requests', 'web_search', 'agent_lookup', 'agent_contacts'],
     skills: ['web-research', 'docs-writing'],
   },
-  {
-    username: 'code-reviewer',
-    name: 'Code Reviewer',
-    team: 'Working changes',
-    role: 'Code reviewer',
-    description: 'Reviews the working changes for bugs, edge cases and style.',
-    tier: 'base',
-    emoji: '🧐',
-    tools: ['read_diff', 'read_file', 'list_files', 'search_code', 'read_image', 'agent_lookup', 'agent_contacts'],
-    skills: ['code-review'],
-  },
-  {
-    username: 'test-writer',
-    name: 'Test Writer',
-    team: 'Working changes',
-    role: 'Test engineer',
-    description: 'Writes unit tests for the changes and features you stage.',
-    tier: 'base',
-    emoji: '🧪',
-    tools: ['read_file', 'write_file', 'list_files', 'search_code', 'run_command', 'read_diff', 'agent_lookup', 'agent_contacts'],
-    skills: ['run-tests'],
-  },
-  {
-    username: 'docs-writer',
-    name: 'Docs Writer',
-    team: 'Wiki',
-    role: 'Technical writer',
-    description: 'Writes and updates documentation and the wiki.',
-    tier: 'base',
-    emoji: '📝',
-    tools: ['read_file', 'write_file', 'list_files', 'agent_lookup', 'agent_contacts'],
-    skills: ['docs-writing'],
-  },
-  {
-    username: 'refactorer',
-    name: 'Refactorer',
-    team: 'Explorer',
-    role: 'Refactoring specialist',
-    description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.',
-    tier: 'base',
-    emoji: '🛠️',
-    tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
-    skills: ['refactor-safety'],
-  },
-  {
-    username: 'bug-hunter',
-    name: 'Bug Hunter',
-    team: 'Commit graph',
-    role: 'Debugger',
-    description: 'Root-causes bugs from history, logs and code reading.',
-    tier: 'base',
-    emoji: '🐞',
-    tools: ['read_file', 'search_code', 'read_diff', 'read_history', 'run_command', 'list_files', 'agent_lookup', 'agent_contacts'],
-    skills: ['bug-triage'],
-  },
-  {
-    username: 'git-expert',
-    name: 'Git Expert',
-    team: 'Commit graph',
-    role: 'Git specialist',
-    description: 'Git workflows — history, rebase, merge and recovery.',
-    tier: 'base',
-    emoji: '🔧',
-    tools: ['read_history', 'read_diff', 'list_files', 'read_file', 'run_command', 'agent_lookup', 'agent_contacts'],
-    skills: ['git-commit-style', 'history-analysis'],
-  },
-  {
-    username: 'security-auditor',
-    name: 'Security Auditor',
-    team: 'Security and quality',
-    role: 'Security reviewer',
-    description: 'Security and vulnerability review of code and configs.',
-    tier: 'base',
-    emoji: '🛡️',
-    tools: ['read_file', 'search_code', 'list_files', 'read_diff', 'agent_lookup', 'agent_contacts'],
-    skills: ['security-review'],
-  },
+  ...workspaceNav.flatMap(({ id, label }) =>
+    WORKSPACE_BASE_AGENT_SPECS[id].map((spec): BuiltinSpec => ({
+      ...spec,
+      team: label,
+      tier: 'base',
+    })),
+  ),
 ];
 
 const AVATAR_GRADIENTS: Array<[string, string]> = [
@@ -655,7 +765,7 @@ function builtinFromSpec(spec: BuiltinSpec): AgentEntry {
 export function builtinAgents(): AgentEntry[] {
   purgeStaleOverridesIfNeeded();
   const overrides = loadAgentOverrides();
-  return DEFAULT_AGENT_SPECS.map((spec) => {
+  return BUILTIN_AGENT_SPECS.map((spec) => {
     const base = builtinFromSpec(spec);
     const patch = overrides[spec.username];
     if (!patch) return base;
@@ -667,7 +777,7 @@ export function builtinAgents(): AgentEntry[] {
 
 const OVERRIDES_KEY = 'pigry:agent-overrides';
 
-/** Bump when DEFAULT_AGENT_SPECS change in a way a stale override would
+/** Bump when built-in specs change in a way a stale override would
  * break (e.g. a tool id was removed from the registry) — overrides saved
  * under an older factory are dropped once, on first load. */
 const FACTORY_VERSION = 3;

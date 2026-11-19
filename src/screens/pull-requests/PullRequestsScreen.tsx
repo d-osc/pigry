@@ -26,6 +26,7 @@ import {
   ghPrCreate,
   ghPrDetail,
   ghPrList,
+  invalidateGhCache,
   ghPrReview,
 } from '../../lib/tauriClient';
 import type { GhPrDetail, GhPullRequest } from '../../types/repository';
@@ -141,12 +142,13 @@ export function PullRequestsScreen() {
     [displayPrs],
   );
 
-  const loadList = async () => {
+  const loadList = async (force = false) => {
     const isCurrent = listGate.begin();
     setRefreshing(true);
     setListLoading(true);
     setListError(null);
     try {
+      if (force) await invalidateGhCache();
       const list = await ghPrList();
       if (!isCurrent()) return;
       setPrs(list);
@@ -352,7 +354,7 @@ export function PullRequestsScreen() {
         <button
           type="button"
           className="outline-button"
-          onClick={() => void loadList()}
+          onClick={() => void loadList(true)}
           disabled={refreshing}
         >
           <RefreshCw size={12} strokeWidth={1.25} className={refreshing ? 'spin' : ''} />
@@ -524,7 +526,7 @@ export function PullRequestsScreen() {
               <span className="pr-empty__hint">
                 Make sure the GitHub CLI (gh) is installed and signed in.
               </span>
-              <button type="button" className="outline-button" onClick={() => void loadList()}>
+              <button type="button" className="outline-button" onClick={() => void loadList(true)}>
                 <RefreshCw size={12} strokeWidth={1.25} />
                 Retry
               </button>
@@ -763,7 +765,8 @@ export function PullRequestsScreen() {
 
                       {detailTab === 'commits' && (
                         <PrCommits
-                          key={JSON.stringify([repository?.localPath, selected])}
+                          key={JSON.stringify([repository?.localPath, selected, detailNonce])}
+                          number={d!.number}
                           commits={d!.commits}
                         />
                       )}

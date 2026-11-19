@@ -44,6 +44,16 @@
   color: var(--text-primary);
 }
 
+.rebase-banner--edit,
+.rebase-banner__actions {
+  flex-wrap: wrap;
+}
+
+.rebase-banner__actions {
+  display: flex;
+  gap: 6px;
+}
+
 .error-boundary {
   margin: 12px 0;
   padding: 14px 16px;

@@ -378,7 +378,10 @@ export function PrDiffDialog({
               </>
             )}
 
-            {active && (
+            {active && !active.original && !active.modified && (
+              <p className="diff-pane__notice">No text diff available for this file.</p>
+            )}
+            {active && (active.original || active.modified) && (
               <div className="pr-diff-dialog__editor">
                 <DiffEditor
                   key={active.path}

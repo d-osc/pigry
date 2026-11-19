@@ -23,6 +23,8 @@ import type {
   WorktreeFileContent,
   GhAccount,
   GhPrDetail,
+  GhPrFile,
+  GhPrCommit,
   GhReleaseDetail,
   GhAuthStatus,
   GhIssue,
@@ -129,9 +131,17 @@ export async function getCommitHistory(
   return invoke('get_commit_history', { includeRemotes });
 }
 
-export async function getBranchCommits(refName: string): Promise<CommitHistory> {
+export async function getBranchCommits(refName: string, firstParent?: boolean): Promise<CommitHistory> {
   if (!isTauri()) return demoHistory;
-  return invoke('get_branch_commits', { refName });
+  return invoke('get_branch_commits', { refName, firstParent });
+}
+
+export async function startCommitEdit(branch: string, headOid: string, oid: string): Promise<AppStatePayload> {
+  return invoke('start_commit_edit', { branch, headOid, oid });
+}
+
+export async function continueCommitEdit(): Promise<AppStatePayload> {
+  return invoke('continue_commit_edit');
 }
 
 export async function getFileTree(): Promise<FileTree> {
@@ -349,6 +359,16 @@ export async function ghReleaseDelete(tag: string): Promise<void> {
   return invoke('gh_release_delete', { tag });
 }
 
+export async function invalidateGhCache(): Promise<void> {
+  if (isTauri()) await invoke('gh_invalidate_cache');
+}
+
+export async function ghPrItemsPage<K extends 'files' | 'commits'>(
+  number: number, kind: K, cursor: string | null,
+): Promise<{ items: { files: GhPrFile; commits: GhPrCommit }[K][]; nextCursor: string | null }> {
+  return invoke('gh_pr_items_page', { number, kind, cursor });
+}
+
 export async function ghPrDetail(number: number): Promise<GhPrDetail | null> {
   if (!isTauri()) return null;
   return invoke('gh_pr_detail', { number });
@@ -361,6 +381,10 @@ export async function ghPrDiff(number: number): Promise<string> {
 
 export async function ghPrCommitDiff(oid: string): Promise<string> {
   return invoke('gh_pr_commit_diff', { oid });
+}
+
+export async function ghPrFilePatches(number: number): Promise<Array<{ path: string; patch: string | null }>> {
+  return invoke('gh_pr_file_patches', { number });
 }
 
 export async function ghPrComment(number: number, body: string): Promise<void> {
@@ -820,6 +844,7 @@ export async function getCommitDetail(oid: string): Promise<CommitDetail> {
 export async function getCommitFileDiff(
   oid: string,
   path: string,
+  previousPath?: string,
 ): Promise<FileDiffContent> {
   if (!isTauri()) {
     // Design fixture: the keyboard.ts shortcut refactor from the Figma file.
@@ -885,7 +910,7 @@ export async function getCommitFileDiff(
       language: 'TypeScript',
     };
   }
-  return invoke('get_commit_file_diff', { oid, path });
+  return invoke('get_commit_file_diff', { oid, path, previousPath });
 }
 
 export async function createBranch(
@@ -1059,6 +1084,21 @@ export async function cherryPickAbort(): Promise<AppStatePayload> {
   return invoke('cherry_pick_abort');
 }
 
+export async function duplicateCommit(
+  sourceBranch: string,
+  destinationBranch: string,
+  oid: string,
+): Promise<AppStatePayload> {
+  return invoke('duplicate_commit', { sourceBranch, destinationBranch, oid });
+}
+
+export async function getDuplicateCommitCandidates(
+  sourceBranch: string,
+  destinationBranch: string,
+): Promise<string[]> {
+  return invoke('duplicate_commit_candidates', { sourceBranch, destinationBranch });
+}
+
 export async function mergeBranch(
   branch: string,
   strategy?: string,
@@ -1080,6 +1120,18 @@ export interface MergePreviewCommitFile {
   status: string;
   additions: number;
   deletions: number;
+}
+
+export interface BranchComparison {
+  baseOid: string;
+  compareOid: string;
+  baseOnly: number;
+  compareOnly: number;
+  files: MergePreviewCommitFile[];
+}
+
+export async function compareBranches(baseRef: string, compareRef: string): Promise<BranchComparison> {
+  return invoke('compare_branches', { baseRef, compareRef });
 }
 
 export interface MergePreviewFileCommit {

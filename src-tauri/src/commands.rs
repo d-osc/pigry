@@ -429,12 +429,17 @@ pub async fn get_commit_history(
 pub async fn get_branch_commits(
     state: State<'_, Mutex<AppState>>,
     refName: String,
+    first_parent: Option<bool>,
 ) -> Result<git_state::CommitHistory, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::build_branch_commits(&repo_path, &refName)
+    if first_parent.unwrap_or(false) {
+        git_state::build_ref_commits(&repo_path, &refName, true)
+    } else {
+        git_state::build_branch_commits(&repo_path, &refName)
+    }
 }
 
 #[tauri::command]
@@ -504,7 +509,7 @@ pub async fn gh_issue_comment(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::issue_comment(&repo_path, number, &body)
+    gh::issue_comment(&repo_path, number, &body).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -517,7 +522,7 @@ pub async fn gh_issue_create(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::issue_create(&repo_path, &title, &body)
+    gh::issue_create(&repo_path, &title, &body).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -529,7 +534,7 @@ pub async fn gh_issue_close(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::issue_close(&repo_path, number)
+    gh::issue_close(&repo_path, number).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -541,7 +546,7 @@ pub async fn gh_issue_reopen(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::issue_reopen(&repo_path, number)
+    gh::issue_reopen(&repo_path, number).inspect(|_| crate::gh_cache::invalidate())
 }
 
 /// Wiki clones live under the OS app-config dir — outside the watched
@@ -719,7 +724,7 @@ pub async fn gh_code_alert_dismiss(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::code_alert_dismiss(&repo_path, number, &reason)
+    gh::code_alert_dismiss(&repo_path, number, &reason).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -776,7 +781,7 @@ pub async fn gh_switch_account(
         let state = state.lock().map_err(|e| e.to_string())?;
         gh_auth_dir(&state)
     };
-    gh::switch_account(&repo_path, &account)
+    gh::switch_account(&repo_path, &account).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -788,7 +793,7 @@ pub async fn gh_login_with_token(
         let state = state.lock().map_err(|e| e.to_string())?;
         gh_auth_dir(&state)
     };
-    gh::login_with_token(&repo_path, &token)
+    gh::login_with_token(&repo_path, &token).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -800,7 +805,7 @@ pub async fn gh_logout(
         let state = state.lock().map_err(|e| e.to_string())?;
         gh_auth_dir(&state)
     };
-    gh::logout(&repo_path, &account)
+    gh::logout(&repo_path, &account).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -858,7 +863,7 @@ pub async fn gh_release_create(
         target.as_deref(),
         draft,
         prerelease,
-    )
+    ).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -872,7 +877,7 @@ pub async fn gh_release_edit(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::release_edit(&repo_path, &tag, &title, &notes)
+    gh::release_edit(&repo_path, &tag, &title, &notes).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -884,7 +889,7 @@ pub async fn gh_release_delete(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::release_delete(&repo_path, &tag)
+    gh::release_delete(&repo_path, &tag).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -896,6 +901,11 @@ pub async fn gh_install(
         gh_auth_dir(&state)
     };
     gh::install(&repo_path)
+}
+
+#[tauri::command]
+pub fn gh_invalidate_cache() {
+    crate::gh_cache::invalidate();
 }
 
 #[tauri::command]
@@ -911,6 +921,22 @@ pub async fn gh_pr_detail(
 }
 
 #[tauri::command]
+pub async fn gh_pr_items_page(
+    state: State<'_, Mutex<AppState>>,
+    number: u32,
+    kind: String,
+    cursor: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || gh::pr_items_page(&repo_path, number, &kind, cursor))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn gh_pr_diff(
     state: State<'_, Mutex<AppState>>,
     number: u64,
@@ -920,6 +946,20 @@ pub async fn gh_pr_diff(
         repo_path_str(&state)?.to_path_buf()
     };
     gh::pr_diff(&repo_path, number)
+}
+
+#[tauri::command]
+pub async fn gh_pr_file_patches(
+    state: State<'_, Mutex<AppState>>,
+    number: u64,
+) -> Result<Vec<gh::GhPrFilePatch>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || gh::pr_file_patches(&repo_path, number))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -944,7 +984,7 @@ pub async fn gh_pr_comment(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::pr_comment(&repo_path, number, &body)
+    gh::pr_comment(&repo_path, number, &body).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -958,7 +998,7 @@ pub async fn gh_pr_review(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::pr_review(&repo_path, number, &event, body.as_deref())
+    gh::pr_review(&repo_path, number, &event, body.as_deref()).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -985,7 +1025,7 @@ pub async fn gh_pr_create(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::pr_create(&repo_path, &title, &body, &head, &base)
+    gh::pr_create(&repo_path, &title, &body, &head, &base).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -997,7 +1037,7 @@ pub async fn gh_pr_close(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::pr_close(&repo_path, number)
+    gh::pr_close(&repo_path, number).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1098,7 +1138,7 @@ pub async fn gh_run_rerun(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::run_rerun(&repo_path, run_id, failed_only)
+    gh::run_rerun(&repo_path, run_id, failed_only).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1110,7 +1150,7 @@ pub async fn gh_run_cancel(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::run_cancel(&repo_path, run_id)
+    gh::run_cancel(&repo_path, run_id).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1123,7 +1163,7 @@ pub async fn gh_workflow_dispatch(
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::workflow_dispatch(&repo_path, &workflow_path, &ref_name)
+    gh::workflow_dispatch(&repo_path, &workflow_path, &ref_name).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1380,7 +1420,7 @@ pub async fn git_push(state: State<'_, Mutex<AppState>>) -> Result<crate::net::N
         let branch = repo_state.current_branch.clone();
         (path, branch, repo_state.upstream.is_some())
     };
-    crate::net::push(&repo_path, &branch, has_upstream)
+    crate::net::push(&repo_path, &branch, has_upstream).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1400,12 +1440,13 @@ pub async fn get_commit_file_diff(
     state: State<'_, Mutex<AppState>>,
     oid: String,
     path: String,
+    previous_path: Option<String>,
 ) -> Result<git_state::FileDiffContent, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    git_state::read_commit_file_diff(&repo_path, &oid, &path)
+    git_state::read_commit_file_diff(&repo_path, &oid, &path, previous_path.as_deref())
 }
 
 #[tauri::command]
@@ -1703,6 +1744,43 @@ pub async fn cherry_pick(
 }
 
 #[tauri::command]
+pub async fn duplicate_commit_candidates(
+    state: State<'_, Mutex<AppState>>,
+    source_branch: String,
+    destination_branch: String,
+) -> Result<Vec<String>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::duplicate_commit_candidates(&repo_path, &source_branch, &destination_branch)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn duplicate_commit(
+    state: State<'_, Mutex<AppState>>,
+    source_branch: String,
+    destination_branch: String,
+    oid: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::duplicate_commit(&repo_path, &source_branch, &destination_branch, &oid)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
 pub async fn merge_branch(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
@@ -1731,6 +1809,21 @@ pub async fn merge_preview(
         repo_path_str(&state)?.to_path_buf()
     };
     ops::merge_preview(&repo_path, &branch)
+}
+
+#[tauri::command]
+pub async fn compare_branches(
+    state: State<'_, Mutex<AppState>>,
+    base_ref: String,
+    compare_ref: String,
+) -> Result<ops::BranchComparison, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || ops::compare_branches(&repo_path, &base_ref, &compare_ref))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -2120,6 +2213,41 @@ pub async fn interactive_rebase(
         repo_path_str(&state)?.to_path_buf()
     };
     ops::interactive_rebase(&repo_path, &base, &steps)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn start_commit_edit(
+    state: State<'_, Mutex<AppState>>,
+    branch: String,
+    head_oid: String,
+    oid: String,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::start_commit_edit(&repo_path, &branch, &head_oid, &oid)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn continue_commit_edit(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || ops::continue_commit_edit(&repo_path))
+        .await
+        .map_err(|error| error.to_string())??;
     let state = state.lock().map_err(|e| e.to_string())?;
     Ok(build_payload(&state))
 }

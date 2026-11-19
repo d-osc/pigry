@@ -1,0 +1,53 @@
+.duplicate-commit__branches,
+.duplicate-commit__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.duplicate-commit__branches label {
+  display: grid;
+  align-items: start;
+  flex: 1 1 180px;
+  max-width: 320px;
+  min-width: 0;
+  gap: 4px;
+}
+
+.duplicate-commit__branches select {
+  width: 100%;
+  min-width: 0;
+}
+
+.duplicate-commit__branches > svg {
+  align-self: flex-end;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+}
+
+.duplicate-commit__actions input {
+  min-width: min(100%, 190px);
+}
+
+.duplicate-commit .cherry__row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.duplicate-commit__present {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  flex-shrink: 0;
+}
+
+.duplicate-commit__eligible {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--green);
+}
+
+.duplicate-commit .cherry__row-meta {
+  flex: 0 1 auto;
+  text-align: right;
+}

@@ -152,7 +152,15 @@ fn verify_gh() -> Result<String, String> {
     Ok(version)
 }
 
-fn run_gh(repo_path: &Path, args: &[&str]) -> Result<String, String> {
+/// Runs a read-only GitHub command, including GraphQL queries.
+pub(crate) fn run_gh(repo_path: &Path, args: &[&str]) -> Result<String, String> {
+    let seconds = if args.first() == Some(&"run") { 5 } else { 20 };
+    crate::gh_cache::read(repo_path, args, std::time::Duration::from_secs(seconds), || {
+        run_uncached_gh(repo_path, args)
+    })
+}
+
+fn run_uncached_gh(repo_path: &Path, args: &[&str]) -> Result<String, String> {
     let output = gh_command()
         .args(args)
         .current_dir(repo_path)
@@ -532,15 +540,8 @@ fn api_user(repo_path: &Path, login: Option<&str>) -> (String, String) {
         Some(name) => format!("users/{}", name),
         None => "user".to_string(),
     };
-    let output = gh_command()
-        .args(["api", &target, "--jq", "{name: .name, avatar_url: .avatar_url}"])
-        .current_dir(repo_path)
-        .output();
-    let Ok(output) = output else { return (String::new(), String::new()) };
-    if !output.status.success() {
-        return (String::new(), String::new());
-    }
-    let text = String::from_utf8_lossy(&output.stdout).to_string();
+    let Ok(text) = run_gh(repo_path, &["api", &target, "--jq", "{name: .name, avatar_url: .avatar_url}"])
+        else { return (String::new(), String::new()) };
     let value: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
     (
         value
@@ -775,6 +776,32 @@ pub struct GhPrFile {
 pub struct GhPrCommit {
     pub oid: String,
     pub message: String,
+    pub body: String,
+    pub author_name: String,
+    pub author_login: String,
+    pub avatar_url: String,
+    pub date: String,
+}
+
+fn parse_pr_commit(commit: &serde_json::Value) -> GhPrCommit {
+    let authors = &commit["authors"];
+    let author = authors.as_array().or_else(|| authors["nodes"].as_array()).and_then(|items| items.first());
+    let user = author.and_then(|author| author.get("user")).filter(|value| value.is_object());
+    let login = user.or(author).map(|item| jstr(item, "login")).unwrap_or_default();
+    let mut avatar_url = user.map(|item| jstr(item, "avatarUrl")).unwrap_or_default();
+    if avatar_url.is_empty() && !login.is_empty() && login.bytes().all(|b| b.is_ascii_alphanumeric() || b"-[]".contains(&b)) {
+        avatar_url = format!("https://github.com/{login}.png?size=40");
+    }
+    let date = commit["authoredDate"].as_str().or_else(|| commit["committedDate"].as_str()).unwrap_or_default();
+    GhPrCommit {
+        oid: jstr(commit, "oid"),
+        message: jstr(commit, "messageHeadline"),
+        body: jstr(commit, "messageBody"),
+        author_name: author.map(|item| jstr(item, "name")).unwrap_or_default(),
+        author_login: login,
+        avatar_url,
+        date: date.to_owned(),
+    }
 }
 
 #[derive(Serialize)]
@@ -924,10 +951,7 @@ pub fn pr_detail(repo_path: &Path, number: u64) -> Result<GhPrDetail, String> {
         .map(|items| {
             items
                 .iter()
-                .map(|commit| GhPrCommit {
-                    oid: jstr(commit, "oid"),
-                    message: jstr(commit, "messageHeadline"),
-                })
+                .map(parse_pr_commit)
                 .collect()
         })
         .unwrap_or_default();
@@ -976,9 +1000,86 @@ pub fn pr_detail(repo_path: &Path, number: u64) -> Result<GhPrDetail, String> {
     })
 }
 
+/// Fetches the next page after the items shown by gh pr view.
+pub fn pr_items_page(
+    repo_path: &Path,
+    number: u32,
+    kind: &str,
+    cursor: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let fields = match kind {
+        "files" => "path additions deletions",
+        "commits" => "commit { oid messageHeadline messageBody authoredDate committedDate authors(first:1) { nodes { name user { login avatarUrl } } } }",
+        _ => return Err("Unknown pull request item type.".into()),
+    };
+    let query = format!(
+        "query($owner:String!, $repo:String!, $number:Int!, $cursor:String) {{
+            repository(owner:$owner,name:$repo) {{ pullRequest(number:$number) {{
+                {kind}(first:100,after:$cursor) {{ nodes {{ {fields} }} pageInfo {{ hasNextPage endCursor }} }}
+            }} }}
+        }}"
+    );
+    let load = |cursor: Option<&str>| -> Result<serde_json::Value, String> {
+        let number_arg = format!("number={number}");
+        let query_arg = format!("query={query}");
+        let cursor_arg = cursor.map(|value| format!("cursor={value}"));
+        let mut args = vec!["api", "graphql", "-F", "owner={owner}", "-F", "repo={repo}", "-F", &number_arg, "-f", &query_arg];
+        if let Some(value) = &cursor_arg {
+            args.extend(["-f", value.as_str()]);
+        }
+        let mut result: serde_json::Value = serde_json::from_str(&run_gh(repo_path, &args)?)
+            .map_err(|error| error.to_string())?;
+        let page = result["data"]["repository"]["pullRequest"][kind].take();
+        if page.is_object() { Ok(page) } else { Err("GitHub did not return the pull request items.".into()) }
+    };
+    let next_cursor = |page: &serde_json::Value| {
+        page["pageInfo"]["hasNextPage"].as_bool().filter(|value| *value)
+            .and_then(|_| page["pageInfo"]["endCursor"].as_str().map(str::to_owned))
+    };
+    // gh pr view supplies the first 100 nodes but omits their cursor.
+    let cursor = match cursor {
+        Some(cursor) => cursor,
+        None => match next_cursor(&load(None)?) {
+            Some(cursor) => cursor,
+            None => return Ok(serde_json::json!({ "items": [], "nextCursor": null })),
+        },
+    };
+    let page = load(Some(&cursor))?;
+    let nodes = page["nodes"].as_array().ok_or("GitHub did not return a list of items.")?;
+    let items = nodes.iter().map(|node| {
+        if kind == "files" {
+            serde_json::json!({
+                "path": jstr(node, "path"),
+                "additions": jnum_i64(node, "additions"),
+                "deletions": jnum_i64(node, "deletions"),
+            })
+        } else {
+            serde_json::json!(parse_pr_commit(&node["commit"]))
+        }
+    }).collect::<Vec<_>>();
+    Ok(serde_json::json!({ "items": items, "nextCursor": next_cursor(&page) }))
+}
+
 /// Unified diff of the pull request.
 pub fn pr_diff(repo_path: &Path, number: u64) -> Result<String, String> {
     run_gh(repo_path, &["pr", "diff", &number.to_string()])
+}
+
+#[derive(Serialize)]
+pub struct GhPrFilePatch {
+    path: String,
+    patch: Option<String>,
+}
+
+pub fn pr_file_patches(repo_path: &Path, number: u64) -> Result<Vec<GhPrFilePatch>, String> {
+    let endpoint = format!("repos/{{owner}}/{{repo}}/pulls/{number}/files?per_page=100");
+    let output = run_gh(repo_path, &["api", "--paginate", "--slurp", &endpoint])?;
+    let pages: Vec<Vec<serde_json::Value>> =
+        serde_json::from_str(&output).map_err(|error| error.to_string())?;
+    Ok(pages.into_iter().flatten().map(|file| GhPrFilePatch {
+        path: jstr(&file, "filename"),
+        patch: file["patch"].as_str().map(str::to_owned),
+    }).collect())
 }
 
 /// Unified diff for a PR commit, including commits absent from the local clone.
@@ -1639,15 +1740,8 @@ pub fn workflow_list(repo_path: &Path) -> Result<Vec<GhWorkflow>, String> {
 /// `gh api` against the current repository — the `:owner`/`:repo` placeholders
 /// resolve from the git remote. Returns the jq-extracted field if numeric.
 fn gh_api_u64(repo_path: &Path, endpoint: &str) -> Option<u64> {
-    let output = gh_command()
-        .args(["api", endpoint, "--jq", ".total_count"])
-        .current_dir(repo_path)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&output.stdout)
+    run_gh(repo_path, &["api", endpoint, "--jq", ".total_count"])
+        .ok()?
         .trim()
         .parse()
         .ok()
@@ -2258,7 +2352,7 @@ pub fn code_alert_dismiss(repo_path: &Path, number: u64, reason: &str) -> Result
     let (owner, name) = repo_slug(repo_path)?;
     let path = format!("/repos/{owner}/{name}/code-scanning/alerts/{number}");
     let reason_field = format!("reason={reason}");
-    run_gh(
+    run_uncached_gh(
         repo_path,
         &[
             "api",

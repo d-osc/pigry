@@ -7,7 +7,7 @@ import { SettingsModal } from './settings/SettingsModal';
 import { RebaseModal } from './rebase/RebaseModal';
 import { ShortcutSheet } from './ShortcutSheet';
 import { ChevronLeft, ChevronsRight, Undo2 } from 'lucide-react';
-import type { NavId } from './navigation';
+import { workspaceNav, type NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
 import { getFileTree, gitCliStatus, readWorktreeFile, reportValidationReady } from '../lib/tauriClient';
@@ -20,11 +20,14 @@ import {
   type RepositoryContextValue,
 } from '../hooks/useRepository';
 const MergeBranchScreen = lazy(() => import('../screens/merge-branch/MergeBranchScreen').then((module) => ({ default: module.MergeBranchScreen })));
+const CompareBranchScreen = lazy(() => import('../screens/compare-branch/CompareBranchScreen').then((module) => ({ default: module.CompareBranchScreen })));
 const RebaseBranchScreen = lazy(() => import('../screens/rebase-branch/RebaseBranchScreen').then((module) => ({ default: module.RebaseBranchScreen })));
 const PushCommitsScreen = lazy(() => import('../screens/push-commits/PushCommitsScreen').then((module) => ({ default: module.PushCommitsScreen })));
 const PullCommitsScreen = lazy(() => import('../screens/pull-commits/PullCommitsScreen').then((module) => ({ default: module.PullCommitsScreen })));
 const StashesScreen = lazy(() => import('../screens/stashes/StashesScreen').then((module) => ({ default: module.StashesScreen })));
 const CherryPickScreen = lazy(() => import('../screens/cherry-pick/CherryPickScreen').then((module) => ({ default: module.CherryPickScreen })));
+const DuplicateCommitScreen = lazy(() => import('../screens/duplicate-commit/DuplicateCommitScreen').then((module) => ({ default: module.DuplicateCommitScreen })));
+const EditCommitScreen = lazy(() => import('../screens/edit-commit/EditCommitScreen').then((module) => ({ default: module.EditCommitScreen })));
 const BranchesScreen = lazy(() => import('../screens/branches/BranchesScreen').then((module) => ({ default: module.BranchesScreen })));
 const WorkingChangesScreen = lazy(() => import('../screens/working-changes/WorkingChangesScreen').then((module) => ({ default: module.WorkingChangesScreen })));
 const AppSettingsScreen = lazy(() => import('../screens/settings/AppSettingsScreen').then((module) => ({ default: module.AppSettingsScreen })));
@@ -50,24 +53,9 @@ const MAX_SIDEBAR_WIDTH = 420;
 /** Workspace screens that show the shared AI Agent rail. Every nav menu has
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
-const AI_RAIL_SCREENS: NavId[] = [
-  'working-changes',
-  'merge-branch',
-  'rebase-branch',
-  'push-commits',
-  'pull-commits',
-  'stashes',
-  'cherry-pick',
-  'branches',
-  'actions',
-  'pull-requests',
-  'releases',
-  'issues',
-  'projects',
-  'wiki',
-  'security',
-  'insights',
-];
+const AI_RAIL_SCREENS = new Set<NavId>(
+  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent'),
+);
 
 function ErrorBanner() {
   const { error } = useRepository();
@@ -105,16 +93,74 @@ function GitMissingBanner() {
   );
 }
 
-function RebaseBanner({ onAbort }: { onAbort: () => void }) {
-  const { repository, busy } = useRepository();
+function RebaseBanner({ screen, hasUnsavedFiles, onNavigate }: {
+  screen: NavId;
+  hasUnsavedFiles: boolean;
+  onNavigate: (screen: NavId) => void;
+}) {
+  const { repository, busy, abortRebase, continueCommitEdit } = useRepository();
   if (!repository?.rebaseInProgress) return null;
+  const edit = repository.commitEdit;
+  if (edit) {
+    const conflicts = repository.files.some(file => file.status === 'C');
+    const unstaged = repository.files.some(file => !file.staged && !file.untracked);
+    const staged = repository.files.some(file => file.staged);
+    return (
+      <div className="rebase-banner rebase-banner--edit" role="region" aria-label="Commit edit in progress">
+        <span role="status">
+          <strong>{edit.editing ? 'Editing' : 'Replaying'} {edit.oid.slice(0, 7)} on {edit.branch}</strong>
+          {' · '}
+          {conflicts ? 'Resolve and stage conflicts to continue.' : 'Save your files in Explorer, then stage the changes to include.'}
+        </span>
+        <div className="rebase-banner__actions">
+          {screen !== 'explorer' && (
+            <button type="button" className="settings__btn settings__btn--small" onClick={() => onNavigate('explorer')} disabled={busy}>
+              Open Explorer
+            </button>
+          )}
+          {screen !== 'working-changes' && (
+            <button
+              type="button"
+              className="settings__btn settings__btn--small"
+              onClick={() => onNavigate('working-changes')}
+              disabled={busy || hasUnsavedFiles}
+            >
+              Working changes
+            </button>
+          )}
+          {screen !== 'explorer' && (
+            <button
+              type="button"
+              className="settings__btn settings__btn--primary settings__btn--small"
+              disabled={busy || conflicts || unstaged || hasUnsavedFiles}
+              onClick={() => void continueCommitEdit()}
+            >
+              {edit.editing && staged ? 'Save and continue' : 'Continue rebase'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="settings__btn settings__btn--small"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm('Abort the edit and restore the original branch? Tracked changes made during the edit will be discarded.')) {
+                void abortRebase();
+              }
+            }}
+          >
+            <Undo2 size={11} /> Abort edit
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rebase-banner" role="alert">
       <span>
         A rebase is in progress on <strong>{repository.currentBranch}</strong> — resolve conflicts
         and continue in a terminal, or abort to restore the branch.
       </span>
-      <button type="button" className="settings__btn settings__btn--small" onClick={onAbort} disabled={busy}>
+      <button type="button" className="settings__btn settings__btn--small" onClick={() => void abortRebase()} disabled={busy}>
         <Undo2 size={11} />
         Abort rebase
       </button>
@@ -131,13 +177,18 @@ function renderScreen(
   openFilePalette: () => void,
   terminalOpen: boolean,
   onToggleTerminal: () => void,
-  onEditorStatus: (status: EditorStatusInfo | null) => void,
+  editorCallbacks: {
+    onEditorStatus: (status: EditorStatusInfo | null) => void;
+    onUnsavedFilesChange: (unsaved: boolean) => void;
+  },
 ) {
   switch (screen) {
     case 'working-changes':
       return <WorkingChangesScreen />;
     case 'merge-branch':
       return <MergeBranchScreen />;
+    case 'compare-branch':
+      return <CompareBranchScreen />;
     case 'rebase-branch':
       return <RebaseBranchScreen />;
     case 'push-commits':
@@ -148,6 +199,10 @@ function renderScreen(
       return <StashesScreen />;
     case 'cherry-pick':
       return <CherryPickScreen />;
+    case 'duplicate-commit':
+      return <DuplicateCommitScreen />;
+    case 'edit-commit':
+      return <EditCommitScreen />;
     case 'branches':
       return <BranchesScreen />;
     case 'commit-graph':
@@ -161,7 +216,7 @@ function renderScreen(
           onOpenFilePalette={openFilePalette}
           terminalOpen={terminalOpen}
           onToggleTerminal={onToggleTerminal}
-          onEditorStatus={onEditorStatus}
+          {...editorCallbacks}
         />
       );
     case 'projects':
@@ -247,6 +302,7 @@ function AppShellInner() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   // Live info of the focused editor — merged into the single status bar.
   const [editorStatus, setEditorStatus] = useState<EditorStatusInfo | null>(null);
+  const [hasUnsavedFiles, setHasUnsavedFiles] = useState(false);
   // Shared AI Agent rail — shown on the workspace screens listed above.
   // One instance, so chats persist while hopping between those screens.
   const [railOpen, setRailOpen] = useState(false);
@@ -559,20 +615,23 @@ function AppShellInner() {
                   </button>
                 )}
                 <main className="app-shell__workspace">
-                  <RebaseBanner onAbort={() => void repository.abortRebase()} />
+                  <RebaseBanner screen={screen} hasUnsavedFiles={hasUnsavedFiles} onNavigate={navigate} />
                   <ErrorBanner />
                   <ErrorBoundary key={`${repository.repository?.localPath}:${repository.repository?.currentBranch}:${screen}`}><Suspense fallback={<div className="screen-loading" role="status">Loading workspace…</div>}>
-                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal, setEditorStatus)}
+                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal, {
+                      onEditorStatus: setEditorStatus,
+                      onUnsavedFilesChange: setHasUnsavedFiles,
+                    })}
                   </Suspense></ErrorBoundary>
                 </main>
-                {AI_RAIL_SCREENS.includes(screen) && railOpen && (
+                {AI_RAIL_SCREENS.has(screen) && railOpen && (
                   <ResizeHandle
                     orientation="v"
                     label="Resize AI panel"
                     onDelta={(dx) => setRailWidth((w) => Math.min(480, Math.max(280, w - dx)))}
                   />
                 )}
-                {AI_RAIL_SCREENS.includes(screen) &&
+                {AI_RAIL_SCREENS.has(screen) &&
                   (railOpen ? (
                     <AiAgentPanel
                       width={railWidth}
