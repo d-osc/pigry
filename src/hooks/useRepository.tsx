@@ -40,6 +40,8 @@ export interface RepositoryContextValue {
   clearNotifications: () => void;
   repository: NonNullable<AppStatePayload['repository']> | null;
   openRepository: (path: string) => Promise<boolean | void>;
+  openSshWorkspace: (id: number, isCurrent: () => boolean) => Promise<boolean>;
+  closeRepository: () => Promise<boolean>;
   pickRepository: () => Promise<boolean | void>;
   refresh: () => Promise<boolean | void>;
   stage: (paths: string[]) => Promise<boolean | void>;
@@ -85,6 +87,7 @@ const RepositoryContext = createContext<RepositoryContextValue | null>(null);
 export function RepositoryProvider({ children }: { children: ReactNode }) {
   const stateGate = useRequestGate();
   const operationInFlight = useRef(false);
+  const queuedWatcherRefresh = useRef(false);
   const [mode] = useState<BackendMode>(() =>
     client.isTauri() ? 'tauri' : 'browser',
   );
@@ -120,20 +123,32 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
     return () => stateGate.invalidate();
   }, [mode, stateGate]);
 
+  const refreshFromWatcher = useCallback(() => {
+    if (operationInFlight.current) {
+      queuedWatcherRefresh.current = true;
+      return;
+    }
+    queuedWatcherRefresh.current = false;
+    const current = stateGate.begin();
+    client.refresh().then((payload) => { if (current()) setState(payload); })
+      .catch((e: unknown) => { if (current()) setError(String(e)); });
+  }, [stateGate]);
+
+  // Apply changes that arrived while a repository operation was running.
+  useEffect(() => {
+    if (!busy && queuedWatcherRefresh.current) refreshFromWatcher();
+  }, [busy, refreshFromWatcher]);
+
   // Auto-refresh when the file watcher detects external changes.
   useEffect(() => {
     if (mode !== 'tauri') return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    listen('repo-changed', () => {
-      if (operationInFlight.current) return;
-      const current = stateGate.begin();
-      client.refresh().then((payload) => { if (current()) setState(payload); })
-        .catch((e: unknown) => { if (current()) setError(String(e)); });
-    }).then((off) => { if (disposed) off(); else unlisten = off; })
+    listen('repo-changed', refreshFromWatcher)
+      .then((off) => { if (disposed) off(); else unlisten = off; })
       .catch((e: unknown) => { if (!disposed) setError(String(e)); });
     return () => { disposed = true; unlisten?.(); };
-  }, [mode, stateGate]);
+  }, [mode, refreshFromWatcher]);
 
   const run = useCallback(
     async <T,>(action: () => Promise<T>, extract: (result: T) => AppStatePayload | null, successMsg?: string) => {
@@ -205,6 +220,15 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       clearNotifications,
       repository: state?.repository ?? null,
       openRepository: (path) => run(() => client.openRepository(path), (p) => p, 'Repository opened'),
+      openSshWorkspace: (id, isCurrent) => run(async () => {
+        try {
+          return await client.openSshWorkspace(id);
+        } catch (error) {
+          if (isCurrent()) throw error;
+          return null;
+        }
+      }, (payload) => payload, 'Server workspace opened'),
+      closeRepository: () => run(() => client.closeRepository(), (payload) => payload),
       pickRepository: async () => {
         if (!client.isTauri()) return;
         await run(() => client.pickRepository(), (p) => p, 'Repository opened');

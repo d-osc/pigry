@@ -104,13 +104,25 @@
   font-size: var(--fs-sm);
 }
 
-.home__ssh-session {
+.home__ssh-form .home__ssh-terminal-only {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home__ssh-session:not([hidden]) {
   display: flex;
   flex-direction: column;
   height: clamp(280px, 52vh, 650px);
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+.home__ssh-setup-message {
+  margin: 8px 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
 }
 
 .home__ssh-session-header {
@@ -121,6 +133,65 @@
   padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm);
+}
+
+.home__ssh-opened-path {
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.home__ssh-terminal:not([hidden]) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.home__ssh-folder-picker {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.home__ssh-folder-picker h3 {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.home__ssh-folder-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.home__ssh-folder-path input {
+  flex: 1;
+  min-width: min(100%, 140px);
+  font-family: var(--font-mono);
+}
+
+.home__ssh-folder-list {
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home__ssh-folder-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .home__actions .primary-button,

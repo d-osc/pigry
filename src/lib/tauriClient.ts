@@ -78,6 +78,14 @@ export async function openRepository(path: string): Promise<AppStatePayload> {
   return invoke('open_repository', { path });
 }
 
+export async function openSshWorkspace(id: number): Promise<AppStatePayload> {
+  return invoke('open_ssh_workspace', { id });
+}
+
+export async function closeRepository(): Promise<AppStatePayload> {
+  return invoke('close_repository');
+}
+
 export async function getLaunchFolder(): Promise<string | null> {
   if (!isTauri()) return null;
   return invoke('get_launch_folder');
@@ -729,8 +737,16 @@ export async function ptyCreate(shellId: string | null, cwd: string): Promise<Pt
   return invoke('pty_create', { shellId, cwd });
 }
 
-export async function ptyCreateSsh(host: string, username: string | null, port: number | null): Promise<PtySessionInfo> {
-  return invoke('pty_create_ssh', { host, username, port });
+export async function ptyCreateSsh(host: string, username: string | null, port: number | null, browseFolders: boolean): Promise<PtySessionInfo> {
+  return invoke('pty_create_ssh', { host, username, port, browseFolders });
+}
+
+export async function ptyStartSshWorkspace(id: number, path: string): Promise<PtySessionInfo> {
+  return invoke('pty_start_ssh_workspace', { id, path });
+}
+
+export async function cancelSshWorkspaceStart(id: number): Promise<void> {
+  return invoke('cancel_ssh_workspace_start', { id });
 }
 
 export async function ptyWrite(id: number, data: string): Promise<void> {

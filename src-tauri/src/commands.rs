@@ -1,10 +1,10 @@
 //! Tauri command handlers — thin wrappers around `git_state` + `config`.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::config::{self, AppConfig};
@@ -18,12 +18,19 @@ use crate::memory_vector;
 use crate::gh_insights;
 use crate::insights;
 use crate::wiki;
+use crate::ssh_workspace::SshWorkspace;
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
 /// repositories) so we keep them synchronous inside async commands.
 pub struct AppState {
     pub config: AppConfig,
     pub repo_path: Option<PathBuf>,
+    pub(crate) ssh_workspace: Option<ActiveSshWorkspace>,
+}
+
+pub(crate) struct ActiveSshWorkspace {
+    id: u32,
+    pub connection: Arc<SshWorkspace>,
 }
 
 #[derive(Serialize)]
@@ -216,6 +223,9 @@ pub struct CommitOutcome {
 }
 
 fn repo_path_str(state: &AppState) -> Result<&Path, String> {
+    if state.ssh_workspace.is_some() {
+        return Err("This feature currently requires a local workspace.".into());
+    }
     state
         .repo_path
         .as_deref()
@@ -259,13 +269,138 @@ fn open_repo_sync(
         .map_err(|e| format!("not a git repository: {}", e.message()))?;
     let root = repo.workdir().ok_or("Open a working repository, not a bare remote")?.to_path_buf();
     let mut state = state.lock().map_err(|e| e.to_string())?;
+    let previous_workspace = state.ssh_workspace.take();
     config::set_active(&mut state.config, &root.to_string_lossy());
     config::save(app, &state.config);
     state.repo_path = Some(root.clone());
     if let Some(holder) = app.try_state::<FileWatcherHolder>() {
-        holder.watcher.lock().map_err(|e| e.to_string())?.watch(&root.to_string_lossy());
+        if let Ok(watcher) = holder.watcher.lock() { watcher.watch(&root.to_string_lossy()); }
     }
-    Ok(build_payload(&state))
+    let payload = build_payload(&state);
+    drop(state);
+    stop_ssh_workspace(previous_workspace);
+    Ok(payload)
+}
+
+#[tauri::command]
+pub async fn open_ssh_workspace(app: tauri::AppHandle, id: u32) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let pending = crate::pty::pending_ssh_workspace(id).ok_or("The SSH session ended before the workspace opened.")?;
+        let (connection, mut payload) = pending.open(|| crate::pty::pending_ssh_workspace(id).is_some())?;
+        let state_holder = app.state::<Mutex<AppState>>();
+        let mut state = state_holder.lock().map_err(|error| error.to_string())?;
+        if crate::pty::pending_ssh_workspace(id).is_none() {
+            return Err("The SSH connection closed before the workspace opened.".into());
+        }
+        complete_ssh_payload(&mut payload, &connection, &state.config.recent);
+        let connection = Arc::new(connection);
+        let previous_workspace = state.ssh_workspace.replace(ActiveSshWorkspace { id, connection: Arc::clone(&connection) });
+        state.repo_path = None;
+        if let Some(holder) = app.try_state::<FileWatcherHolder>() {
+            if let Ok(watcher) = holder.watcher.lock() { watcher.stop(); }
+        }
+        drop(state);
+        stop_ssh_workspace(previous_workspace);
+        watch_ssh_workspace(app, id, Arc::downgrade(&connection));
+        Ok(payload)
+    }).await.map_err(|error| error.to_string())?
+}
+
+fn watch_ssh_workspace(app: tauri::AppHandle, id: u32, connection: std::sync::Weak<SshWorkspace>) {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let Some(connection) = connection.upgrade() else { return; };
+        match connection.changed() {
+            Ok(false) => {}
+            Ok(true) => {
+                let holder = app.state::<Mutex<AppState>>();
+                if holder.lock().is_ok_and(|state| state.ssh_workspace.as_ref().is_some_and(|remote| remote.id == id)) {
+                    let _ = app.emit("repo-changed", ());
+                }
+            }
+            Err(_) => return,
+        }
+    });
+}
+
+#[tauri::command]
+pub async fn cancel_ssh_workspace_start(state: State<'_, Mutex<AppState>>, id: u32) -> Result<(), String> {
+    let state = state.lock().map_err(|error| error.to_string())?;
+    if state.ssh_workspace.as_ref().is_some_and(|remote| remote.id == id) {
+        return Ok(()); // Ownership passed from Home to the workspace.
+    }
+    if crate::pty::pending_ssh_workspace(id).is_some() {
+        crate::pty::pty_kill(id)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn ssh_workspace_exited(app: &tauri::AppHandle, id: u32) {
+    let state = app.state::<Mutex<AppState>>();
+    if let Ok(mut state) = state.lock() {
+        if !state.ssh_workspace.as_ref().is_some_and(|remote| remote.id == id) { return; }
+        let remote = state.ssh_workspace.take();
+        state.repo_path = None;
+        if let Some(holder) = app.try_state::<FileWatcherHolder>() {
+            if let Ok(watcher) = holder.watcher.lock() { watcher.stop(); }
+        }
+        drop(state);
+        drop(remote);
+        let _ = app.emit("repo-changed", ());
+    }
+}
+
+fn complete_ssh_payload(payload: &mut serde_json::Value, connection: &SshWorkspace, recent: &[String]) {
+    if let Some(state) = payload.as_object_mut() {
+        state.insert("activePath".into(), serde_json::json!(connection.uri()));
+        state.insert("recent".into(), serde_json::json!(recent));
+        state.insert("sshWorkspace".into(), serde_json::json!(connection.info()));
+    }
+}
+
+pub(crate) fn route_ssh_workspace(invoke: tauri::ipc::Invoke<tauri::Wry>) -> Option<tauri::ipc::Invoke<tauri::Wry>> {
+    use tauri::ipc::InvokeBody;
+
+    if !crate::remote_protocol::is_workspace_command(invoke.message.command()) {
+        return Some(invoke);
+    }
+    let webview = invoke.message.webview();
+    let state = webview.state::<Mutex<AppState>>();
+    let Ok(state) = state.lock() else { return Some(invoke); };
+    let Some(workspace) = &state.ssh_workspace else { return Some(invoke); };
+    let connection = Arc::clone(&workspace.connection);
+    let recent = state.config.recent.clone();
+    drop(state);
+
+    let InvokeBody::Json(params) = invoke.message.payload() else {
+        invoke.resolver.reject("PIGRY Server requests require JSON.");
+        return None;
+    };
+    let params = params.clone();
+    let method = invoke.message.command().to_owned();
+    tauri::async_runtime::spawn_blocking(move || match connection.call(&method, params) {
+        Ok(mut result) => {
+            if method == "commit" {
+                complete_ssh_payload(&mut result["state"], &connection, &recent);
+            } else if result.get("repository").is_some() {
+                complete_ssh_payload(&mut result, &connection, &recent);
+            }
+            invoke.resolver.resolve(result);
+        }
+        Err(error) => invoke.resolver.reject(error),
+    });
+    None
+}
+
+fn stop_ssh_workspace(previous: Option<ActiveSshWorkspace>) {
+    if let Some(remote) = previous {
+        let _ = crate::pty::pty_kill(remote.id);
+    }
+}
+
+pub(crate) fn stop_active_ssh_workspace(app: &tauri::AppHandle) {
+    let previous = app.state::<Mutex<AppState>>().lock().ok().and_then(|mut state| state.ssh_workspace.take());
+    stop_ssh_workspace(previous);
 }
 
 #[tauri::command]
@@ -312,9 +447,15 @@ pub async fn close_repository(
         holder.watcher.lock().map_err(|e| e.to_string())?.stop();
     }
     state.repo_path = None;
-    state.config.active = None;
-    config::save(&app, &state.config);
-    Ok(build_payload(&state))
+    let previous_workspace = state.ssh_workspace.take();
+    if previous_workspace.is_none() {
+        state.config.active = None;
+        config::save(&app, &state.config);
+    }
+    let payload = build_payload(&state);
+    drop(state);
+    stop_ssh_workspace(previous_workspace);
+    Ok(payload)
 }
 
 #[tauri::command]

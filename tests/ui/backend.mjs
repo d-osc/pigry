@@ -14,12 +14,24 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
   const detail = demoCommitDetail(demoHistory.commits[0].oid);
   await page.addInitScript(({ state, history, tree, content, stats, detail, incoming, branchComparison, branchHistory, duplicateMatches, changedFile }) => {
     let opened = false;
+    let sshConnection = null;
+    let sshPath = null;
+    let workspace = null;
+    let setupId = 271;
     let incomingCommits = [];
     const callbacks = new Map();
+    const eventHandlers = new Map();
     let callbackId = 0;
     const control = { failures: {}, calls: [], settled: [], delay: {}, commitFails: false };
+    control.emit = (event, payload) => {
+      for (const id of eventHandlers.get(event) ?? []) {
+        callbacks.get(id)?.({ event, id, payload });
+      }
+    };
     window.testBackend = control;
-    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: (event, id) => eventHandlers.get(event)?.delete(id),
+    };
     window.__TAURI_INTERNALS__ = {
       metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
       transformCallback: (fn) => { callbacks.set(++callbackId, fn); return callbackId; },
@@ -31,6 +43,12 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
         if (delay) await new Promise(resolve => setTimeout(resolve, delay));
         control.settled.push({ cmd, args });
         if (control.failures[cmd]) throw control.failures[cmd];
+        if (cmd === 'plugin:event|listen') {
+          const handlers = eventHandlers.get(args.event) ?? new Set();
+          handlers.add(args.handler);
+          eventHandlers.set(args.event, handlers);
+          return args.handler;
+        }
         if (cmd.startsWith('plugin:')) return 1;
         switch (cmd) {
           case 'ai_chat': return {
@@ -39,12 +57,32 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
             body: JSON.stringify({ choices: [{ message: { content: 'Test model reply' } }] }),
             error: '',
           };
-          case 'pty_create_ssh': return { id: 271, label: `SSH · ${args.host}`, shellName: 'ssh' };
-          case 'pty_kill': return null;
-          case 'get_app_state': return opened ? state : { ...state, repository: null, activePath: null };
+          case 'pty_create_ssh':
+            sshConnection = args;
+            return { id: 271, label: 'SSH · ' + args.host, shellName: 'ssh' };
+          case 'pty_start_ssh_workspace':
+            sshPath = args.path;
+            return { id: ++setupId, label: 'PIGRY Server · ' + sshConnection.host, shellName: 'pigry-server' };
+          case 'open_ssh_workspace': {
+            const authority = `${sshConnection.username ? sshConnection.username + '@' : ''}${sshConnection.host}${sshConnection.port ? ':' + sshConnection.port : ''}`;
+            workspace = {
+              ...state,
+              activePath: `ssh://${authority}${sshPath}`,
+              repository: { ...state.repository, localPath: sshPath },
+              sshWorkspace: { host: sshConnection.host, port: sshConnection.port, path: sshPath },
+            };
+            return workspace;
+          }
+          case 'cancel_ssh_workspace_start': return null;
+          case 'close_repository':
+            workspace = null;
+            opened = false;
+            return { ...state, repository: null, activePath: null };
+          case 'pty_kill': case 'pty_resize': case 'pty_write': return null;
+          case 'get_app_state': return workspace ?? (opened ? state : { ...state, repository: null, activePath: null });
           case 'get_launch_folder': return null;
-          case 'open_repository': case 'pick_repository': opened = true; return state;
-          case 'refresh': return structuredClone(state);
+          case 'open_repository': case 'pick_repository': workspace = null; opened = true; return state;
+          case 'refresh': return structuredClone(workspace ?? state);
           case 'stage_paths':
             state.repository.files = state.repository.files.map(file => ({ ...file, id: `${file.path}:staged`, staged: true }));
             return structuredClone(state);

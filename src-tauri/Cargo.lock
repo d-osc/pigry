@@ -3234,11 +3234,12 @@ dependencies = [
 
 [[package]]
 name = "pigry"
-version = "0.3.10"
+version = "0.3.11"
 dependencies = [
  "base64 0.22.1",
  "chromiumoxide",
  "futures",
+ "getrandom 0.4.3",
  "git2",
  "notify",
  "openssl",
@@ -3247,6 +3248,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

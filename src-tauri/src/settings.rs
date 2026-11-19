@@ -113,4 +113,5 @@ pub fn set_remote_url(repo_path: &Path, name: &str, url: &str) -> Result<(), Str
 }
 
 #[cfg(test)]
+#[path = "settings/tests.rs"]
 mod tests;

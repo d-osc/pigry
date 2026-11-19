@@ -1,6 +1,6 @@
 [package]
 name = "pigry"
-version = "0.3.10"
+version = "0.3.11"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -50,6 +50,8 @@ futures = "0.3"
 chromiumoxide = { version = "0.7", features = ["tokio-runtime"] }
 pdf-extract = "0.7"
 portable-pty = "0.8"
+getrandom = "0.4"
+sha2 = "0.10"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

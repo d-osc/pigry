@@ -24,6 +24,7 @@ import {
 import { PtyTerminalView } from './PtyTerminalView';
 import { ResizeHandle } from './ResizeHandle';
 import { useTerminalTheme } from '../hooks/useTerminalTheme';
+import { useRepository } from '../hooks/useRepository';
 import './TerminalPanel.css';
 
 interface TerminalPanelProps {
@@ -109,6 +110,7 @@ function adjustWeights(node: PaneNode, splitId: number, index: 0 | 1, delta: num
 // ---------------------------------------------------------------------------
 
 export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
+  const sshWorkspace = !!useRepository().state?.sshWorkspace;
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [groups, setGroups] = useState<TerminalGroup[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
@@ -152,7 +154,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   const createTerminal = useCallback(
     async (shellId?: string | null) => {
       if (!isTauri()) return;
-      const chosen = shellId ?? lastShellId ?? shells[0]?.id ?? null;
+      const chosen = sshWorkspace ? null : shellId ?? lastShellId ?? shells[0]?.id ?? null;
       try {
         const info = await ptyCreate(chosen, cwd);
         if (chosen) {
@@ -162,7 +164,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         const tab: TerminalTab = {
           id: info.id,
           label: info.label,
-          shellId: chosen ?? shells[0]?.id ?? 'powershell',
+          shellId: sshWorkspace ? 'ssh' : chosen ?? shells[0]?.id ?? 'powershell',
           shellName: info.shellName,
           exited: false,
         };
@@ -175,23 +177,23 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         console.warn('terminal spawn failed', error);
       }
     },
-    [cwd, lastShellId, shells],
+    [cwd, lastShellId, shells, sshWorkspace],
   );
 
   // Load the shell profile list once.
   useEffect(() => {
-    void ptyListShells().then(setShells).catch(() => undefined);
-  }, []);
+    if (!sshWorkspace) void ptyListShells().then(setShells).catch(() => undefined);
+  }, [sshWorkspace]);
 
   // The first terminal spawns as soon as the panel exists (VS Code keeps at
   // least one shell around while the panel is open).
   const bootedRef = useRef(false);
   useEffect(() => {
-    if (bootedRef.current || !isTauri() || !cwd) return;
+    if (bootedRef.current || !isTauri() || !cwd || (sshWorkspace && !visible)) return;
     bootedRef.current = true;
     void createTerminal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cwd]);
+  }, [cwd, sshWorkspace, visible]);
 
   const groupOf = (terminalId: number, list: TerminalGroup[]) =>
     list.find((group) => collectLeafIds(group.tree).includes(terminalId)) ?? null;
@@ -468,13 +470,13 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
               type="button"
               className="terminal-panel__action terminal-panel__new"
               aria-label="New terminal"
-              title={`New terminal (${shells.find((shell) => shell.id === lastShellId)?.name ?? shells[0]?.name ?? 'default shell'})`}
+              title={sshWorkspace ? 'New SSH terminal' : `New terminal (${shells.find((shell) => shell.id === lastShellId)?.name ?? shells[0]?.name ?? 'default shell'})`}
               disabled={demo}
               onClick={() => void createTerminal()}
             >
               <Plus size={13} strokeWidth={1.5} />
             </button>
-            <button
+            {!sshWorkspace && <button
               type="button"
               className="terminal-panel__action terminal-panel__newdrop"
               aria-label="Select shell profile"
@@ -483,8 +485,8 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
               onClick={() => setProfileMenuOpen((open) => !open)}
             >
               <ChevronDown size={11} strokeWidth={1.75} />
-            </button>
-            {profileMenuOpen && (
+            </button>}
+            {!sshWorkspace && profileMenuOpen && (
               <div className="terminal-panel__profiles" role="menu">
                 <div className="terminal-panel__profiles-title">Terminal profiles</div>
                 {shells.map((shell) => (

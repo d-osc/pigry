@@ -105,4 +105,5 @@ pub fn push_delete_remote(repo_path: &PathBuf, remote: &str, name: &str) -> Resu
 }
 
 #[cfg(test)]
+#[path = "net/tests.rs"]
 mod tests;

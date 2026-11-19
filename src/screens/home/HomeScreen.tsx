@@ -23,11 +23,14 @@ import './HomeScreen.css';
  */
 export function HomeScreen({
   onBackToWorkspace,
+  workspaceType,
+  onWorkspaceTypeChange,
 }: {
   /** Present only while a repository is already open behind this screen. */
   onBackToWorkspace?: () => void;
+  workspaceType: 'local' | 'server';
+  onWorkspaceTypeChange: (type: 'local' | 'server') => void;
 }) {
-  const [workspaceType, setWorkspaceType] = useState<'local' | 'server'>('local');
   const [cloneUrl, setCloneUrl] = useState('');
   const [cloneTarget, setCloneTarget] = useState('');
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -76,15 +79,15 @@ export function HomeScreen({
           <div className="home__card-heading">
             <span className="home__eyebrow">LET’S GET TO WORK</span>
             <h2>Open your workspace</h2>
-            <p>{workspaceType === 'local' ? 'Open or clone a local repository.' : 'Open an SSH terminal on a server.'}</p>
+            <p>{workspaceType === 'local' ? 'Open or clone a local repository.' : 'Connect over SSH and choose a server folder.'}</p>
           </div>
           <div className="segmented home__workspace-types" role="group" aria-label="Workspace type">
             <button type="button" className={`segmented__item${workspaceType === 'local' ? ' is-active' : ''}`}
-              aria-pressed={workspaceType === 'local'} onClick={() => setWorkspaceType('local')}>
+              aria-pressed={workspaceType === 'local'} onClick={() => onWorkspaceTypeChange('local')}>
               <FolderOpen size={14} /> Local
             </button>
             <button type="button" className={`segmented__item${workspaceType === 'server' ? ' is-active' : ''}`}
-              aria-pressed={workspaceType === 'server'} onClick={() => setWorkspaceType('server')}>
+              aria-pressed={workspaceType === 'server'} onClick={() => onWorkspaceTypeChange('server')}>
               <Server size={14} /> Server
             </button>
           </div>

@@ -182,6 +182,7 @@ export interface AppStatePayload {
   activePath: string | null;
   recent: string[];
   repository: RepositoryState | null;
+  sshWorkspace?: { host: string; path: string; port: number | null };
 }
 
 export interface CommitOutcome {

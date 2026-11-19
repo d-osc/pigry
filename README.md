@@ -13,6 +13,22 @@ npm run tauri dev
 
 `npm run dev` opens the browser demo. Local Git operations and GitHub data require the desktop runtime. Both light and dark themes are available in Settings → Appearance.
 
+## Remote SSH workspace
+
+Choose **Server** on Home or run **Connect to SSH host…** from the command palette. Enter an SSH config alias or `user@host`, connect, and select a Git folder on the server. Pigry uses OpenSSH settings and authentication. Password authentication can prompt again when the workspace or a remote terminal starts.
+
+Pigry installs the bundled Rust server under `~/.local/share/pigry/server` (or `$XDG_DATA_HOME/pigry/server`) and reuses the installed binary while its checksum matches. The server runs inside the SSH connection as the signed-in user. It supports Linux x86-64 and ARM64 with Git and standard shell tools. Editing files, viewing diffs and running Git use the server's working tree and Git configuration. Windows filesystem drivers are unnecessary.
+
+Release builds bundle both Linux architectures. To enable Remote SSH in a development build, build the companion on Linux or WSL. Run this from the repository root with the musl toolchain installed. Use the target server's architecture.
+
+```sh
+arch="$(uname -m)"
+target="$arch-unknown-linux-musl"
+rustup target add "$target"
+CC=musl-gcc RUSTFLAGS="-C linker=musl-gcc" cargo build --locked --release --manifest-path src-remote/Cargo.toml --target "$target"
+cp "src-remote/target/$target/release/pigry-server" "src-tauri/remote-bin/pigry-server-linux-$arch"
+```
+
 ## Open a folder from Windows Explorer
 
 The Windows EXE (NSIS) and MSI installers register **Open with Pigry** for folders and the background of an open folder. On Windows 11 this classic shell entry is available under **Show more options**. Uninstalling removes the entries.

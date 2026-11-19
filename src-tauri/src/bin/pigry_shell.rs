@@ -8,5 +8,15 @@
 //! like cmd.exe or powershell.exe and the REPL's stdio simply works.
 
 fn main() {
+    {
+        let mut args = std::env::args_os().skip(1);
+        if args.next().is_some_and(|arg| arg == "--ssh-workspace") {
+            if let Err(error) = pigry_lib::ssh_relay::run(args) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
     std::process::exit(pigry_lib::pty_bash::pty_bash_main());
 }

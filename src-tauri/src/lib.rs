@@ -57,6 +57,9 @@ pub mod settings;
 mod gh_insights;
 mod insights;
 mod pty;
+mod remote_protocol;
+pub mod ssh_relay;
+mod ssh_workspace;
 pub mod pty_bash;
 mod watcher;
 mod wiki;
@@ -64,12 +67,21 @@ mod launch;
 
 use std::sync::Mutex;
 
-use tauri::Manager;
+use tauri::{Manager, Wry, ipc::Invoke};
 
 use commands::AppState;
 use watcher::FileWatcher;
 
 static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+fn with_ssh_routing(
+    local: impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static,
+) -> impl Fn(Invoke<Wry>) -> bool + Send + Sync + 'static {
+    move |invoke| match commands::route_ssh_workspace(invoke) {
+        Some(invoke) => local(invoke),
+        None => true,
+    }
+}
 
 #[tauri::command]
 fn validation_ready() {
@@ -108,7 +120,7 @@ pub fn run() {
             // but is not auto-opened at startup.
             let repo_path = None;
             let _ = &config.active;
-            app.manage(Mutex::new(AppState { config, repo_path }));
+            app.manage(Mutex::new(AppState { config, repo_path, ssh_workspace: None }));
             app.manage(launch::LaunchFolder(launch::parse_folder(std::env::args_os().skip(1))));
 
             // File watcher: watches the active repo and emits `repo-changed`.
@@ -136,11 +148,13 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(with_ssh_routing(tauri::generate_handler![
             commands::get_app_state,
             launch::get_launch_folder,
             validation_ready,
             commands::open_repository,
+            commands::open_ssh_workspace,
+            commands::cancel_ssh_workspace_start,
             commands::pick_repository,
             commands::close_repository,
             commands::refresh,
@@ -159,6 +173,7 @@ pub fn run() {
             pty::agent_shell_run,
             pty::pty_create,
             pty::pty_create_ssh,
+            pty::pty_start_ssh_workspace,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,
@@ -312,14 +327,15 @@ pub fn run() {
             commands::browser,
             commands::read_pdf_text,
             commands::browser_page,
-        ])
+        ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     // Terminal PTY children must not outlive the app — the exit event is
     // the one place the run loop lets us clean them up.
-    app.run(|_, event| {
+    app.run(|app, event| {
         if let tauri::RunEvent::Exit = event {
+            commands::stop_active_ssh_workspace(app);
             pty::kill_all();
         }
     });

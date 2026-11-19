@@ -66,6 +66,7 @@ function ErrorBanner() {
 /** Shown when the external git CLI isn't installed/on PATH — local
  * operations shell out to the user's own git, so nothing works without it. */
 function GitMissingBanner() {
+  const { state } = useRepository();
   const [missing, setMissing] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +81,7 @@ function GitMissingBanner() {
       cancelled = true;
     };
   }, []);
-  if (!missing) return null;
+  if (!missing || state?.sshWorkspace) return null;
   return (
     <div className="git-missing-banner" role="alert">
       <strong>Git not found.</strong> PIGRY needs the external Git CLI for commits, branches and
@@ -326,6 +327,7 @@ function AppShellInner() {
   // The landing screen (repository picker) shows at startup; "Go home"
   // re-opens it mid-session while the workspace stays loaded behind it.
   const [showHome, setShowHome] = useState(() => mode === 'tauri');
+  const [homeWorkspace, setHomeWorkspace] = useState<'local' | 'server'>('local');
   // Active path at the moment Home was entered; opening a *different*
   // repository from the picker dismisses it (cancel and watcher refreshes
   // keep the same path, so they don't).
@@ -413,6 +415,11 @@ function AppShellInner() {
         setPaletteSeed('');
         setPaletteMode('quick');
         setPaletteOpen((open) => !open);
+      } else if (key === 'p' && event.shiftKey) {
+        event.preventDefault();
+        setPaletteSeed('');
+        setPaletteMode('commands');
+        setPaletteOpen(true);
       } else if (key === 'p') {
         event.preventDefault();
         setPaletteSeed('');
@@ -527,6 +534,11 @@ function AppShellInner() {
         repository: repository as RepositoryContextValue,
         openSettings: () => setSettingsOpen(true),
         openShortcuts: () => setShortcutsOpen(true),
+        connectSsh: () => {
+          setHomeWorkspace('server');
+          setShowHome(true);
+          if (screen === 'app-settings') setScreen('explorer');
+        },
       }),
     [navigate, screen, repository],
   );
@@ -543,7 +555,10 @@ function AppShellInner() {
   return (
     <div className="app-shell">
       <TitleBar
-        onGoHome={() => setShowHome(true)}
+        onGoHome={() => {
+          setHomeWorkspace('local');
+          setShowHome(true);
+        }}
         onOpenSettings={(section) => {
           setSettingsSection(section ?? null);
           setScreen('app-settings');
@@ -573,6 +588,8 @@ function AppShellInner() {
         <>
           {(showHome || !repository.repository) && (
             <HomeScreen
+              workspaceType={homeWorkspace}
+              onWorkspaceTypeChange={setHomeWorkspace}
               onBackToWorkspace={
                 repository.repository ? () => setShowHome(false) : undefined
               }
@@ -665,7 +682,16 @@ function AppShellInner() {
                     </button>
                   ))}
               </div>
-              <StatusBar editorStatus={editorStatus} terminalOpen={terminalOpen} onToggleTerminal={toggleTerminal} />
+              <StatusBar editorStatus={editorStatus} terminalOpen={terminalOpen} onToggleTerminal={toggleTerminal}
+                onDisconnectSsh={() => {
+                  if (hasUnsavedFiles) {
+                    repository.notify('Save or close unsaved files before disconnecting.', 'error');
+                    return;
+                  }
+                  void repository.closeRepository().then((closed) => {
+                    if (closed) setShowHome(true);
+                  });
+                }} />
             </>
           )}
         </>

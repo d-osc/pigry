@@ -12,6 +12,7 @@ import {
   Keyboard,
   Network,
   RefreshCw,
+  Server,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -38,10 +39,11 @@ interface CommandDeps {
   repository: RepositoryContextValue;
   openSettings: () => void;
   openShortcuts: () => void;
+  connectSsh: () => void;
 }
 
 /** Builds the palette command list from current app state. */
-export function buildCommands({ navigate, activeScreen, repository, openSettings, openShortcuts }: CommandDeps): Command[] {
+export function buildCommands({ navigate, activeScreen, repository, openSettings, openShortcuts, connectSsh }: CommandDeps): Command[] {
   const { repository: repo, refresh, stage, unstage, stash, fetchRemote, pullRemote, pushRemote, pickRepository } =
     repository;
 
@@ -63,6 +65,14 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
       icon: FolderOpen,
       enabled: true,
       run: () => void pickRepository(),
+    },
+    {
+      id: 'repo:connect-ssh',
+      title: 'Connect to SSH host…',
+      section: 'Repository',
+      icon: Server,
+      enabled: repository.mode === 'tauri',
+      run: connectSsh,
     },
     {
       id: 'repo:refresh',

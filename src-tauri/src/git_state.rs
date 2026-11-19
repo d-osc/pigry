@@ -11,6 +11,7 @@ use git2::{
 use serde::Serialize;
 
 #[cfg(test)]
+#[path = "git_state/tests.rs"]
 mod tests;
 
 const MAX_DIFF_BYTES: usize = 1_000_000;

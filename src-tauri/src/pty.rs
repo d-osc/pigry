@@ -8,14 +8,16 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
-use std::sync::Mutex;
 use tauri::{Emitter, State};
+#[cfg(not(debug_assertions))]
+use tauri::Manager;
 
-use crate::commands::AppState;
+use crate::commands::{self, AppState};
+use crate::ssh_workspace::{PendingWorkspace, SshEndpoint, shell_quote};
 use crate::CommandNoWindow;
 
 /// One live terminal session: the ConPTY master, its input writer and the
@@ -24,6 +26,12 @@ struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn Child + Send + Sync>,
+    attachment: Option<SessionAttachment>,
+}
+
+enum SessionAttachment {
+    FolderPicker(SshEndpoint),
+    Workspace(Arc<PendingWorkspace>),
 }
 
 /// id → session registry (browser.rs keeps webview bounds the same way).
@@ -261,9 +269,19 @@ pub fn pty_list_shells() -> Vec<ShellProfile> {
 #[tauri::command]
 pub fn pty_create(
     app: tauri::AppHandle,
+    state: State<'_, std::sync::Mutex<AppState>>,
     shell_id: Option<String>,
     cwd: String,
 ) -> Result<PtySessionInfo, String> {
+    let remote = state.lock().map_err(|error| error.to_string())?.ssh_workspace.as_ref()
+        .map(|workspace| Arc::clone(&workspace.connection));
+    if let Some(remote) = remote {
+        let script = format!("cd -P {} && exec \"${{SHELL:-/bin/sh}}\" -i", shell_quote(&remote.remote_path));
+        let command = format!("sh -c {}", shell_quote(&script));
+        let mut cmd = remote.endpoint.command(Some(&command));
+        cmd.cwd(resolve_cwd(""));
+        return spawn_pty(app, cmd, format!("SSH · {}", remote.endpoint.host), None);
+    }
     let shells = detect_shells();
     let profile = shell_id
         .as_deref()
@@ -277,7 +295,7 @@ pub fn pty_create(
         cmd.arg(arg);
     }
     cmd.cwd(resolve_cwd(&cwd));
-    spawn_pty(app, cmd, profile.name)
+    spawn_pty(app, cmd, profile.name, None)
 }
 
 #[tauri::command]
@@ -286,6 +304,7 @@ pub async fn pty_create_ssh(
     host: String,
     username: Option<String>,
     port: Option<u16>,
+    browse_folders: Option<bool>,
 ) -> Result<PtySessionInfo, String> {
     if host.is_empty() || host.starts_with('-') || !host.bytes().all(|byte| {
         byte.is_ascii_alphanumeric() || b".-_:".contains(&byte)
@@ -295,33 +314,65 @@ pub async fn pty_create_ssh(
     if port == Some(0) {
         return Err("SSH port must be between 1 and 65535.".into());
     }
-    let mut cmd = CommandBuilder::new("ssh");
-    if let Some(username) = username {
+    if let Some(username) = &username {
         if username.is_empty() || !username.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || b".-_@".contains(&byte)
         }) {
             return Err("Enter a valid SSH username.".into());
         }
-        cmd.arg("-l");
-        cmd.arg(username);
     }
-    if let Some(port) = port {
-        cmd.arg("-p");
-        cmd.arg(port.to_string());
-    }
-    cmd.arg("--");
-    cmd.arg(&host);
+    let endpoint = SshEndpoint { host, username, port };
+    let browse_folders = browse_folders.unwrap_or(false);
+    let remote_command = browse_folders.then(|| {
+        let script = include_str!("ssh_folders.sh").replace("\r\n", "\n");
+        format!("sh -c {}", shell_quote(&script))
+    });
+    let mut cmd = endpoint.command(remote_command.as_deref());
     cmd.cwd(resolve_cwd(""));
-    cmd.env("TERM", "xterm-256color");
-    tauri::async_runtime::spawn_blocking(move || spawn_pty(app, cmd, format!("SSH · {host}")))
+    let label = format!("SSH · {}", endpoint.host);
+    let attachment = browse_folders.then_some(SessionAttachment::FolderPicker(endpoint));
+    tauri::async_runtime::spawn_blocking(move || spawn_pty(app, cmd, label, attachment))
         .await
         .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn pty_start_ssh_workspace(app: tauri::AppHandle, id: u32, path: String) -> Result<PtySessionInfo, String> {
+    let endpoint = {
+        let sessions = PTYS.lock().map_err(|error| error.to_string())?;
+        match sessions.get(&id).and_then(|session| session.attachment.as_ref()) {
+            Some(SessionAttachment::FolderPicker(endpoint)) => endpoint.clone(),
+            _ => return Err("SSH folder session has ended. Reconnect and try again.".into()),
+        }
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(any(not(windows), debug_assertions))]
+        let console_host = std::env::current_exe().map_err(|error| error.to_string())?;
+        #[cfg(all(windows, not(debug_assertions)))]
+        let console_host = pigry_shell_path().ok_or("The Pigry console helper is missing.")?;
+        #[cfg(debug_assertions)]
+        let assets = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("remote-bin");
+        #[cfg(not(debug_assertions))]
+        let assets = app.path().resource_dir().map_err(|error| error.to_string())?.join("pigry-server");
+        let (pending, cmd) = PendingWorkspace::start(endpoint, path, console_host, assets)?;
+        let label = format!("PIGRY Server · {}", pending.endpoint.host);
+        spawn_pty(app, cmd, label, Some(SessionAttachment::Workspace(Arc::new(pending))))
+    }).await.map_err(|error| error.to_string())?
+}
+
+pub(crate) fn pending_ssh_workspace(id: u32) -> Option<Arc<PendingWorkspace>> {
+    let sessions = PTYS.lock().ok()?;
+    match sessions.get(&id)?.attachment.as_ref() {
+        Some(SessionAttachment::Workspace(pending)) => Some(Arc::clone(pending)),
+        _ => None,
+    }
 }
 
 fn spawn_pty(
     app: tauri::AppHandle,
     mut cmd: CommandBuilder,
     label: String,
+    attachment: Option<SessionAttachment>,
 ) -> Result<PtySessionInfo, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -358,6 +409,7 @@ fn spawn_pty(
             master: pair.master,
             writer,
             child,
+            attachment,
         },
     );
 
@@ -368,24 +420,20 @@ fn spawn_pty(
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
         let Ok(mut map) = PTYS.lock() else { return };
-        match map.get_mut(&id) {
-            Some(session) => match session.child.try_wait() {
-                Ok(Some(status)) => {
-                    let code = Some(status.exit_code());
-                    map.remove(&id); // drops the master → ConPTY closes → reader EOFs
-                    let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code });
-                    return;
-                }
-                Ok(None) => continue,
-                Err(_) => {
-                    map.remove(&id);
-                    let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code: None });
-                    return;
-                }
-            },
-            // Killed/closed from the frontend — it owns the announcement.
-            None => return,
+        let Some(session) = map.get_mut(&id) else { return };
+        let code = match session.child.try_wait() {
+            Ok(None) => continue,
+            Ok(Some(status)) => Some(status.exit_code()),
+            Err(_) => None,
+        };
+        let closed = map.remove(&id);
+        drop(map);
+        if matches!(closed.as_ref().and_then(|session| session.attachment.as_ref()), Some(SessionAttachment::Workspace(_))) {
+            commands::ssh_workspace_exited(&app_exit, id);
         }
+        drop(closed); // drops the master → ConPTY closes → reader EOFs
+        let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code });
+        return;
     });
 
     // Output pump: read the master and forward chunks to the webview until
@@ -453,8 +501,8 @@ pub fn pty_resize(id: u32, cols: u16, rows: u16) -> Result<(), String> {
 
 #[tauri::command]
 pub fn pty_kill(id: u32) -> Result<(), String> {
-    let mut map = PTYS.lock().map_err(|e| e.to_string())?;
-    if let Some(mut session) = map.remove(&id) {
+    let session = PTYS.lock().map_err(|e| e.to_string())?.remove(&id);
+    if let Some(mut session) = session {
         kill_child_tree(&mut session.child);
     }
     Ok(())
@@ -464,7 +512,9 @@ pub fn pty_kill(id: u32) -> Result<(), String> {
 /// outlive the app (the first RunEvent handling in the app).
 pub fn kill_all() {
     let Ok(mut map) = PTYS.lock() else { return };
-    for (_, mut session) in map.drain() {
+    let sessions = std::mem::take(&mut *map);
+    drop(map);
+    for (_, mut session) in sessions {
         kill_child_tree(&mut session.child);
     }
 }

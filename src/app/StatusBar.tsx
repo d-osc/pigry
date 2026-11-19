@@ -6,6 +6,7 @@ import {
   CircleCheck,
   CircleX,
   CloudDownload,
+  Unplug,
   SquareTerminal,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
@@ -24,12 +25,14 @@ export function StatusBar({
   editorStatus,
   terminalOpen,
   onToggleTerminal,
+  onDisconnectSsh,
 }: {
   editorStatus?: EditorStatusInfo | null;
   terminalOpen?: boolean;
   onToggleTerminal?: () => void;
+  onDisconnectSsh?: () => void;
 } = {}) {
-  const { repository, refresh, busy, fetchRemote, pullRemote, pushRemote, notifications, clearNotifications } =
+  const { repository, state, refresh, busy, fetchRemote, pullRemote, pushRemote, notifications, clearNotifications } =
     useRepository();
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
@@ -53,6 +56,8 @@ export function StatusBar({
   const upstream = repository.upstream;
   const synced = upstream === null || (upstream.ahead === 0 && upstream.behind === 0);
   const hasRemote = repository.remotes.length > 0;
+  const ssh = state?.sshWorkspace;
+  const displayPath = (ssh && state?.activePath) || repository.localPath;
 
   return (
     <footer className="status-bar">
@@ -63,16 +68,22 @@ export function StatusBar({
             {synced ? 'Up to date' : `↑${upstream.ahead} ↓${upstream.behind}`}
           </span>
         ) : (
-          <span>Local repository</span>
+          <span>{ssh ? 'SSH workspace' : 'Local repository'}</span>
         )}
         <span className="status-bar__branch" title={repository.currentBranch}>
           {repository.currentBranch ?? 'main'}
           {editorStatus?.dirty ? ' ✱' : ''}
         </span>
       </div>
-      <span className="status-bar__path">{repository.localPath}</span>
+      <span className="status-bar__path" title={displayPath}>{displayPath}</span>
+      {ssh && (
+        <button type="button" className="status-bar__net-button" title="Disconnect SSH workspace"
+          aria-label="Disconnect SSH workspace" disabled={busy} onClick={onDisconnectSsh}>
+          <Unplug size={12} />
+        </button>
+      )}
       <div className="status-bar__right">
-        {repository.files.length > 0 ? (
+        {repository.files.length > 0 || ssh ? (
           <button
             type="button"
             className="status-bar__summary"
@@ -80,9 +91,13 @@ export function StatusBar({
             disabled={busy}
             title="Click to rescan"
           >
-            {repository.files.length} files changed
-            <span className="status-bar__sep">·</span>
-            {staged} staged / {unstaged} unstaged
+            {repository.files.length === 0 ? 'Working tree clean' : (
+              <>
+                {repository.files.length} files changed
+                <span className="status-bar__sep">·</span>
+                {staged} staged / {unstaged} unstaged
+              </>
+            )}
           </button>
         ) : (
           <span>Working tree clean</span>

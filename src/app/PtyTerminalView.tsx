@@ -79,9 +79,11 @@ interface PtyTerminalViewProps {
   /** OSC title from the shell — becomes the tab label, like VS Code. */
   onTitle: (id: number, title: string) => void;
   onExited: (id: number, code: number | null) => void;
+  inputEnabled?: boolean;
+  oscHandler?: { identifier: number; handle: (data: string) => boolean };
 }
 
-export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExited }: PtyTerminalViewProps) {
+export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExited, inputEnabled = true, oscHandler }: PtyTerminalViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -134,6 +136,8 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
 
     term.open(container);
 
+    const osc = oscHandler && term.parser.registerOscHandler(oscHandler.identifier, oscHandler.handle);
+
     // PTY plumbing: input downstream, output upstream (via the shared router).
     chunkWriters.set(id, (data) => term.write(data));
     exitHandlers.set(id, (code) => {
@@ -184,6 +188,7 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
       observer.disconnect();
       chunkWriters.set(id, null);
       exitHandlers.set(id, null);
+      osc?.dispose();
       term.dispose();
       termRef.current = null;
     };
@@ -194,6 +199,10 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
   useEffect(() => {
     if (termRef.current) termRef.current.options.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.disableStdin = !inputEnabled;
+  }, [inputEnabled]);
 
   // Follow pane focus changes.
   useEffect(() => {

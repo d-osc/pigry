@@ -1,0 +1,15 @@
+[package]
+name = "pigry-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.22"
+git2 = { version = "0.20", default-features = false }
+notify = "7"
+pdf-extract = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+strip = true

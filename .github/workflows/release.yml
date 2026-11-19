@@ -11,7 +11,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  pigry-server:
+    strategy:
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            arch: x86_64
+          - platform: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch }}-unknown-linux-musl
+      - name: Build the Linux server
+        env:
+          TARGET: ${{ matrix.arch }}-unknown-linux-musl
+          ARCH: ${{ matrix.arch }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          CC=musl-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+            CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+            cargo build --locked --release --manifest-path src-remote/Cargo.toml --target "$TARGET"
+          mkdir -p src-tauri/remote-bin
+          cp "src-remote/target/$TARGET/release/pigry-server" "src-tauri/remote-bin/pigry-server-linux-$ARCH"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pigry-server-linux-${{ matrix.arch }}
+          path: src-tauri/remote-bin/pigry-server-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
   build:
+    needs: pigry-server
     permissions:
       contents: write
     strategy:
@@ -40,6 +73,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pigry-server-linux-*
+          path: src-tauri/remote-bin
+          merge-multiple: true
 
       - name: Install Node.js
         uses: actions/setup-node@v4
