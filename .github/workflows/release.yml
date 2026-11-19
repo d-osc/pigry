@@ -32,11 +32,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-          CC=musl-gcc CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
-            CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+          host="$(rustc -vV | sed -n 's/^host: //p')"
+          linker="$(rustc --print sysroot)/lib/rustlib/$host/bin/rust-lld"
+          CC=musl-gcc RUSTFLAGS="-C linker=$linker -C linker-flavor=ld.lld -C target-feature=+crt-static" \
             cargo build --locked --release --manifest-path src-remote/Cargo.toml --target "$TARGET"
+          server="src-remote/target/$TARGET/release/pigry-server"
+          headers="$(readelf --program-headers --wide "$server")"
+          if grep -qw INTERP <<< "$headers"; then
+            echo "PIGRY Server must run without an external dynamic loader."
+            exit 1
+          fi
+          test "$("$server" </dev/null)" = "PIGRY_SERVER 1"
           mkdir -p src-tauri/remote-bin
-          cp "src-remote/target/$TARGET/release/pigry-server" "src-tauri/remote-bin/pigry-server-linux-$ARCH"
+          cp "$server" "src-tauri/remote-bin/pigry-server-linux-$ARCH"
       - uses: actions/upload-artifact@v4
         with:
           name: pigry-server-linux-${{ matrix.arch }}

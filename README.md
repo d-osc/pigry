@@ -25,7 +25,10 @@ Release builds bundle both Linux architectures. To enable Remote SSH in a develo
 arch="$(uname -m)"
 target="$arch-unknown-linux-musl"
 rustup target add "$target"
-CC=musl-gcc RUSTFLAGS="-C linker=musl-gcc" cargo build --locked --release --manifest-path src-remote/Cargo.toml --target "$target"
+host="$(rustc -vV | sed -n 's/^host: //p')"
+linker="$(rustc --print sysroot)/lib/rustlib/$host/bin/rust-lld"
+CC=musl-gcc RUSTFLAGS="-C linker=$linker -C linker-flavor=ld.lld -C target-feature=+crt-static" \
+  cargo build --locked --release --manifest-path src-remote/Cargo.toml --target "$target"
 cp "src-remote/target/$target/release/pigry-server" "src-tauri/remote-bin/pigry-server-linux-$arch"
 ```
 
