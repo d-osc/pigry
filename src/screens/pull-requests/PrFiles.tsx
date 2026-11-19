@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { DiffEditor } from '../../editor/ThemedEditors';
 import { useRequestGate } from '../../hooks/useRequestGate';
 import { parseUnifiedByFile, type PrDiffFile } from '../../lib/ghData';
 import { ghPrDiff } from '../../lib/tauriClient';
 import type { GhPrDetail } from '../../types/repository';
 import { PrDiffDialog } from './PrDiffDialog';
+import { PrInlineDiff } from './PrInlineDiff';
 
 export function PrFiles({ detail }: { detail: GhPrDetail }) {
   const request = useRequestGate();
@@ -83,23 +83,7 @@ export function PrFiles({ detail }: { detail: GhPrDetail }) {
                     <button type="button" className="pr-section__link" onClick={() => void loadDiff()}>Try again</button>
                   </div>
                 )}
-                {diff && (diff.original || diff.modified) ? (
-                  <DiffEditor
-                    height={280}
-                    original={diff.original}
-                    modified={diff.modified}
-                    language={diff.language}
-                    options={{
-                      readOnly: true,
-                      renderSideBySide: false,
-                      ignoreTrimWhitespace: false,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                    }}
-                  />
-                ) : diffs && (
-                  <p className="pr-section__muted">No text diff available for this file.</p>
-                )}
+                {diffs && <PrInlineDiff diff={diff} />}
               </div>
             )}
           </div>

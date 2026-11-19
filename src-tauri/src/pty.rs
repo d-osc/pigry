@@ -272,6 +272,57 @@ pub fn pty_create(
         .ok_or_else(|| "no shell available".to_string())?
         .clone();
 
+    let mut cmd = CommandBuilder::new(&profile.exe);
+    for arg in &profile.args {
+        cmd.arg(arg);
+    }
+    cmd.cwd(resolve_cwd(&cwd));
+    spawn_pty(app, cmd, profile.name)
+}
+
+#[tauri::command]
+pub async fn pty_create_ssh(
+    app: tauri::AppHandle,
+    host: String,
+    username: Option<String>,
+    port: Option<u16>,
+) -> Result<PtySessionInfo, String> {
+    if host.is_empty() || host.starts_with('-') || !host.bytes().all(|byte| {
+        byte.is_ascii_alphanumeric() || b".-_:".contains(&byte)
+    }) {
+        return Err("Enter a hostname, SSH config alias, or IP address.".into());
+    }
+    if port == Some(0) {
+        return Err("SSH port must be between 1 and 65535.".into());
+    }
+    let mut cmd = CommandBuilder::new("ssh");
+    if let Some(username) = username {
+        if username.is_empty() || !username.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || b".-_@".contains(&byte)
+        }) {
+            return Err("Enter a valid SSH username.".into());
+        }
+        cmd.arg("-l");
+        cmd.arg(username);
+    }
+    if let Some(port) = port {
+        cmd.arg("-p");
+        cmd.arg(port.to_string());
+    }
+    cmd.arg("--");
+    cmd.arg(&host);
+    cmd.cwd(resolve_cwd(""));
+    cmd.env("TERM", "xterm-256color");
+    tauri::async_runtime::spawn_blocking(move || spawn_pty(app, cmd, format!("SSH · {host}")))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn spawn_pty(
+    app: tauri::AppHandle,
+    mut cmd: CommandBuilder,
+    label: String,
+) -> Result<PtySessionInfo, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
         .openpty(PtySize {
@@ -282,19 +333,10 @@ pub fn pty_create(
         })
         .map_err(|e| format!("openpty failed: {e}"))?;
 
-    let mut cmd = CommandBuilder::new(&profile.exe);
-    for arg in &profile.args {
-        cmd.arg(arg);
-    }
-    cmd.cwd(resolve_cwd(&cwd));
     // ConPTY needs the default console env; just tag the session for shells
     // that want to know they are hosted.
     cmd.env("TERM_PROGRAM", "pigry");
 
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("spawn {} failed: {e}", profile.exe))?;
     let writer = pair
         .master
         .take_writer()
@@ -303,6 +345,10 @@ pub fn pty_create(
         .master
         .try_clone_reader()
         .map_err(|e| format!("clone reader failed: {e}"))?;
+    let child = pair
+        .slave
+        .spawn_command(cmd)
+        .map_err(|e| format!("Could not start {label}: {e}"))?;
     drop(pair.slave); // eof for the slave side; the master keeps the session
 
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
@@ -374,8 +420,8 @@ pub fn pty_create(
 
     Ok(PtySessionInfo {
         id,
-        label: profile.name.clone(),
-        shell_name: profile.name,
+        label: label.clone(),
+        shell_name: label,
     })
 }
 

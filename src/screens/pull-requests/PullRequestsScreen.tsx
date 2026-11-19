@@ -32,6 +32,7 @@ import type { GhPrDetail, GhPullRequest } from '../../types/repository';
 import { colorOf, initialsOf, relativeTime, reviewDisplay } from '../../lib/ghData';
 import { PrCommits } from './PrCommits';
 import { PrFiles } from './PrFiles';
+import { PrSummary } from './PrSummary';
 import { useRepository } from '../../hooks/useRepository';
 import './PullRequestsScreen.css';
 
@@ -740,15 +741,7 @@ export function PullRequestsScreen() {
                       {detailTab === 'overview' && (
                         <section className="pr-section">
                           <h3>Summary</h3>
-                          {d!.body.split('\n').map((line, index) =>
-                            line.trim().startsWith('- ') ? (
-                              <ul key={index}>
-                                <li>{line.trim().slice(2)}</li>
-                              </ul>
-                            ) : line.trim() ? (
-                              <p key={index}>{line}</p>
-                            ) : null,
-                          )}
+                          <PrSummary body={d!.body} url={d!.url} />
                           {d!.labels.length > 0 && (
                             <div className="pr-labels">
                               {d!.labels.map((label) => (

@@ -76,6 +76,53 @@
   gap: 8px;
 }
 
+.home__workspace-types {
+  align-self: flex-start;
+}
+
+.home__workspace-types .segmented__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home__card--server:has(.home__ssh-session) {
+  width: min(960px, calc(100vw - 48px));
+}
+
+.home__ssh-form:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.home__ssh-form label {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+.home__ssh-session {
+  display: flex;
+  flex-direction: column;
+  height: clamp(280px, 52vh, 650px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.home__ssh-session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+
 .home__actions .primary-button,
 .home__actions .outline-button {
   justify-content: center;

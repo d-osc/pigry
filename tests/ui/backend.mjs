@@ -29,6 +29,8 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
         if (control.failures[cmd]) throw control.failures[cmd];
         if (cmd.startsWith('plugin:')) return 1;
         switch (cmd) {
+          case 'pty_create_ssh': return { id: 271, label: `SSH · ${args.host}`, shellName: 'ssh' };
+          case 'pty_kill': return null;
           case 'get_app_state': return opened ? state : { ...state, repository: null, activePath: null };
           case 'get_launch_folder': return null;
           case 'open_repository': case 'pick_repository': opened = true; return state;
@@ -51,7 +53,18 @@ export async function installBackend(page, { entries, incoming = [] } = {}) {
           case 'gh_auth_status': return { loggedIn: true, account: 'validation' };
           case 'gh_account_list': return [];
           case 'gh_pr_list': return [{ number: 42, title: 'Private repository pull request', state: 'OPEN', draft: false, branch: 'feature', baseRef: 'main', author: 'validation', updatedAt: '2026-11-15T00:00:00Z', url: '', review: 'APPROVED', checksTotal: 1, checksOk: 1, comments: 0, labels: [] }];
-          case 'gh_pr_detail': return { number: args.number, title: 'Private repository pull request', body: `Reviewable private PR body ${args.number}`, state: 'OPEN', draft: false, author: 'validation', baseRef: 'main', headRef: 'feature', updatedAt: '2026-11-15T00:00:00Z', url: '', reviewDecision: 'APPROVED', mergeable: 'MERGEABLE', labels: [], reviews: [], comments: [], files: [{ path: 'feature.txt', additions: 1, deletions: 1 }, { path: 'notes.txt', additions: 1, deletions: 0 }], commits: [{ oid: '1234567890123456789012345678901234567890', message: 'Update feature files' }], checks: [] };
+          case 'gh_pr_detail': return { number: args.number, title: 'Private repository pull request', body: [
+            `Reviewable private PR body ${args.number}`,
+            '',
+            '**Bumps** [example/action](https://github.com/example/action).',
+            '',
+            '<details>',
+            '<summary>Release notes</summary>',
+            '<ul><li>Update <code>action</code>.</li></ul>',
+            '</details>',
+            '',
+            '[Unsafe link](javascript:alert%281%29)',
+          ].join('\n'), state: 'OPEN', draft: false, author: 'validation', baseRef: 'main', headRef: 'feature', updatedAt: '2026-11-15T00:00:00Z', url: '', reviewDecision: 'APPROVED', mergeable: 'MERGEABLE', labels: [], reviews: [], comments: [], files: [{ path: 'feature.txt', additions: 1, deletions: 1 }, { path: 'notes.txt', additions: 1, deletions: 0 }], commits: [{ oid: '1234567890123456789012345678901234567890', message: 'Update feature files' }], checks: [] };
           case 'gh_pr_diff':
           case 'gh_pr_commit_diff': return [
             'diff --git a/feature.txt b/feature.txt',

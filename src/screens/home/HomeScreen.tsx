@@ -9,9 +9,11 @@ import {
   ArrowUpRight,
   GitCommitHorizontal,
   Sparkles,
+  Server,
 } from 'lucide-react';
 import { PigryMark } from '../../app/PigryMark';
 import { useRepository } from '../../hooks/useRepository';
+import { SshWorkspace } from './SshWorkspace';
 import './HomeScreen.css';
 
 /**
@@ -25,6 +27,7 @@ export function HomeScreen({
   /** Present only while a repository is already open behind this screen. */
   onBackToWorkspace?: () => void;
 }) {
+  const [workspaceType, setWorkspaceType] = useState<'local' | 'server'>('local');
   const [cloneUrl, setCloneUrl] = useState('');
   const [cloneTarget, setCloneTarget] = useState('');
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -69,130 +72,146 @@ export function HomeScreen({
           )}
         </header>
 
-        <div className="home__card">
+        <div className={`home__card${workspaceType === 'server' ? ' home__card--server' : ''}`}>
           <div className="home__card-heading">
             <span className="home__eyebrow">LET’S GET TO WORK</span>
             <h2>Open your workspace</h2>
-            <p>Pick a local project or bring one from a remote.</p>
+            <p>{workspaceType === 'local' ? 'Open or clone a local repository.' : 'Open an SSH terminal on a server.'}</p>
           </div>
-          <div className="home__actions">
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => void pickRepository()}
-              disabled={busy}
-            >
-              <FolderOpen size={13} strokeWidth={1.5} />
-              Open repository <ArrowUpRight size={15} />
+          <div className="segmented home__workspace-types" role="group" aria-label="Workspace type">
+            <button type="button" className={`segmented__item${workspaceType === 'local' ? ' is-active' : ''}`}
+              aria-pressed={workspaceType === 'local'} onClick={() => setWorkspaceType('local')}>
+              <FolderOpen size={14} /> Local
             </button>
-            <button
-              type="button"
-              className="outline-button"
-              aria-expanded={cloneOpen}
-              onClick={() => setCloneOpen((open) => !open)}
-              disabled={busy}
-            >
-              <Download size={12} strokeWidth={1.5} />
-              Clone repository
+            <button type="button" className={`segmented__item${workspaceType === 'server' ? ' is-active' : ''}`}
+              aria-pressed={workspaceType === 'server'} onClick={() => setWorkspaceType('server')}>
+              <Server size={14} /> Server
             </button>
           </div>
+          {workspaceType === 'server' ? (
+            <SshWorkspace />
+          ) : (
+            <>
+              <div className="home__actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void pickRepository()}
+                  disabled={busy}
+                >
+                  <FolderOpen size={13} strokeWidth={1.5} />
+                  Open repository <ArrowUpRight size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="outline-button"
+                  aria-expanded={cloneOpen}
+                  onClick={() => setCloneOpen((open) => !open)}
+                  disabled={busy}
+                >
+                  <Download size={12} strokeWidth={1.5} />
+                  Clone repository
+                </button>
+              </div>
 
-          {cloneOpen && (
-            <div className="home__clone">
-              <input
-                className="home__clone-input"
-                aria-label="Repository URL"
-                placeholder="Repository URL…"
-                value={cloneUrl}
-                onChange={(event) => setCloneUrl(event.target.value)}
-                spellCheck={false}
-              />
-              <input
-                className="home__clone-input"
-                aria-label="Target directory"
-                placeholder="Target directory…"
-                value={cloneTarget}
-                onChange={(event) => setCloneTarget(event.target.value)}
-                spellCheck={false}
-              />
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => {
-                  if (cloneUrl && cloneTarget) {
-                    void cloneRepo(cloneUrl, cloneTarget);
-                  }
-                }}
-                disabled={busy || !cloneUrl || !cloneTarget}
-              >
-                <Download size={12} strokeWidth={1.5} />
-                Clone
-              </button>
-              <p className="home__clone-hint">
-                The cloned repository opens automatically when finished.
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <p className="home__error" role="alert">
-              {error}{' '}
-              <button type="button" onClick={() => void refresh()}>
-                Retry
-              </button>
-            </p>
-          )}
-
-          <div className="home__recent">
-            <p className="home__recent-heading">
-              <History size={11} strokeWidth={1.5} />
-              Recent repositories
-            </p>
-            {recent.length === 0 ? (
-              <p className="home__recent-empty">
-                No repositories yet — open a folder above to get started.
-              </p>
-            ) : (
-              recent.map((path, index) => {
-                const isOpen = path === activePath;
-                const chip = isOpen
-                  ? 'Open now'
-                  : index === 0 && !activePath
-                    ? 'Last opened'
-                    : null;
-                return (
+              {cloneOpen && (
+                <div className="home__clone">
+                  <input
+                    className="home__clone-input"
+                    aria-label="Repository URL"
+                    placeholder="Repository URL…"
+                    value={cloneUrl}
+                    onChange={(event) => setCloneUrl(event.target.value)}
+                    spellCheck={false}
+                  />
+                  <input
+                    className="home__clone-input"
+                    aria-label="Target directory"
+                    placeholder="Target directory…"
+                    value={cloneTarget}
+                    onChange={(event) => setCloneTarget(event.target.value)}
+                    spellCheck={false}
+                  />
                   <button
-                    key={path}
                     type="button"
-                    className="home__recent-item"
+                    className="primary-button"
                     onClick={() => {
-                      // The repository already open behind this screen —
-                      // the row simply returns to it.
-                      if (isOpen && onBackToWorkspace) {
-                        onBackToWorkspace();
-                        return;
+                      if (cloneUrl && cloneTarget) {
+                        void cloneRepo(cloneUrl, cloneTarget);
                       }
-                      void openRepository(path);
                     }}
-                    disabled={busy}
-                    title={path}
+                    disabled={busy || !cloneUrl || !cloneTarget}
                   >
-                    <span className="home__recent-icon">
-                      <GitBranch size={13} strokeWidth={1.25} />
-                    </span>
-                    <span className="home__recent-text">
-                      <span className="home__recent-name">
-                        {repoName(path)}
-                        {chip && <em className="home__recent-chip">{chip}</em>}
-                      </span>
-                      <span className="home__recent-path">{path}</span>
-                    </span>
-                    <ChevronRight size={13} strokeWidth={1.25} className="home__recent-go" />
+                    <Download size={12} strokeWidth={1.5} />
+                    Clone
                   </button>
-                );
-              })
-            )}
-          </div>
+                  <p className="home__clone-hint">
+                    The cloned repository opens automatically when finished.
+                  </p>
+                </div>
+              )}
+
+              {error && (
+                <p className="home__error" role="alert">
+                  {error}{' '}
+                  <button type="button" onClick={() => void refresh()}>
+                    Retry
+                  </button>
+                </p>
+              )}
+
+              <div className="home__recent">
+                <p className="home__recent-heading">
+                  <History size={11} strokeWidth={1.5} />
+                  Recent repositories
+                </p>
+                {recent.length === 0 ? (
+                  <p className="home__recent-empty">
+                    No repositories yet — open a folder above to get started.
+                  </p>
+                ) : (
+                  recent.map((path, index) => {
+                    const isOpen = path === activePath;
+                    const chip = isOpen
+                      ? 'Open now'
+                      : index === 0 && !activePath
+                        ? 'Last opened'
+                        : null;
+                    return (
+                      <button
+                        key={path}
+                        type="button"
+                        className="home__recent-item"
+                        onClick={() => {
+                          // The repository already open behind this screen —
+                          // the row simply returns to it.
+                          if (isOpen && onBackToWorkspace) {
+                            onBackToWorkspace();
+                            return;
+                          }
+                          void openRepository(path);
+                        }}
+                        disabled={busy}
+                        title={path}
+                      >
+                        <span className="home__recent-icon">
+                          <GitBranch size={13} strokeWidth={1.25} />
+                        </span>
+                        <span className="home__recent-text">
+                          <span className="home__recent-name">
+                            {repoName(path)}
+                            {chip && <em className="home__recent-chip">{chip}</em>}
+                          </span>
+                          <span className="home__recent-path">{path}</span>
+                        </span>
+                        <ChevronRight size={13} strokeWidth={1.25} className="home__recent-go" />
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

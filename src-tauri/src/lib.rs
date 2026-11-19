@@ -157,6 +157,7 @@ pub fn run() {
             pty::pty_list_shells,
             pty::agent_shell_run,
             pty::pty_create,
+            pty::pty_create_ssh,
             pty::pty_write,
             pty::pty_resize,
             pty::pty_kill,

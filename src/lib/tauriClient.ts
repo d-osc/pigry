@@ -705,6 +705,10 @@ export async function ptyCreate(shellId: string | null, cwd: string): Promise<Pt
   return invoke('pty_create', { shellId, cwd });
 }
 
+export async function ptyCreateSsh(host: string, username: string | null, port: number | null): Promise<PtySessionInfo> {
+  return invoke('pty_create_ssh', { host, username, port });
+}
+
 export async function ptyWrite(id: number, data: string): Promise<void> {
   if (!isTauri()) return;
   return invoke('pty_write', { id, data });

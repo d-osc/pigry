@@ -19,7 +19,7 @@ const chunkWriters = new Map<number, ((data: string) => void) | null>();
 const exitHandlers = new Map<number, ((code: number | null) => void) | null>();
 const stashedChunks = new Map<number, string[]>();
 const stashedExits = new Map<number, number | null>();
-let listenerStarted = false;
+let listenerReady: Promise<void> | null = null;
 
 function handlePtyChunk(id: number, data: string) {
   const write = chunkWriters.get(id);
@@ -37,25 +37,31 @@ function handlePtyExit(id: number, code: number | null) {
   else stashedExits.set(id, code);
 }
 
-async function ensurePtyListener(): Promise<void> {
-  if (listenerStarted || !isTauri()) return;
-  listenerStarted = true;
-  try {
-    await listen<PtyChunkEvent>('pty-output', (event) => {
-      handlePtyChunk(event.payload.id, event.payload.data);
+export async function ensurePtyListener(): Promise<void> {
+  if (!isTauri()) return;
+  listenerReady ??= (async () => {
+    const stopOutput = await listen<PtyChunkEvent>('pty-output', ({ payload }) => {
+      handlePtyChunk(payload.id, payload.data);
     });
-    await listen<PtyExitEvent>('pty-exit', (event) => {
-      handlePtyExit(event.payload.id, event.payload.code);
-    });
-  } catch {
-    listenerStarted = false;
-  }
+    try {
+      await listen<PtyExitEvent>('pty-exit', ({ payload }) => {
+        handlePtyExit(payload.id, payload.code);
+      });
+    } catch (error) {
+      stopOutput();
+      throw error;
+    }
+  })().catch((error: unknown) => {
+    listenerReady = null;
+    throw error;
+  });
+  return listenerReady;
 }
 
-function drainStashed(id: number): { chunks: string[]; exit: number | null } {
+function drainStashed(id: number): { chunks: string[]; exit: number | null | undefined } {
   const chunks = stashedChunks.get(id) ?? [];
   stashedChunks.delete(id);
-  const exit = stashedExits.get(id) ?? null;
+  const exit = stashedExits.get(id);
   stashedExits.delete(id);
   return { chunks, exit };
 }
@@ -139,9 +145,9 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
     });
     const stashed = drainStashed(id);
     for (const chunk of stashed.chunks) term.write(chunk);
-    if (stashed.exit !== null) {
+    if (stashed.exit !== undefined) {
       exitedRef.current = true;
-      term.write(`\r\n\x1b[31mprocess exited with code ${stashed.exit}\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[31m${stashed.exit === null ? 'process terminated' : `process exited with code ${stashed.exit}`}\x1b[0m\r\n`);
       onExited(id, stashed.exit);
     }
 
@@ -172,7 +178,7 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
       }
     }
 
-    void ensurePtyListener();
+    void ensurePtyListener().catch(() => undefined);
 
     return () => {
       observer.disconnect();

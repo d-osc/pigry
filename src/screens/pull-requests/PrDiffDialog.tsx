@@ -56,7 +56,6 @@ export function PrDiffDialog({
   files,
   initialPath,
   headRef,
-  showHistoryTools = true,
   onClose,
 }: {
   title: string;
@@ -64,7 +63,6 @@ export function PrDiffDialog({
   initialPath?: string;
   /** Branch/ref the diff is taken from — history & blame walk this. */
   headRef?: string;
-  showHistoryTools?: boolean;
   onClose: () => void;
 }) {
   const [activePath, setActivePath] = useState(initialPath ?? files[0]?.path ?? '');
@@ -321,7 +319,7 @@ export function PrDiffDialog({
                   Unified
                 </button>
               </div>
-              {showHistoryTools && <div className="diff-pane__view-options">
+              <div className="diff-pane__view-options">
                 {blameOn && blameError && (
                   <span className="pr-diff-dialog__hint">{blameError}</span>
                 )}
@@ -354,7 +352,7 @@ export function PrDiffDialog({
                     Blame
                   </button>
                 </div>
-              </div>}
+              </div>
             </div>
 
             {historyOn && (
