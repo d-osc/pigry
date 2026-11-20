@@ -20,5 +20,24 @@ fn main() {
     if std::env::args_os().skip(1).any(|arg| arg == "--pty-bash") {
         std::process::exit(pigry_lib::pty_bash::pty_bash_main());
     }
+    #[cfg(target_os = "macos")]
+    {
+        // Finder launches with a system PATH. Include both Homebrew prefixes
+        // before Tauri starts its threads so Git and gh can be located.
+        let existing = std::env::var_os("PATH").unwrap_or_default();
+        let mut paths: Vec<_> = std::env::split_paths(&existing).collect();
+        for prefix in ["/opt/homebrew/bin", "/usr/local/bin"] {
+            let path = std::path::PathBuf::from(prefix);
+            if !paths.contains(&path) {
+                paths.push(path);
+            }
+        }
+        if let Ok(path) = std::env::join_paths(paths) {
+            // SAFETY: This is the entry thread, before any threads are started.
+            unsafe {
+                std::env::set_var("PATH", path);
+            }
+        }
+    }
     pigry_lib::run()
 }

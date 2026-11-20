@@ -113,25 +113,6 @@
   color: var(--text-muted);
 }
 
-.filter-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 12px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text-primary);
-  font-size: var(--fs-md);
-  font-weight: 500;
-}
-
-.filter-pill svg {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
 .commit-history__view-controls {
   margin-left: auto;
   display: flex;
@@ -385,60 +366,6 @@
   text-align: right;
 }
 
-/* Filter dropdowns (branch / author / time / path / columns) */
-.filter-dd {
-  position: relative;
-  display: inline-flex;
-}
-
-.filter-pill--active {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.filter-dd__menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  min-width: 220px;
-  max-height: 320px;
-  overflow: auto;
-  padding: 6px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  z-index: 130;
-}
-
-.filter-dd__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--fs-md);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.filter-dd__item:hover {
-  background: var(--accent-tint-1);
-  color: var(--text-primary);
-}
-
-.filter-dd__item--active,
-.filter-dd__item--active:hover {
-  color: var(--accent);
-}
-
 .filter-dd__group {
   border-top: 1px solid var(--border);
   margin-top: 6px;
@@ -574,11 +501,6 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
-}
-
-.filter-dd__menu--right {
-  left: auto;
-  right: 0;
 }
 
 /* Show more — reveal older graph rows */

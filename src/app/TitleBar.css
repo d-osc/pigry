@@ -10,6 +10,10 @@
   flex-shrink: 0;
 }
 
+.title-bar--macos {
+  padding-inline-start: 86px;
+}
+
 /* Invisible layer that lets the OS drag the frameless window */
 .title-bar__drag {
   position: absolute;

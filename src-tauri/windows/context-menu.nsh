@@ -6,6 +6,15 @@
   WriteRegStr SHCTX "Software\Classes\Directory\Background\shell\Pigry" "" "Open with Pigry"
   WriteRegStr SHCTX "Software\Classes\Directory\Background\shell\Pigry" "Icon" '$\"$INSTDIR\${MAINBINARYNAME}.exe$\",0'
   WriteRegStr SHCTX "Software\Classes\Directory\Background\shell\Pigry\command" "" '$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --open-folder $\"%V\.$\"'
+  IfFileExists "$INSTDIR\pigry-shell.exe" 0 +3
+  nsExec::ExecToLog '"$INSTDIR\pigry-shell.exe" --register-cli'
+  Pop $0
+!macroend
+
+!macro NSIS_HOOK_PREUNINSTALL
+  IfFileExists "$INSTDIR\pigry-shell.exe" 0 +3
+  nsExec::ExecToLog '"$INSTDIR\pigry-shell.exe" --unregister-cli'
+  Pop $0
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

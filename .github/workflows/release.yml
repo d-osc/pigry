@@ -59,7 +59,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows — x86_64 (NSIS + MSI installers)
+          # Windows — x86_64 (per-user NSIS installer)
           - platform: windows-latest
             args: ''
           # Windows — arm64 (NSIS installer, cross-compiled from the x64 host)
@@ -147,12 +147,20 @@ jobs:
           releaseBody: |
             Installers for Windows, Linux and macOS (x86_64 + arm64).
 
-            **Windows** — .msi / .exe (NSIS)
+            **Windows** — per-user .exe setup (NSIS)
             **Linux** — .deb / .rpm / .AppImage
             **macOS** — .dmg (universal: Intel + Apple Silicon)
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      - name: Verify the macOS universal app bundle
+        if: matrix.platform == 'macos-latest'
+        run: |
+          app=src-tauri/target/universal-apple-darwin/release/bundle/macos/pigry.app
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/pigry"
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/pigry-shell"
+          test -s "$app/Contents/Resources/icon.icns"
 
       - name: Upload updater signatures
         shell: bash

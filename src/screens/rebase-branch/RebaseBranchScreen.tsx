@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect, CommitSearch } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useRequestGate } from '../../hooks/useRequestGate';
 /** Rebase Branch screen — replay the current branch onto another branch.
  * Pick a base, optionally edit the plan (reorder / squash / drop), then
@@ -82,10 +84,16 @@ export function RebaseBranchScreen() {
   } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [splitView, setSplitView] = useState(true);
+  const [sort, setSort] = useState<CommitSort>('replay');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
+  const [query, setQuery] = useState('');
 
   const planCurrent = plan !== null && plan.base === base && plan.head === headOid;
   const rows = planCurrent ? plan.rows : null;
   const planError = planCurrent ? plan.error : null;
+  const isReplayView = sort === 'replay' && !query.trim() && !account && range === 'all';
+  const visibleRows = browseCommits((rows ?? []).map((row, index) => ({ ...row, index })), sort, query, account, cutoff);
   const planValid = rows !== null && rows.length > 0 && rows[rows.length - 1].action !== 'squash';
 
   // The plan is the commits between the base branch and HEAD (base excluded),
@@ -375,9 +383,25 @@ export function RebaseBranchScreen() {
             No commits between {base} and HEAD — nothing to rebase.
           </p>
         )}
-        {rows !== null && rows.length > 0 && (
+        {!!rows?.length && (
+          <div className="commit-list-controls">
+            <CommitSearch query={query} onChange={setQuery} />
+            <CommitFilters commits={rows} account={account} range={range}
+              onAccountChange={setAccount}
+              onRangeChange={setRange} />
+            <CommitSortSelect sort={sort} onChange={setSort} replay />
+            {!isReplayView && <button type="button" className="outline-button" onClick={() => {
+              setSort('replay');
+              setQuery('');
+              setAccount('');
+              setRange('all');
+            }}>Show replay order</button>}
+          </div>
+        )}
+        {!!rows?.length && !visibleRows.length && <p className="rb__empty" role="status">No commits match the search.</p>}
+        {rows !== null && visibleRows.length > 0 && (
           <ul className="rb__list">
-            {rows.map((row, index) => (
+            {visibleRows.map(row => (
               <li
                 key={row.oid}
                 className={`rb__row${row.action === 'drop' ? ' rb__row--drop' : ''}${selectedOid === row.oid ? ' rb__row--open' : ''}`}
@@ -385,7 +409,7 @@ export function RebaseBranchScreen() {
                 <button
                   type="button"
                   className="rb__action"
-                  onClick={() => cycleAction(index)}
+                  onClick={() => cycleAction(row.index)}
                   title="Click to cycle pick → squash → drop"
                   data-action={row.action}
                 >
@@ -412,12 +436,12 @@ export function RebaseBranchScreen() {
                   )}
                   <CommitSyncIcon pushed={row.pushed} />
                 </button>
-                <span className="rb__move">
+                {isReplayView && <span className="rb__move">
                   <button
                     type="button"
                     className="icon-button"
-                    onClick={() => move(index, -1)}
-                    disabled={index === 0}
+                    onClick={() => move(row.index, -1)}
+                    disabled={row.index === 0}
                     aria-label="Move commit up (applied later)"
                   >
                     <ArrowUp size={11} />
@@ -425,13 +449,13 @@ export function RebaseBranchScreen() {
                   <button
                     type="button"
                     className="icon-button"
-                    onClick={() => move(index, 1)}
-                    disabled={index === rows.length - 1}
+                    onClick={() => move(row.index, 1)}
+                    disabled={row.index === rows.length - 1}
                     aria-label="Move commit down (applied earlier)"
                   >
                     <ArrowDown size={11} />
                   </button>
-                </span>
+                </span>}
                 {selectedOid === row.oid && (
                   <div className="rb__detail">
                     {loadingDetail && <p className="rb__empty">Loading commit…</p>}
@@ -565,7 +589,7 @@ export function RebaseBranchScreen() {
           </button>
         </div>
         <p className="rb__hint">
-          Click the action chip to cycle pick → squash → drop; arrows reorder. The plain rebase
+          Click the action chip to cycle pick → squash → drop. Use Replay order to reorder commits with the arrows. The plain rebase
           replays every commit untouched. Cloud = pushed to a remote; disk = local only.
         </p>
       </section>

@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { useRepository } from '../hooks/useRepository';
 import { PigryMark } from './PigryMark';
+import { isMac } from '../lib/platform';
 import { ghAccountList, ghAuthStatus, ghLogout, ghSwitchAccount, isTauri } from '../lib/tauriClient';
 import { updateGhProfileFromAccounts } from '../lib/ghProfile';
 import type { GhAccount } from '../types/repository';
@@ -34,6 +35,7 @@ interface TitleBarProps {
 }
 
 export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarProps) {
+  const nativeControls = isMac && isTauri();
   const { repository, openRepository, pickRepository, notify } = useRepository();
 
   const withWindow = async (action: (win: {
@@ -259,8 +261,9 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
 
   return (
     <header
-      className="title-bar"
+      className={nativeControls ? 'title-bar title-bar--macos' : 'title-bar'}
       onContextMenu={(event) => {
+        if (nativeControls) return;
         event.preventDefault();
         setWinMenu({ x: event.clientX, y: event.clientY });
       }}
@@ -507,7 +510,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
       </div>
 
       <div className="title-bar__actions">
-        <div className="title-bar__win-controls">
+        {!nativeControls && <div className="title-bar__win-controls">
           <button
             type="button"
             className="title-bar__win-button"
@@ -535,7 +538,7 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
           >
             <X size={15} strokeWidth={1.5} />
           </button>
-        </div>
+        </div>}
 
         {winMenu && (
           <div

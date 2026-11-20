@@ -4,7 +4,7 @@ A desktop Git workspace built with Tauri, React and TypeScript. It includes a co
 
 ## Development
 
-Requires Node.js 22.18+ or 24+, npm, the Rust toolchain, Git and the Tauri prerequisites for Windows. GitHub views additionally require the `gh` CLI and a signed-in account with access to the repository.
+Requires Node.js 22.18+ or 24+, npm, the Rust toolchain, Git and the Tauri prerequisites for your OS. GitHub views additionally require the `gh` CLI and a signed-in account with access to the repository.
 
 ```sh
 npm install
@@ -32,13 +32,21 @@ CC=musl-gcc RUSTFLAGS="-C linker=$linker -C linker-flavor=ld.lld -C target-featu
 cp "src-remote/target/$target/release/pigry-server" "src-tauri/remote-bin/pigry-server-linux-$arch"
 ```
 
-## Open a folder from Windows Explorer
+## Install and open from a terminal
 
-The Windows EXE (NSIS) and MSI installers register **Open with Pigry** for folders and the background of an open folder. On Windows 11 this classic shell entry is available under **Show more options**. Uninstalling removes the entries.
+**Windows** uses the per-user `-setup.exe` installer for x64 and ARM64. Setup registers `pigry` in your user PATH. Start a new terminal after setup to pick up the change. Existing system-wide MSI installations can be removed separately through Windows Installed apps with the access required by that installation.
 
-The menu launches `pigry --open-folder PATH` in a new window and opens the Git repository containing that folder. Paths with spaces, Unicode characters and network shares are supported. A folder without a Git repository shows an error in the repository picker; Pigry does not initialize or change it automatically. Launching Pigry normally still opens the repository picker.
+**macOS** uses the Universal DMG on macOS 13.3 or later, on Apple Silicon and Intel. Move Pigry to Applications, open it, then run **Install pigry command in PATH…** from the Command Palette. This installs the launcher at `~/.local/bin/pigry`. If that directory is missing from your PATH, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` and start a new terminal.
 
-Explorer integration is included in Windows installers starting with v0.3.1.
+```sh
+pigry .
+pigry ./project
+pigry "./My Project"
+```
+
+Pigry opens the Git working tree containing the supplied folder in a new window. Paths with spaces and Unicode characters work when quoted. Opening a folder outside a Git repository leaves the repository picker open and shows an error.
+
+Windows setup also registers **Open with Pigry** for folders and the background of open folders in Explorer. On Windows 11, use **Show more options**. Uninstall removes the Explorer entries and the PATH entry added by setup.
 
 ## Validation
 

@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect, CommitSearch } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useEffect, useState } from 'react';
 import { ArrowDownCircle, CloudDownload } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
@@ -11,10 +13,14 @@ const PAGE_SIZE = 40;
 export function PullCommitsScreen() {
   const { repository, mode, busy, fetchRemote, pullRemote } = useRepository();
   const [reload, setReload] = useState(0);
+  const [sort, setSort] = useState<CommitSort>('newest');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
   const scope = JSON.stringify([repository?.localPath, repository?.currentBranch, repository?.headOid, repository?.upstream, reload]);
   const [commits, setCommits] = useScopedState<PushPreviewCommit[] | null>(scope, null);
   const [previewError, setPreviewError] = useScopedState<string | null>(scope, null);
   const [visibleCount, setVisibleCount] = useScopedState(scope, PAGE_SIZE);
+  const [query, setQuery] = useScopedState(scope, '');
   const hasUpstream = Boolean(repository?.upstream);
 
   useEffect(() => {
@@ -38,6 +44,7 @@ export function PullCommitsScreen() {
   if (!repository) return null;
 
   const { currentBranch, upstream } = repository;
+  const matches = browseCommits([...(commits ?? [])].reverse(), sort, query, account, cutoff);
   const refreshPreview = () => setReload((value) => value + 1);
 
   const sync = async (action: () => Promise<boolean>) => {
@@ -98,14 +105,25 @@ export function PullCommitsScreen() {
           {upstream.ahead > 0 && (
             <p className="push__empty" role="status">Branches have diverged. Fast-forward pull requires a shared history without local-only commits.</p>
           )}
-          <CommitPreviewList key={scope} commits={commits.slice(-visibleCount).reverse()} source="Pull commit" />
-          {commits.length > visibleCount && (
+          <div className="commit-list-controls">
+            <CommitSearch query={query} onChange={value => { setQuery(value); setVisibleCount(PAGE_SIZE); }} />
+            <CommitFilters commits={commits} account={account} range={range}
+              onAccountChange={value => { setAccount(value); setVisibleCount(PAGE_SIZE); }}
+              onRangeChange={value => { setRange(value); setVisibleCount(PAGE_SIZE); }} />
+            <CommitSortSelect sort={sort} onChange={value => { setSort(value); setVisibleCount(PAGE_SIZE); }} />
+          </div>
+          {matches.length === 0 ? (
+            <p className="push__empty" role="status">No commits match the search.</p>
+          ) : (
+            <CommitPreviewList key={scope} commits={matches.slice(0, visibleCount)} source="Pull commit" />
+          )}
+          {matches.length > visibleCount && (
             <button
               type="button"
               className="push__show-more"
               onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
             >
-              Show more — {commits.length - visibleCount} older commits
+              Show more — {matches.length - visibleCount} remaining commits
             </button>
           )}
         </section>

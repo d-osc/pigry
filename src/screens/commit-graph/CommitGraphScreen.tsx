@@ -1,8 +1,7 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import {
   ArrowDown,
-  CalendarRange,
   ChevronLeft,
   Cloud,
   CloudCheck,
@@ -14,7 +13,6 @@ import {
   Search,
   SlidersHorizontal,
   Tag as TagIcon,
-  UserRound,
 } from 'lucide-react';
 import { commitAvatars, getCommitOidSet, isTauri } from '../../lib/tauriClient';
 import { useRepository } from '../../hooks/useRepository';
@@ -27,6 +25,9 @@ import { AiAgentPanel } from '../explorer/AiAgentPanel';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { teamForScreen } from '../../lib/agentExtras';
 import { shareCommitWithChat } from '../../lib/chatBridge';
+import { FilterDropdown } from '../commit-preview/FilterDropdown';
+import { CommitFilters } from '../commit-preview/CommitListControls';
+import { useCommitTimeRange } from '../commit-preview/commitList';
 import './CommitGraphScreen.css';
 
 /** Muted author avatar tints from the design (cycled by initials). */
@@ -91,7 +92,7 @@ export function CommitGraphScreen({
   const [lastFetch, setLastFetch] = useState<number | null>(null);
   const [branchFilter, setBranchFilter] = useState('');
   const [authorFilter, setAuthorFilter] = useState('');
-  const [timeFilter, setTimeFilter] = useState<'all' | '24h' | '7d' | '30d' | 'year'>('all');
+  const { range, setRange, cutoff: timeCutoff } = useCommitTimeRange();
   const [pathFilter, setPathFilter] = useState('');
   const [pathDraft, setPathDraft] = useState('');
   const [oidSet, setOidSet] = useState<Set<string> | null>(null);
@@ -159,23 +160,6 @@ export function CommitGraphScreen({
       cancelled = true;
     };
   }, [branchFilter, pathFilter, notify]);
-
-  const authors = useMemo(
-    () => [...new Set((history?.commits ?? []).map((row) => row.authorName))].sort(),
-    [history],
-  );
-
-  const timeCutoff = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity -- filter cutoff snapshot
-    const now = Date.now() / 1000;
-    switch (timeFilter) {
-      case '24h': return now - 24 * 3600;
-      case '7d': return now - 7 * 24 * 3600;
-      case '30d': return now - 30 * 24 * 3600;
-      case 'year': return now - 365 * 24 * 3600;
-      default: return null;
-    }
-  }, [timeFilter]);
 
   const submitNewBranch = async () => {
     const name = newBranchName.trim();
@@ -456,46 +440,13 @@ export function CommitGraphScreen({
             ))}
           </FilterDropdown>
 
-          <FilterDropdown
-            icon={<UserRound size={16} strokeWidth={1.25} />}
-            label={authorFilter || 'All authors'}
-            active={!!authorFilter}
-          >
-            <button
-              type="button"
-              className={`filter-dd__item${!authorFilter ? ' filter-dd__item--active' : ''}`}
-              onClick={() => setAuthorFilter('')}
-            >
-              All authors
-            </button>
-            {authors.map((name) => (
-              <button
-                key={name}
-                type="button"
-                className={`filter-dd__item${authorFilter === name ? ' filter-dd__item--active' : ''}`}
-                onClick={() => setAuthorFilter(name)}
-              >
-                {name}
-              </button>
-            ))}
-          </FilterDropdown>
-
-          <FilterDropdown
-            icon={<CalendarRange size={16} strokeWidth={1.25} />}
-            label={TIME_LABELS[timeFilter]}
-            active={timeFilter !== 'all'}
-          >
-            {(Object.keys(TIME_LABELS) as Array<keyof typeof TIME_LABELS>).map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={`filter-dd__item${timeFilter === key ? ' filter-dd__item--active' : ''}`}
-                onClick={() => setTimeFilter(key)}
-              >
-                {TIME_LABELS[key]}
-              </button>
-            ))}
-          </FilterDropdown>
+          <CommitFilters
+            commits={history?.commits ?? []}
+            account={authorFilter}
+            onAccountChange={setAuthorFilter}
+            range={range}
+            onRangeChange={setRange}
+          />
 
           <FilterDropdown
             icon={<FolderOpen size={16} strokeWidth={1.25} />}
@@ -807,87 +758,5 @@ export function CommitGraphScreen({
         </div>
       )}
     </div>
-  );
-}
-
-const TIME_LABELS: Record<'all' | '24h' | '7d' | '30d' | 'year', string> = {
-  all: 'All time',
-  '24h': 'Last 24 hours',
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  year: 'This year',
-};
-
-/** Generic filter dropdown — closes on any outside click (capture phase). */
-function FilterDropdown({
-  icon,
-  label,
-  active,
-  children,
-  menuWidth,
-  ariaLabel,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active?: boolean;
-  children: React.ReactNode;
-  menuWidth?: number;
-  ariaLabel?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [alignRight, setAlignRight] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  // Flip to right-aligned when the menu would overflow the window edge.
-  useLayoutEffect(() => {
-    if (!open || !menuRef.current) return;
-    const rect = menuRef.current.getBoundingClientRect();
-    setAlignRight(rect.right > window.innerWidth - 8);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocMouseDown = (event: MouseEvent) => {
-      if (ref.current?.contains(event.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocMouseDown, true);
-    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
-  }, [open]);
-
-  return (
-    <div className="filter-dd" ref={ref}>
-      <button
-        type="button"
-        className={`filter-pill${active ? ' filter-pill--active' : ''}`}
-        onClick={() => setOpen((value) => !value)}
-        aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-haspopup="menu"
-      >
-        {icon}
-        {label}
-        <Chevron />
-      </button>
-      {open && (
-        <div
-          ref={menuRef}
-          className={`filter-dd__menu${alignRight ? ' filter-dd__menu--right' : ''}`}
-          role="menu"
-          style={menuWidth ? { width: menuWidth } : undefined}
-        >
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Chevron() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" />
-    </svg>
   );
 }

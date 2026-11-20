@@ -151,6 +151,7 @@ pub fn run() {
         .invoke_handler(with_ssh_routing(tauri::generate_handler![
             commands::get_app_state,
             launch::get_launch_folder,
+            launch::install_launch_command,
             validation_ready,
             commands::open_repository,
             commands::open_ssh_workspace,

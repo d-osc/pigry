@@ -3234,7 +3234,7 @@ dependencies = [
 
 [[package]]
 name = "pigry"
-version = "0.3.12"
+version = "0.3.13"
 dependencies = [
  "base64 0.22.1",
  "chromiumoxide",
@@ -3256,6 +3256,8 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tokio",
+ "windows-sys 0.61.2",
+ "winreg 0.56.0",
 ]
 
 [[package]]

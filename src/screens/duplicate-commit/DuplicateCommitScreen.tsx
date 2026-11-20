@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronDown, ChevronRight, Copy, CopyCheck } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
@@ -95,6 +97,9 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
     null,
   );
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<CommitSort>('newest');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
   const [visibleCount, setVisibleCount] = useState(COMMIT_PAGE_SIZE);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
 
@@ -104,7 +109,7 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
       result => {
         if (active) setHistory({
           ...result,
-          commits: [...result.commits].sort((a, b) => b.timeSeconds - a.timeSeconds),
+          commits: result.commits,
         });
       },
       error => { if (active) setLoadError(String(error)); },
@@ -138,9 +143,7 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
   const selected = history.commits.find(commit => commit.oid === selectedOid);
   const candidates = comparison && 'candidates' in comparison ? comparison.candidates : null;
   const canCopy = Boolean(destinationName && selected && !selected.isMerge && candidates?.has(selected.oid));
-  const term = query.trim().toLowerCase();
-  const matches = history.commits.filter(commit =>
-    commit.oid.toLowerCase().includes(term) || commit.summary.toLowerCase().includes(term));
+  const matches = browseCommits(history.commits, sort, query, account, cutoff);
 
   const copy = async () => {
     if (!canCopy || !selected || !destinationName) return;
@@ -172,6 +175,12 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
         >
           <Copy size={13} /> {selected ? `Duplicate ${selected.shortOid}` : 'Duplicate commit'}
         </button>
+      </div>
+      <div className="commit-list-controls">
+        <CommitFilters commits={history.commits} account={account} range={range}
+          onAccountChange={value => { setAccount(value); setSelectedOid(null); setVisibleCount(COMMIT_PAGE_SIZE); }}
+          onRangeChange={value => { setRange(value); setSelectedOid(null); setVisibleCount(COMMIT_PAGE_SIZE); }} />
+        <CommitSortSelect sort={sort} onChange={value => { setSort(value); setVisibleCount(COMMIT_PAGE_SIZE); }} />
       </div>
       {destinationName && !comparison && <p className="cherry__empty" role="status">Comparing commits…</p>}
       {comparison && 'error' in comparison && (

@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
@@ -45,6 +47,9 @@ function CommitPicker({ branch, headOid, dirty }: { branch: string; headOid: str
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<CommitSort>('newest');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   useEffect(() => {
@@ -56,9 +61,7 @@ function CommitPicker({ branch, headOid, dirty }: { branch: string; headOid: str
     return () => { active = false; };
   }, [branch, retry]);
 
-  const term = query.trim().toLowerCase();
-  const commits = history?.commits.filter(commit =>
-    commit.oid.toLowerCase().includes(term) || commit.summary.toLowerCase().includes(term));
+  const commits = history && browseCommits(history.commits, sort, query, account, cutoff);
 
   return (
     <section className="cherry__browse" aria-label="Editable commits">
@@ -100,6 +103,12 @@ function CommitPicker({ branch, headOid, dirty }: { branch: string; headOid: str
             >
               <Pencil size={13} /> Start editing
             </button>
+          </div>
+          <div className="commit-list-controls">
+            <CommitFilters commits={history?.commits ?? []} account={account} range={range}
+              onAccountChange={value => { setAccount(value); setSelected(null); setVisible(PAGE_SIZE); }}
+              onRangeChange={value => { setRange(value); setSelected(null); setVisible(PAGE_SIZE); }} />
+            <CommitSortSelect sort={sort} onChange={value => { setSort(value); setVisible(PAGE_SIZE); }} />
           </div>
           {history?.truncated && (
             <p className="cherry__empty">Showing {history.commits.length} of {history.total} commits on this branch.</p>

@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useRequestGate } from '../../hooks/useRequestGate';
 /** Branches screen — every local and remote branch on the left (with
  * local/cloud symbols + search), the selected branch's commits on the right
@@ -94,6 +96,9 @@ export function BranchesScreen() {
   const [rowsAttempt, setRowsAttempt] = useState(0);
   const [loadedRowsScope, setLoadedRowsScope] = useState('');
   const [commitQuery, setCommitQuery] = useState('');
+  const [sort, setSort] = useState<CommitSort>('newest');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
   const [selectedCommit, setSelectedCommit] = useState<CommitRow | null>(null);
   const [detail, setDetail] = useState<CommitDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -182,16 +187,8 @@ export function BranchesScreen() {
 
   /** How many branch commits are shown before "Show more". */
   const [visibleCount, setVisibleCount] = useState(100);
-  const filteredRows = useMemo(() => {
-    const query = commitQuery.trim().toLowerCase();
-    if (!query) return rows.slice(0, visibleCount);
-    return rows.filter(
-      (row) =>
-        row.oid.toLowerCase().includes(query) ||
-        row.shortOid.toLowerCase().includes(query) ||
-        row.summary.toLowerCase().includes(query),
-    );
-  }, [rows, commitQuery, visibleCount]);
+  const matchingRows = useMemo(() => browseCommits(rows, sort, commitQuery, account, cutoff), [rows, sort, commitQuery, account, cutoff]);
+  const filteredRows = commitQuery.trim() ? matchingRows : matchingRows.slice(0, visibleCount);
 
   /** Effective selection: HEAD's branch until the user picks one — derived,
    * so no auto-select effect is needed. */
@@ -530,6 +527,12 @@ export function BranchesScreen() {
               setVisibleCount(100);
             }}
         />
+        <div className="commit-list-controls">
+          <CommitFilters commits={rows} account={account} range={range}
+            onAccountChange={value => { setAccount(value); setVisibleCount(100); }}
+            onRangeChange={value => { setRange(value); setVisibleCount(100); }} />
+          <CommitSortSelect sort={sort} onChange={value => { setSort(value); setVisibleCount(100); }} />
+        </div>
         <ul className="branches__rows">
           {!loadingRows && rowsError && <li className="branches__empty" role="alert">{rowsError}<button className="outline-button" onClick={() => setRowsAttempt((n) => n + 1)}>Try again</button></li>}
           {loadingRows && <li className="branches__empty">Loading commits…</li>}
@@ -681,14 +684,14 @@ export function BranchesScreen() {
           {!loadingRows && filteredRows.length === 0 && rows.length > 0 && (
             <li className="branches__empty">No commits match the search.</li>
           )}
-          {!loadingRows && !commitQuery.trim() && rows.length > visibleCount && (
+          {!loadingRows && !commitQuery.trim() && matchingRows.length > visibleCount && (
             <li className="branches__show-more-row">
               <button
                 type="button"
                 className="branches__show-more"
                 onClick={() => setVisibleCount((count) => count + 100)}
               >
-                Show more — {rows.length - visibleCount} older commits
+                Show more — {matchingRows.length - visibleCount} remaining commits
               </button>
             </li>
           )}

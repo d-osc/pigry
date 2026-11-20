@@ -9,6 +9,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import '@xterm/xterm/css/xterm.css';
 import { isTauri, ptyResize, ptyWrite, type PtyChunkEvent, type PtyExitEvent } from '../lib/tauriClient';
+import { isMac } from '../lib/platform';
 
 // ---------------------------------------------------------------------------
 // Shared output router — ONE listener pair for every terminal pane. Chunks
@@ -210,14 +211,13 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused]);
 
-  // VS Code Windows clipboard behaviour: Ctrl+C copies a selection instead of
-  // sending ^C; Ctrl+V pastes natively; Ctrl+Shift+C/V always copy/paste;
-  // Ctrl+F opens the find widget. Everything else goes straight to the shell.
+  // Cmd handles clipboard and find on macOS, leaving Ctrl+C to the shell.
+  // On Windows and Linux, Ctrl+C copies a selection and otherwise sends ^C.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
     term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== 'keydown' || !event.ctrlKey || exitedRef.current) return true;
+      if (event.type !== 'keydown' || !(isMac ? event.metaKey : event.ctrlKey) || exitedRef.current) return true;
       const key = event.key.toLowerCase();
 
       if (key === 'c' && !event.shiftKey && term.hasSelection()) {

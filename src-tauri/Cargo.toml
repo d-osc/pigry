@@ -1,6 +1,6 @@
 [package]
 name = "pigry"
-version = "0.3.12"
+version = "0.3.13"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
@@ -53,6 +53,9 @@ portable-pty = "0.8"
 getrandom = "0.4"
 sha2 = "0.10"
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

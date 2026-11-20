@@ -1,3 +1,5 @@
+import { CommitFilters, CommitSortSelect } from '../commit-preview/CommitListControls';
+import { browseCommits, useCommitTimeRange, type CommitSort } from '../commit-preview/commitList';
 import { useRequestGate } from '../../hooks/useRequestGate';
 /** Cherry Pick screen — browse recent commits, inspect one, and pick it onto
  * the current branch (staged, commit to finish). Conflicted picks surface
@@ -34,6 +36,9 @@ export function CherryPickScreen() {
   const headOid = repository?.headOid ?? '';
   const [rows, setRows] = useState<CommitRow[]>([]);
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<CommitSort>('newest');
+  const [account, setAccount] = useState('');
+  const { range, setRange, cutoff } = useCommitTimeRange();
   /** '' = every branch (full history); otherwise a branch ref to browse. */
   const [branchFilter, setBranchFilter] = useState('');
   /** How many rows are shown before "Show more" (search shows all matches). */
@@ -51,6 +56,8 @@ export function CherryPickScreen() {
   } | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [splitView, setSplitView] = useState(true);
+  const matchingRows = browseCommits(rows, sort, query, account, cutoff);
+  const visibleRows = query.trim() ? matchingRows : matchingRows.slice(0, visibleCount);
 
   // Reload the browse list whenever HEAD moves or the branch filter changes.
   useEffect(() => {
@@ -253,19 +260,14 @@ export function CherryPickScreen() {
             </button>
           )}
         </div>
+        <div className="commit-list-controls">
+          <CommitFilters commits={rows} account={account} range={range}
+            onAccountChange={value => { setAccount(value); setVisibleCount(MAX_ROWS); }}
+            onRangeChange={value => { setRange(value); setVisibleCount(MAX_ROWS); }} />
+          <CommitSortSelect sort={sort} onChange={value => { setSort(value); setVisibleCount(MAX_ROWS); }} />
+        </div>
         <ul className="cherry__rows">
-          {(() => {
-            const q = query.trim().toLowerCase();
-            return (q
-              ? rows.filter(
-                  (row) =>
-                    row.oid.toLowerCase().includes(q) ||
-                    row.shortOid.toLowerCase().includes(q) ||
-                    row.summary.toLowerCase().includes(q),
-                )
-              : rows.slice(0, visibleCount)
-            );
-          })().map((row) => {
+          {visibleRows.map((row) => {
             const isSelected = selected?.oid === row.oid;
             return (
               <li key={row.oid} className="cherry__row-item">
@@ -408,23 +410,20 @@ export function CherryPickScreen() {
               </li>
             );
           })}
-          {query.trim() === '' && rows.length === 0 && (
+          {!query.trim() && !account.trim() && rows.length === 0 && (
             <li className="cherry__empty">Loading commits…</li>
           )}
-          {query.trim() !== '' &&
-            rows.filter(
-              (row) =>
-                row.oid.toLowerCase().includes(query.trim().toLowerCase()) ||
-                row.summary.toLowerCase().includes(query.trim().toLowerCase()),
-            ).length === 0 && <li className="cherry__empty">No commits match the search.</li>}
+          {(query.trim() || account.trim()) && visibleRows.length === 0 && (
+            <li className="cherry__empty">No commits match the search.</li>
+          )}
         </ul>
-        {!query.trim() && visibleCount < rows.length && (
+        {!query.trim() && visibleCount < matchingRows.length && (
           <button
             type="button"
             className="cherry__show-more"
             onClick={() => setVisibleCount((count) => count + MAX_ROWS)}
           >
-            Show more — {rows.length - visibleCount} older commits
+            Show more — {matchingRows.length - visibleCount} remaining commits
           </button>
         )}
       </section>

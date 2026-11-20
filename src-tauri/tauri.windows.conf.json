@@ -1,0 +1,15 @@
+{
+  "bundle": {
+    "publisher": "d-osc",
+    "targets": ["nsis"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "windows/context-menu.nsh"
+      }
+    }
+  }
+}

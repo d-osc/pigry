@@ -14,8 +14,11 @@ import {
   RefreshCw,
   Server,
   Settings,
+  Terminal,
   type LucideIcon,
 } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
+import { isMac } from '../lib/platform';
 import type { NavId } from './navigation';
 import { workspaceNav } from './navigation';
 import type { RepositoryContextValue } from '../hooks/useRepository';
@@ -58,6 +61,21 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
   }));
 
   const repoCommands: Command[] = [
+    ...(isMac && repository.mode === 'tauri' ? [{
+      id: 'app:install-cli',
+      title: 'Install pigry command in PATH…',
+      section: 'Repository' as const,
+      icon: Terminal,
+      enabled: true,
+      run: async () => {
+        try {
+          const path = await invoke<string>('install_launch_command');
+          repository.notify(`Installed ${path}. Add ~/.local/bin to your shell PATH if needed.`, 'success');
+        } catch (error) {
+          repository.notify(String(error), 'error');
+        }
+      },
+    }] : []),
     {
       id: 'repo:open',
       title: 'Open repository…',
