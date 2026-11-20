@@ -2,6 +2,66 @@ import { expect, test } from '@playwright/test';
 import { demoTree } from '../../src/lib/demoWorkspace.ts';
 import { installBackend, openFixture } from './backend.mjs';
 
+for (const [team, prefix] of [['Explorer', ''], ['Copilot', 'copilot-']]) {
+  test(`${team}: development base agents are selectable and load their assigned skills`, async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('pigry:ai-providers', JSON.stringify([{
+        id: 'development-fixture',
+        name: 'Development fixture',
+        type: 'custom',
+        apiFormat: 'openai',
+        baseUrl: 'https://fixture.invalid/v1/chat/completions',
+        apiKey: 'fixture',
+        enabled: true,
+        model: 'fixture-model',
+        models: [{ id: 'fixture-model', name: 'fixture-model', enabled: true }],
+      }]));
+    });
+    await installBackend(page);
+    await openFixture(page);
+    if (team === 'Copilot') {
+      await page.locator('.nav-item').filter({ hasText: 'Copilot' }).click();
+    }
+    const composer = page.getByRole('textbox', { name: 'Ask AI' });
+    if (team === 'Explorer' && await composer.count() === 0) {
+      await page.locator('.ai-rail-strip').click();
+    }
+    const specialists = [
+      ['coder', 'code-implementation', ['write_file', 'run_command']],
+      ['debugger', 'unit-testing-and-bug-reporting', ['write_file', 'run_command']],
+      ['qa', 'qa-test-cases-and-e2e', ['write_file', 'run_command', 'browser_e2e']],
+      ['white-hat', 'defensive-security-report', ['read_file', 'write_file', 'github_security']],
+    ];
+    const responses = page.getByText('Test model reply', { exact: true });
+    const existing = await responses.count();
+    for (const [index, [handle, skill, expectedTools]] of specialists.entries()) {
+      const username = prefix + handle;
+      await composer.fill(`@${username}`);
+      const option = page.getByRole('listbox', { name: 'Mention an agent' })
+        .getByRole('option', { name: new RegExp(`@${username}\\b`) });
+      await expect(option).toContainText(team);
+      await option.click();
+      await expect(composer).toHaveValue(`@${username} `);
+      await composer.fill(`@${username} Describe your role and how you report results.`);
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(responses).toHaveCount(existing + index + 1);
+
+      const payload = await page.evaluate(() => {
+        const call = window.testBackend.calls.filter(({ cmd }) => cmd === 'ai_chat').at(-1);
+        return JSON.parse(call.args.body);
+      });
+      expect(JSON.stringify(payload.messages)).toContain(`[Skill: ${skill}]`);
+      const tools = payload.tools.map(({ function: tool }) => tool.name);
+      expect(tools).toEqual(expect.arrayContaining(expectedTools));
+      if (handle === 'white-hat') {
+        expect(tools).not.toContain('run_command');
+        expect(tools).not.toContain('browser_e2e');
+        expect(tools).not.toContain('agent_message');
+      }
+    }
+  });
+}
+
 for (const providerType of ['custom', 'codex']) {
   test(`${providerType}: assigned and tagged skills use the current project override once`, async ({ page }) => {
     await page.addInitScript((type) => {

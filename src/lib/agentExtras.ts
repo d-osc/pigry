@@ -474,6 +474,47 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
 
 type WorkspaceBaseAgentSpec = Omit<BuiltinSpec, 'team' | 'tier'>;
 
+const DEVELOPMENT_FILES = ['list_files', 'search_code', 'read_file', 'read_diff', 'git_status', 'write_file'];
+
+const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
+  {
+    username: 'coder',
+    name: 'Coder',
+    role: 'Software developer',
+    description: 'Implements features and fixes in repository code, verifies the changes, and reports what was edited.',
+    emoji: '💻',
+    tools: [...DEVELOPMENT_FILES, 'run_command'],
+    skills: ['code-implementation'],
+  },
+  {
+    username: 'debugger',
+    name: 'Debugger',
+    role: 'Unit testing and bug diagnosis',
+    description: 'Writes and runs unit tests, traces bugs to their source, and saves a detailed Markdown bug report.',
+    emoji: '🔍',
+    tools: [...DEVELOPMENT_FILES, 'run_command'],
+    skills: ['unit-testing-and-bug-reporting', 'run-tests'],
+  },
+  {
+    username: 'qa',
+    name: 'QA',
+    role: 'Software tester',
+    description: 'Verifies software against its requirements, writes Markdown test cases, and runs end-to-end tests.',
+    emoji: '🧪',
+    tools: [...DEVELOPMENT_FILES, 'run_command', 'browser_e2e'],
+    skills: ['qa-test-cases-and-e2e', 'run-tests'],
+  },
+  {
+    username: 'white-hat',
+    name: 'White Hat Hacker',
+    role: 'Defensive security reviewer',
+    description: 'Reviews the current repository for vulnerabilities and saves a Markdown report with evidence and remediation.',
+    emoji: '🛡️',
+    tools: [...DEVELOPMENT_FILES, 'github_security'],
+    skills: ['defensive-security-report'],
+  },
+];
+
 /** Every workspace menu has at least one specialist available via @mention. */
 const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec, ...WorkspaceBaseAgentSpec[]]> = {
   explorer: [{
@@ -484,7 +525,7 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '🛠️',
     tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
     skills: ['refactor-safety'],
-  }],
+  }, ...DEVELOPMENT_BASE_AGENTS],
   'ai-agent': [{
     username: 'workspace-guide',
     name: 'Workspace Guide',
@@ -493,7 +534,7 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '🧭',
     tools: ['git_status', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
     skills: ['workspace-tool-use', 'file-navigation'],
-  }],
+  }, ...DEVELOPMENT_BASE_AGENTS.map(agent => ({ ...agent, username: `copilot-${agent.username}` }))],
   'working-changes': [{
     username: 'code-reviewer',
     name: 'Code Reviewer',

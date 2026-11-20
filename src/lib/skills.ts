@@ -71,6 +71,61 @@ export interface BaseSkill {
 
 export const BUILTIN_SKILLS: BaseSkill[] = [
   {
+    id: 'code-implementation',
+    name: 'Code implementation',
+    description: 'Implement a requested feature or fix and verify it through the existing entry points.',
+    content: [
+      '# Code implementation',
+      '',
+      '1. Read project instructions, inspect the working tree and locate the normal entry point and its callers.',
+      '2. Edit the repository code to implement the request. Reuse existing types and helpers and preserve user edits and existing behavior outside the scope.',
+      '3. Run the smallest relevant tests, type check or build. Add a focused regression test when needed.',
+      '4. Summarize the changed paths, behavior and verification results. Report any checks that could not run.',
+    ].join('\n'),
+  },
+  {
+    id: 'unit-testing-and-bug-reporting',
+    name: 'Unit testing and bug reporting',
+    description: 'Write and run unit tests and save a detailed Markdown report on the bug.',
+    content: [
+      '# Unit testing and bug reporting',
+      '',
+      '1. Inspect existing tests and isolate the affected unit. Reproduce functional bugs with deterministic fixtures and assertions for the expected result.',
+      '2. Add or update focused unit tests using the repository’s framework. Run them and record the command, result and relevant error. Preserve production code unless the user also requests a fix.',
+      '3. Use write_file to save a Markdown report at the requested path. Otherwise use a new descriptive file under docs/reports/ with a .md extension.',
+      '4. Include the environment, affected file and line, preconditions, reproduction for the functional bug, expected and actual results, root cause or hypothesis, impact, and the recommended fix or regression test.',
+      '5. Distinguish confirmed bugs, hypotheses and tests that could not run. Link the saved report and changed test files in the reply.',
+    ].join('\n'),
+  },
+  {
+    id: 'qa-test-cases-and-e2e',
+    name: 'QA test cases and E2E',
+    description: 'Write Markdown test cases and verify user workflows end to end.',
+    content: [
+      '# QA test cases and E2E',
+      '',
+      '1. Read the acceptance criteria and trace the user workflows. Cover the normal path, expected validation errors and failure recovery relevant to the request.',
+      '2. Use the existing E2E runner or browser_e2e to exercise the normal UI in an authorized development or test environment with test data. Assert visible outcomes.',
+      '3. Use write_file to save the Markdown test cases at the requested path. Otherwise create a descriptive .md file under docs/reports/.',
+      '4. Give each case an ID, requirement, preconditions, test data, steps, expected and observed results, and Pass, Fail, Blocked or Not run status. Record the commands and link relevant evidence.',
+      '5. Report coverage gaps and reasons for blocked cases. Link the saved test cases and summarize the executed results.',
+    ].join('\n'),
+  },
+  {
+    id: 'defensive-security-report',
+    name: 'Defensive security reporting',
+    description: 'Review authorized repository code and existing alerts, then save findings and mitigations in Markdown.',
+    content: [
+      '# Defensive security reporting',
+      '',
+      '1. Review only code, configuration, dependencies and existing alerts for the repository the user authorized. Use source inspection for input handling, authorization, sensitive data exposure, and least privilege.',
+      '2. Corroborate observations with repository files and existing alerts when available. Do not generate exploits or payloads, reproduce vulnerabilities, probe live targets, run scans or delegate offensive work.',
+      '3. Use write_file only to save a Markdown report at the requested path. Otherwise create a descriptive .md file under docs/reports/. Redact secrets and sensitive data.',
+      '4. For each finding record severity, confidence, affected file and line, source evidence, potential impact, and a concrete mitigation. Describe safe verification in terms of the expected protective behavior.',
+      '5. Separate confirmed findings from items needing review, record the scope and limits, and link the saved report.',
+    ].join('\n'),
+  },
+  {
     id: 'file-navigation',
     name: 'File navigation',
     description: 'Find, read, save and preview repository files.',
