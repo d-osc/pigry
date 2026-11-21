@@ -72,15 +72,15 @@ jobs:
       - name: Typecheck + frontend build
         run: npm run build
 
+      # The E2E runner tests (tests/e2e-cli.test.mjs) launch real browsers, so install them before `npm test`.
+      - name: Install test browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
       - name: Frontend tests
         run: npm test
 
       - name: Lint (zero warnings)
         run: npm run lint
-
-      - name: Install UI test browser
-        if: matrix.platform == 'windows-latest'
-        run: npx playwright install chromium
 
       - name: UI and visual regression tests
         if: matrix.platform == 'windows-latest'
