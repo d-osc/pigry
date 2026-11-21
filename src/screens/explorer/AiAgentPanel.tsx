@@ -1,5 +1,6 @@
 import { useEffectEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PauseGate } from '../../lib/pauseGate';
+import { beginFanOut, claimWrite, endFanOut } from '../../lib/writeGuard';
 import { findDefinition } from '../../lib/symbolLookup';
 import { DIAGRAM_TOOLS } from '../../lib/diagramTools';
 import { DESIGN_TOOLS } from '../../lib/designTools';
@@ -1759,7 +1760,8 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const input = agent && (name.startsWith('diagram_') || name.startsWith('design_') || name.startsWith('board_') || name.startsWith('e2e_')) ? { ...rawInput, agent } : rawInput;
     const id = liveStart({ kind: 'tool', title: name, detail: clip(rawInput, 400), status: 'running' });
     try {
-      const output = await toolRequest(tool, name, input);
+      const refused = name === 'write_file' ? claimWrite(String(rawInput.path ?? ''), agent) : null;
+      const output = refused ?? await toolRequest(tool, name, input);
       liveEnd(id, { status: /^error\b/i.test(String(output)) ? 'error' : 'done', result: clip(output, 800) });
       return output;
     } catch (error) {
@@ -1965,6 +1967,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     setReplyingAs(targets.map((t) => t.username).join(' + '));
     setActivity({ kind: 'thinking', label: '' });
     const replies = new Map<string, ChatMessage>();
+    if (targets.length > 1) beginFanOut();
     try {
       const settled = await Promise.allSettled(
         targets.map((target) => runIsolatedTurn(history, target)),
@@ -2017,6 +2020,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
         // never block the UI on a hook
       }
     } finally {
+      if (targets.length > 1) endFanOut();
       setSending(false);
       setActivity(null);
       setReplyingAs('');
