@@ -19,6 +19,16 @@ self.MonacoEnvironment = {
   },
 };
 
+// Monaco rejects an in-flight diff computation when its diff editor is disposed (navigating away, switching files):
+// a cancellation, not an error — keep it out of the unhandled-rejection reports.
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason as { message?: string } | string | undefined;
+    const message = typeof reason === 'string' ? reason : reason?.message;
+    if (message === 'no diff result available') event.preventDefault();
+  });
+}
+
 loader.config({ monaco });
 
 monaco.editor.defineTheme('pigry-dark', {

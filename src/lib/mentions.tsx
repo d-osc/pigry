@@ -88,11 +88,12 @@ export function pushWithMentions(
   nodes: React.ReactNode[],
   text: string,
   keyBase: string,
+  usernames?: ReadonlySet<string>,
 ): void {
   const parts = text.split(MENTION_SPLIT);
   parts.forEach((part, i) => {
     if (!part) return;
-    if (i % 2 === 1) {
+    if (i % 2 === 1 && (!usernames || usernames.has(part.slice(1)))) {
       nodes.push(
         <span key={`${keyBase}-men${i}`} className="mention">
           {part}

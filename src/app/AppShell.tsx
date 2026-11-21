@@ -10,7 +10,7 @@ import { ChevronLeft, ChevronsRight, Undo2 } from 'lucide-react';
 import { workspaceNav, type NavId } from './navigation';
 import { buildCommands } from './commands';
 import { CommandPalette, type PaletteMode } from './commandPalette/CommandPalette';
-import { getFileTree, gitCliStatus, readWorktreeFile, reportValidationReady } from '../lib/tauriClient';
+import { getFileTree, gitCliStatus, openInBrowser, readWorktreeFile, reportValidationReady } from '../lib/tauriClient';
 import { AiAgentPanel } from '../screens/explorer/AiAgentPanel';
 import { ResizeHandle } from './ResizeHandle';
 import { teamForScreen } from '../lib/agentExtras';
@@ -32,6 +32,10 @@ const BranchesScreen = lazy(() => import('../screens/branches/BranchesScreen').t
 const WorkingChangesScreen = lazy(() => import('../screens/working-changes/WorkingChangesScreen').then((module) => ({ default: module.WorkingChangesScreen })));
 const AppSettingsScreen = lazy(() => import('../screens/settings/AppSettingsScreen').then((module) => ({ default: module.AppSettingsScreen })));
 const CommitGraphScreen = lazy(() => import('../screens/commit-graph/CommitGraphScreen').then((module) => ({ default: module.CommitGraphScreen })));
+const E2eScreen = lazy(() => import('../screens/e2e/E2eScreen').then((module) => ({ default: module.E2eScreen })));
+const BoardScreen = lazy(() => import('../screens/board/BoardScreen').then((module) => ({ default: module.BoardScreen })));
+const DesignScreen = lazy(() => import('../screens/design/DesignScreen').then((module) => ({ default: module.DesignScreen })));
+const DiagramScreen = lazy(() => import('../screens/diagram/DiagramScreen').then((module) => ({ default: module.DiagramScreen })));
 const ExplorerScreen = lazy(() => import('../screens/explorer/ExplorerScreen').then((module) => ({ default: module.ExplorerScreen })));
 const ProjectsScreen = lazy(() => import('../screens/projects/ProjectsScreen').then((module) => ({ default: module.ProjectsScreen })));
 const PullRequestsScreen = lazy(() => import('../screens/pull-requests/PullRequestsScreen').then((module) => ({ default: module.PullRequestsScreen })));
@@ -54,8 +58,28 @@ const MAX_SIDEBAR_WIDTH = 420;
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS = new Set<NavId>(
-  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent'),
+  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'board' && id !== 'e2e'),
 );
+
+/** The Tauri webview ignores target="_blank" links — route every external
+ * http(s) link click to the OS default browser instead. */
+function useExternalLinks() {
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      const anchor = (event.target as HTMLElement | null)?.closest?.('a[href]');
+      const href = anchor?.getAttribute('href') ?? '';
+      if (!/^https?:\/\//i.test(href)) return;
+      event.preventDefault();
+      openInBrowser(href).catch(() => {
+        // not running inside the desktop app — fall back to the browser itself
+        window.open(href, '_blank', 'noopener');
+      });
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, []);
+}
 
 function ErrorBanner() {
   const { error } = useRepository();
@@ -179,7 +203,7 @@ function renderScreen(
   terminalOpen: boolean,
   onToggleTerminal: () => void,
   editorCallbacks: {
-    onEditorStatus: (status: EditorStatusInfo | null) => void;
+    onEditorStatus?: (status: EditorStatusInfo | null) => void;
     onUnsavedFilesChange: (unsaved: boolean) => void;
   },
 ) {
@@ -211,7 +235,6 @@ function renderScreen(
     case 'explorer':
       return (
         <ExplorerScreen
-          key={explorerOpenPath ?? 'explorer'}
           openPath={explorerOpenPath}
           onJumpToCommit={jumpToCommit}
           onOpenFilePalette={openFilePalette}
@@ -224,6 +247,14 @@ function renderScreen(
       return <ProjectsScreen />;
     case 'pull-requests':
       return <PullRequestsScreen />;
+    case 'board':
+      return <BoardScreen />;
+    case 'e2e':
+      return <E2eScreen />;
+    case 'design':
+      return <DesignScreen />;
+    case 'diagram':
+      return <DiagramScreen />;
     case 'ai-agent':
       return <AiAgentScreen />;
     case 'releases':
@@ -244,6 +275,7 @@ function renderScreen(
 }
 
 function AppShellInner() {
+  useExternalLinks();
   const [screen, setScreen] = useState<NavId>(() => {
     try {
       const stored = localStorage.getItem('pigry:default-screen');
@@ -256,6 +288,13 @@ function AppShellInner() {
     return 'explorer';
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
+  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'board' || screen === 'e2e';
+  useEffect(() => {
+    if (keepAgentScreen) {
+      setVisitedAgentScreens((visited) => visited.includes(screen) ? visited : [...visited, screen]);
+    }
+  }, [keepAgentScreen, screen]);
   // Section the settings page should open on (null = default). Set by
   // TitleBar account actions like "Add account" so users land on the
   // Accounts section instead of the Appearance section.
@@ -269,6 +308,35 @@ function AppShellInner() {
   } | null>(null);
   const [filesRequestId, setFilesRequestId] = useState(0);
   const [explorerOpenPath, setExplorerOpenPath] = useState<string | null>(null);
+  // diagram_open (agent tool) asks the shell to show the Diagram editor.
+  useEffect(() => {
+    const onOpenDiagram = () => setScreen('diagram');
+    const onOpenDesign = () => setScreen('design');
+    const onOpenBoard = () => setScreen('board');
+    const onOpenE2e = () => setScreen('e2e');
+    window.addEventListener('pigry:open-diagram', onOpenDiagram);
+    window.addEventListener('pigry:open-design', onOpenDesign);
+    window.addEventListener('pigry:open-board', onOpenBoard);
+    window.addEventListener('pigry:open-e2e', onOpenE2e);
+    return () => {
+      window.removeEventListener('pigry:open-diagram', onOpenDiagram);
+      window.removeEventListener('pigry:open-design', onOpenDesign);
+      window.removeEventListener('pigry:open-board', onOpenBoard);
+      window.removeEventListener('pigry:open-e2e', onOpenE2e);
+    };
+  }, []);
+  // Chat panels without their own navigation (e.g. the Copilot page) ask the
+  // shell to open a file link in the Explorer.
+  useEffect(() => {
+    const onGoto = (event: Event) => {
+      const { path, line } = (event as CustomEvent<{ path: string; line?: number }>).detail;
+      setScreen('explorer');
+      setExplorerOpenPath(path);
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent('pigry:open-file', { detail: { path, line } })), 400);
+    };
+    window.addEventListener('pigry:goto-file', onGoto);
+    return () => window.removeEventListener('pigry:goto-file', onGoto);
+  }, []);
   const [recentlyOpened, setRecentlyOpened] = useState<string[]>([]);
   const [paletteSeed, setPaletteSeed] = useState('');
   // Left side bar folds away — default open, remembered across restarts.
@@ -360,11 +428,23 @@ function AppShellInner() {
     setScreen('commit-graph');
   }, []);
 
+  // The Board's code cards open their commit in the Commit graph.
+  useEffect(() => {
+    const onGotoCommit = (event: Event) => jumpToCommit((event as CustomEvent<{ oid: string }>).detail.oid);
+    window.addEventListener('pigry:goto-commit', onGotoCommit);
+    return () => window.removeEventListener('pigry:goto-commit', onGotoCommit);
+  }, [jumpToCommit]);
+
   // App Settings (gh sign-in) can pop the integrated terminal open.
   useEffect(() => {
     const onToggle = () => setTerminalOpen((open) => !open);
     window.addEventListener('pigry:toggle-terminal', onToggle);
-    return () => window.removeEventListener('pigry:toggle-terminal', onToggle);
+    const show = () => setTerminalOpen(true);
+    window.addEventListener('pigry:show-terminal', show);
+    return () => {
+      window.removeEventListener('pigry:toggle-terminal', onToggle);
+      window.removeEventListener('pigry:show-terminal', show);
+    };
   }, []);
 
   // Editor reports its active file so the palette's '@' symbol search knows
@@ -571,7 +651,7 @@ function AppShellInner() {
       />
       <GitMissingBanner />
       <ErrorBoundary><Suspense fallback={<div className="screen-loading" role="status">Loading…</div>}>
-      {screen === 'app-settings' ? (
+      {screen === 'app-settings' && (
         // The app settings page is repo-agnostic — it takes over the whole
         // body from wherever it was opened (workspace or Home picker).
         <main className="app-shell__workspace app-shell__workspace--full">
@@ -584,8 +664,8 @@ function AppShellInner() {
             }}
           />
         </main>
-      ) : (
-        <>
+      )}
+        <div style={{ display: screen === 'app-settings' ? 'none' : 'contents' }}>
           {(showHome || !repository.repository) && (
             <HomeScreen
               workspaceType={homeWorkspace}
@@ -634,18 +714,27 @@ function AppShellInner() {
                 <main className="app-shell__workspace">
                   <RebaseBanner screen={screen} hasUnsavedFiles={hasUnsavedFiles} onNavigate={navigate} />
                   <ErrorBanner />
-                  <ErrorBoundary key={`${repository.repository?.localPath}:${repository.repository?.currentBranch}:${screen}`}><Suspense fallback={<div className="screen-loading" role="status">Loading workspace…</div>}>
-                    {renderScreen(screen, explorerOpenPath, (oid) => setRebaseBase(oid), focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal, {
-                      onEditorStatus: setEditorStatus,
-                      onUnsavedFilesChange: setHasUnsavedFiles,
-                    })}
-                  </Suspense></ErrorBoundary>
+                  {[...new Set([...visitedAgentScreens, screen])].filter((id) => id !== 'app-settings').map((id) => (
+                    <div
+                      key={`${repository.repository?.localPath}:${repository.repository?.currentBranch}:${id}`}
+                      style={{ display: id === screen ? 'contents' : 'none' }}
+                    >
+                      <ErrorBoundary>
+                        <Suspense fallback={<div className="screen-loading" role="status">Loading workspace…</div>}>
+                          {renderScreen(id, explorerOpenPath, setRebaseBase, focusCommit, jumpToCommit, handleOpenFilePalette, terminalOpen, toggleTerminal, {
+                            onEditorStatus: id === screen ? setEditorStatus : undefined,
+                            onUnsavedFilesChange: setHasUnsavedFiles,
+                          })}
+                        </Suspense>
+                      </ErrorBoundary>
+                    </div>
+                  ))}
                 </main>
                 {AI_RAIL_SCREENS.has(screen) && railOpen && (
                   <ResizeHandle
                     orientation="v"
                     label="Resize AI panel"
-                    onDelta={(dx) => setRailWidth((w) => Math.min(480, Math.max(280, w - dx)))}
+                    onDelta={(dx) => setRailWidth((w) => Math.min(window.innerWidth * 0.65, Math.max(280, w - dx)))}
                   />
                 )}
                 {AI_RAIL_SCREENS.has(screen) &&
@@ -694,8 +783,7 @@ function AppShellInner() {
                 }} />
             </>
           )}
-        </>
-      )}
+        </div>
       {paletteOpen && (
         <CommandPalette
           mode={paletteMode}

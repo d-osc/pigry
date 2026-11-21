@@ -13,6 +13,8 @@ import {
   Plus,
   CircleCheck,
   ChevronsLeft,
+  Search,
+  X,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import { workspaceNav, type NavId } from './navigation';
@@ -36,20 +38,24 @@ function Section({
   title,
   count,
   defaultOpen = true,
+  forceOpen = false,
   action,
   children,
 }: {
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  /** Keeps the section expanded while a search is active. */
+  forceOpen?: boolean;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [openState, setOpen] = useState(defaultOpen);
+  const open = forceOpen || openState;
   return (
     <section className="nav-section">
       <div className="nav-section__head-row">
-        <button className="nav-section__head" type="button" onClick={() => setOpen(!open)}>
+        <button className="nav-section__head" type="button" onClick={() => setOpen(!openState)}>
           {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           <span className="nav-section__title">{title}</span>
           {count !== undefined && <span className="nav-section__count">{count}</span>}
@@ -81,7 +87,30 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
   const [newTagName, setNewTagName] = useState("");
   const [newName, setNewName] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [query, setQuery] = useState('');
   if (!repository) return null;
+
+  // Search filters the menu items and every list below (branches, remotes, tags…).
+  const q = query.trim().toLowerCase();
+  const searching = q.length > 0;
+  const matches = (...texts: Array<string | undefined>) =>
+    !searching || texts.some((text) => text?.toLowerCase().includes(q));
+  const navItems = workspaceNav.filter(({ label }) => matches(label));
+  const branchRows = repository.branches
+    .map((branch, index) => ({ branch, index }))
+    .filter(({ branch }) => matches(branch.name));
+  const remoteRows = repository.remotes
+    .map(({ remote, branches }) => ({
+      remote,
+      branches: matches(remote) ? branches : branches.filter((branch) => matches(`${remote}/${branch}`)),
+    }))
+    .filter(({ branches }) => branches.length > 0 || !searching);
+  const tagRows = repository.tags.filter((tag) => matches(tag.name));
+  const stashRows = repository.stashes.filter((entry) => matches(entry.message));
+  const worktreeRows = repository.worktrees.filter((tree) => matches(tree.name, tree.branch, tree.path));
+  const submoduleRows = repository.submodules.filter((sub) => matches(sub.name, sub.path));
+  const nothingFound = searching && navItems.length + branchRows.length + remoteRows.length
+    + tagRows.length + stashRows.length + worktreeRows.length + submoduleRows.length === 0;
 
   const submitNewBranch = () => {
     const name = newName.trim();
@@ -126,6 +155,36 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           </button>
         )}
       </div>
+      <div className="nav-search" role="search">
+        <Search size={12} strokeWidth={1.5} className="nav-search__icon" />
+        <input
+          className="nav-search__input"
+          type="text"
+          value={query}
+          placeholder="Search menu, branches, tags…"
+          aria-label="Search the workspace menu"
+          spellCheck={false}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setQuery('');
+            // Enter jumps to the first matching menu item.
+            if (event.key === 'Enter' && navItems.length > 0) onNavigate(navItems[0].id);
+          }}
+        />
+        {query && (
+          <button
+            type="button"
+            className="nav-search__clear"
+            aria-label="Clear search"
+            title="Clear (Esc)"
+            onClick={() => setQuery('')}
+          >
+            <X size={11} strokeWidth={1.75} />
+          </button>
+        )}
+      </div>
+      {nothingFound && <p className="nav-search__empty">No match for “{query.trim()}”</p>}
+      {(!searching || navItems.length > 0) && (
       <div className="nav-sidebar__workspace">
         <button
           className="nav-sidebar__heading"
@@ -135,9 +194,9 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           <span>Workspace</span>
           <ChevronUp size={10} />
         </button>
-        {workspaceOpen && (
+        {(workspaceOpen || searching) && (
           <nav>
-            {workspaceNav.map(({ id, label, icon: Icon, badge }) => (
+            {navItems.map(({ id, label, icon: Icon, badge }) => (
               <button
                 key={id}
                 type="button"
@@ -160,11 +219,14 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           </nav>
         )}
       </div>
+      )}
 
       <div className="nav-sidebar__refs">
+        {(!searching || branchRows.length > 0 || creating) && (
         <Section
           title="Local branches"
-          count={repository.branches.length}
+          count={searching ? branchRows.length : repository.branches.length}
+          forceOpen={searching}
           action={
             <button
               type="button"
@@ -197,7 +259,7 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
               />
             </div>
           )}
-          {repository.branches.map((branch, index) => (
+          {branchRows.map(({ branch, index }) => (
             <button
               key={branch.name}
               type="button"
@@ -220,10 +282,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
             </button>
           ))}
         </Section>
+        )}
 
-        {repository.remotes.length > 0 && (
-          <Section title="Remotes" count={repository.remotes.length}>
-            {repository.remotes.map(({ remote, branches }) => (
+        {remoteRows.length > 0 && (
+          <Section title="Remotes" count={remoteRows.length} forceOpen={searching}>
+            {remoteRows.map(({ remote, branches }) => (
               <div key={remote} className="nav-remote">
                 <div className="nav-remote__head">
                   <Cloud size={11} strokeWidth={1.25} />
@@ -251,9 +314,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           </Section>
         )}
 
+        {(!searching || tagRows.length > 0 || tagCreating) && (
         <Section
           title="Tags"
-          count={repository.tagTotal}
+          count={searching ? tagRows.length : repository.tagTotal}
+          forceOpen={searching}
             action={
             <button
                 type="button"
@@ -286,7 +351,7 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
                 />
               </div>
             )}
-            {repository.tags.map((tag) => (
+            {tagRows.map((tag) => (
               <button
                 key={tag.name}
                 type="button"
@@ -301,11 +366,14 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
               </button>
             ))}
         </Section>
+        )}
 
         {/* The design keeps STASHES visible even when the list is empty. */}
+        {(!searching || stashRows.length > 0) && (
         <Section
           title="Stashes"
-          count={repository.stashes.length}
+          count={searching ? stashRows.length : repository.stashes.length}
+          forceOpen={searching}
           action={
             <button
               type="button"
@@ -319,7 +387,7 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
             </button>
           }
         >
-            {repository.stashes.map((stash) => (
+            {stashRows.map((stash) => (
               <div key={stash.index} className="nav-stash">
                 <span className="nav-stash__icon">
                   <Archive size={12} strokeWidth={1.25} />
@@ -359,10 +427,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
               </div>
             ))}
           </Section>
+        )}
 
-        {repository.worktrees.length > 0 && (
-          <Section title="Worktrees" count={repository.worktrees.length}>
-            {repository.worktrees.map((tree) => (
+        {worktreeRows.length > 0 && (
+          <Section title="Worktrees" count={worktreeRows.length} forceOpen={searching}>
+            {worktreeRows.map((tree) => (
               <button
                 key={tree.name}
                 type="button"
@@ -380,9 +449,9 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           </Section>
         )}
 
-        {repository.submodules.length > 0 && (
-          <Section title="Submodules" count={repository.submodules.length}>
-            {repository.submodules.map((sub) => (
+        {submoduleRows.length > 0 && (
+          <Section title="Submodules" count={submoduleRows.length} forceOpen={searching}>
+            {submoduleRows.map((sub) => (
               <button
                 key={sub.name}
                 type="button"

@@ -52,6 +52,8 @@ struct PtyChunk {
 struct PtyExit {
     id: u32,
     code: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output: Option<String>,
 }
 
 /// A shell the terminal can be spawned with.
@@ -272,9 +274,40 @@ pub fn pty_create(
     state: State<'_, std::sync::Mutex<AppState>>,
     shell_id: Option<String>,
     cwd: String,
+    startup_command: Option<String>,
 ) -> Result<PtySessionInfo, String> {
     let remote = state.lock().map_err(|error| error.to_string())?.ssh_workspace.as_ref()
         .map(|workspace| Arc::clone(&workspace.connection));
+    if let Some(command) = startup_command {
+        if !matches!(command.as_str(), "npm start" | "npm run dev" | "npm run tauri dev") {
+            return Err("Unsupported project startup command.".into());
+        }
+        let cmd = if let Some(remote) = remote {
+            let script = format!("cd -P {} && exec {command}", shell_quote(&remote.remote_path));
+            remote.endpoint.command(Some(&format!("sh -c {}", shell_quote(&script))))
+        } else {
+            let directory = std::path::Path::new(&cwd);
+            if !directory.is_dir() {
+                return Err("The workspace directory is unavailable.".into());
+            }
+            #[cfg(windows)]
+            let mut cmd = {
+                let system = windows_shell_dir().ok_or("Windows system directory is unavailable.")?;
+                let mut cmd = CommandBuilder::new(system.join("cmd.exe"));
+                cmd.args(["/d", "/c", &command]);
+                cmd
+            };
+            #[cfg(not(windows))]
+            let mut cmd = {
+                let mut cmd = CommandBuilder::new("/bin/sh");
+                cmd.args(["-c", &format!("exec {command}")]);
+                cmd
+            };
+            cmd.cwd(directory);
+            cmd
+        };
+        return spawn_pty_with_output(app, cmd, command, None, true);
+    }
     if let Some(remote) = remote {
         let script = format!("cd -P {} && exec \"${{SHELL:-/bin/sh}}\" -i", shell_quote(&remote.remote_path));
         let command = format!("sh -c {}", shell_quote(&script));
@@ -370,9 +403,19 @@ pub(crate) fn pending_ssh_workspace(id: u32) -> Option<Arc<PendingWorkspace>> {
 
 fn spawn_pty(
     app: tauri::AppHandle,
+    cmd: CommandBuilder,
+    label: String,
+    attachment: Option<SessionAttachment>,
+) -> Result<PtySessionInfo, String> {
+    spawn_pty_with_output(app, cmd, label, attachment, false)
+}
+
+fn spawn_pty_with_output(
+    app: tauri::AppHandle,
     mut cmd: CommandBuilder,
     label: String,
     attachment: Option<SessionAttachment>,
+    capture_output: bool,
 ) -> Result<PtySessionInfo, String> {
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -417,6 +460,7 @@ fn spawn_pty(
     // ConPTY output stream does NOT reach EOF while the master is alive in
     // the registry, so exit detection must not depend on the reader.
     let app_exit = app.clone();
+    let (output_tx, output_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(200));
         let Ok(mut map) = PTYS.lock() else { return };
@@ -432,7 +476,12 @@ fn spawn_pty(
             commands::ssh_workspace_exited(&app_exit, id);
         }
         drop(closed); // drops the master → ConPTY closes → reader EOFs
-        let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code });
+        let output = if capture_output && code.is_some_and(|code| code != 0) {
+            output_rx.recv_timeout(std::time::Duration::from_millis(500)).ok()
+        } else {
+            None
+        };
+        let _ = app_exit.emit(EVENT_EXIT, PtyExit { id, code, output });
         return;
     });
 
@@ -443,12 +492,21 @@ fn spawn_pty(
         let mut reader = reader;
         let mut buf = [0u8; 8192];
         let mut leftover: Vec<u8> = Vec::new();
+        let mut output = String::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
                     let text = push_utf8_chunk(&mut leftover, &buf[..n]);
                     if !text.is_empty() {
+                        if capture_output {
+                            output.push_str(&text);
+                            if output.len() > 24_000 {
+                                let mut start = output.len() - 24_000;
+                                while !output.is_char_boundary(start) { start += 1; }
+                                output.drain(..start);
+                            }
+                        }
                         let _ = app_out.emit(EVENT_OUTPUT, PtyChunk { id, data: text });
                     }
                 }
@@ -463,6 +521,9 @@ fn spawn_pty(
                     data: String::from_utf8_lossy(&leftover).into_owned(),
                 },
             );
+        }
+        if capture_output {
+            let _ = output_tx.send(strip_ansi(&output));
         }
     });
 
@@ -612,6 +673,7 @@ pub async fn agent_shell_run(
     state: State<'_, std::sync::Mutex<AppState>>,
     command: String,
     timeout_secs: Option<u64>,
+    on_output: tauri::ipc::Channel<String>,
 ) -> Result<AgentShellOutput, String> {
     let repo_path = {
         let app = state.lock().map_err(|e| e.to_string())?;
@@ -627,13 +689,18 @@ pub async fn agent_shell_run(
     }
 
     tauri::async_runtime::spawn_blocking(move || {
-        agent_shell_blocking(&repo_path, &command, timeout_ms)
+        agent_shell_blocking(&repo_path, &command, timeout_ms, on_output)
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-fn agent_shell_blocking(cwd: &std::path::Path, command: &str, timeout_ms: u64) -> Result<AgentShellOutput, String> {
+fn agent_shell_blocking(
+    cwd: &std::path::Path,
+    command: &str,
+    timeout_ms: u64,
+    on_output: tauri::ipc::Channel<String>,
+) -> Result<AgentShellOutput, String> {
     // Same host rule as the terminal profiles: the console-subsystem helper
     // when present, else this binary (debug builds).
     let exe = pigry_shell_path()
@@ -689,11 +756,19 @@ fn agent_shell_blocking(cwd: &std::path::Path, command: &str, timeout_ms: u64) -
     let started = std::time::Instant::now();
     let mut last_output = started;
     let mut raw: Vec<u8> = Vec::new();
+    let mut stream_pending = Vec::new();
+    let mut collect = |chunk: &[u8], raw: &mut Vec<u8>| {
+        raw.extend_from_slice(chunk);
+        let text = push_utf8_chunk(&mut stream_pending, chunk);
+        if !text.is_empty() {
+            let _ = on_output.send(strip_ansi(&text));
+        }
+    };
     let mut timed_out = false;
     loop {
         match rx.recv_timeout(std::time::Duration::from_millis(100)) {
             Ok(chunk) => {
-                raw.extend_from_slice(&chunk);
+                collect(&chunk, &mut raw);
                 last_output = std::time::Instant::now();
             }
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
@@ -709,18 +784,23 @@ fn agent_shell_blocking(cwd: &std::path::Path, command: &str, timeout_ms: u64) -
             break;
         }
         if last_output.elapsed() >= std::time::Duration::from_millis(AGENT_SHELL_IDLE_CAP_MS) {
+            timed_out = true;
             break;
         }
     }
     // Brief drain so trailing bytes riding the channel make it in.
     while let Ok(chunk) = rx.recv_timeout(std::time::Duration::from_millis(150)) {
-        raw.extend_from_slice(&chunk);
+        collect(&chunk, &mut raw);
     }
     kill_child_tree(&mut child);
 
     let mut output = clean_transcript(&raw);
     if output.len() > 24_000 {
-        output = format!("[output truncated]\n{}", &output[output.len() - 24_000..]);
+        let mut start = output.len() - 24_000;
+        while !output.is_char_boundary(start) {
+            start += 1;
+        }
+        output = format!("[output truncated]\n{}", &output[start..]);
     }
     let code = tail_exit_code(&output);
     Ok(AgentShellOutput { output, code, timed_out })

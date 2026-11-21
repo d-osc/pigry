@@ -263,9 +263,19 @@
 }
 
 /* ---- Editor groups (VS Code-style splits) ---- */
+.explorer-screen__editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .explorer-screen__groups {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   align-items: stretch;
   overflow: hidden;

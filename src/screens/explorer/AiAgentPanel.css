@@ -713,14 +713,38 @@
   padding: 2px 0;
 }
 
+.ai-composer__input,
+.ai-composer__highlight {
+  box-sizing: border-box;
+  padding: 2px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+
+.ai-composer__highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: transparent;
+  pointer-events: none;
+}
+
+.ai-composer__highlight .mention {
+  color: transparent;
+  font-weight: inherit;
+  padding: 0;
+}
+
 .ai-composer__input {
+  position: relative;
   resize: none;
   border: none;
   outline: none;
   background: none;
-  font: inherit;
-  font-size: var(--fs-sm);
-  line-height: 1.45;
   color: var(--text-primary);
   max-height: 140px;
 }
@@ -798,6 +822,43 @@
   color: var(--text-muted);
   cursor: default;
   transform: none;
+}
+
+.ai-composer__send--pause {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.ai-composer__send--paused {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  animation: ai-paused-pulse 1.6s ease-in-out infinite;
+}
+
+.ai-composer__paused {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-tint-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font-size: var(--fs-2xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@keyframes ai-paused-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-composer__send--paused { animation: none; }
 }
 
 .ai-composer__hint {
@@ -1376,6 +1437,20 @@
 }
 
 /* Tool-activity chips — file ops an agent performed this turn */
+.explorer-ai__tool-activity {
+  margin-bottom: 6px;
+}
+
+.explorer-ai__tool-activity > summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: var(--fs-2xs);
+}
+
+.explorer-ai__tool-activity[open] > summary {
+  margin-bottom: 6px;
+}
+
 .explorer-ai__msg-tools {
   display: flex;
   flex-wrap: wrap;
@@ -1578,6 +1653,121 @@
   margin: 0;
 }
 
+/* file references in chat — click to open in the editor */
+.md-file-link {
+  display: inline;
+  padding: 0 3px;
+  border: none;
+  border-radius: 4px;
+  background: var(--accent-tint-1);
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.md-file-link--code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.md-file-link:hover {
+  background: var(--accent-tint-2);
+  text-decoration-style: solid;
+}
+
+/* live work log — what the running agent is thinking and doing */
+.ai-live {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-card);
+  font-size: var(--fs-2xs);
+}
+
+.ai-live > summary {
+  cursor: pointer;
+  padding: 5px 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ai-live__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-live__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-live__icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.ai-live__step--thinking .ai-live__icon { color: var(--text-muted); }
+.ai-live__step--error .ai-live__title { color: var(--danger, #e5534b); }
+
+.ai-live__title {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.ai-live__state {
+  color: var(--accent);
+}
+
+.ai-live__time {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.ai-live__detail,
+.ai-live__result pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  max-height: 120px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--bg-workspace);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-live__step--thinking .ai-live__detail {
+  font-style: italic;
+}
+
+.ai-live__result > summary {
+  cursor: pointer;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+
+/* paused — static icon, no motion, accent colour */
+.ai-activity--paused {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ai-activity--paused .ai-activity__icon {
+  animation: none;
+}
+
 /* thinking — the icon gently breathes */
 .ai-activity--thinking .ai-activity__icon {
   animation: ai-think 1.3s ease-in-out infinite;
@@ -1660,3 +1850,7 @@
 .explorer-ai__body {
   user-select: text;
 }
+
+/* Design-editor layers attached to a message */
+.ai-composer__sel-chip--layer { border-color: var(--accent-tint-3); }
+.explorer-ai__msg-layers { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }

@@ -19,7 +19,8 @@ import { isMac } from '../lib/platform';
 const chunkWriters = new Map<number, ((data: string) => void) | null>();
 const exitHandlers = new Map<number, ((code: number | null) => void) | null>();
 const stashedChunks = new Map<number, string[]>();
-const stashedExits = new Map<number, number | null>();
+const stashedExits = new Map<number, PtyExitEvent>();
+const exitObservers = new Map<number, (event: PtyExitEvent) => void>();
 let listenerReady: Promise<void> | null = null;
 
 function handlePtyChunk(id: number, data: string) {
@@ -32,10 +33,23 @@ function handlePtyChunk(id: number, data: string) {
   }
 }
 
-function handlePtyExit(id: number, code: number | null) {
+function handlePtyExit(event: PtyExitEvent) {
+  const { id, code } = event;
+  exitObservers.get(id)?.(event);
+  exitObservers.delete(id);
   const handler = exitHandlers.get(id);
   if (handler) handler(code);
-  else stashedExits.set(id, code);
+  else stashedExits.set(id, event);
+}
+
+export function observePtyExit(id: number): Promise<PtyExitEvent> {
+  const exited = stashedExits.get(id);
+  return exited ? Promise.resolve(exited) : new Promise((resolve) => exitObservers.set(id, resolve));
+}
+
+export function cancelPtyObservation(id: number) {
+  exitObservers.get(id)?.({ id, code: null });
+  exitObservers.delete(id);
 }
 
 export async function ensurePtyListener(): Promise<void> {
@@ -46,7 +60,7 @@ export async function ensurePtyListener(): Promise<void> {
     });
     try {
       await listen<PtyExitEvent>('pty-exit', ({ payload }) => {
-        handlePtyExit(payload.id, payload.code);
+        handlePtyExit(payload);
       });
     } catch (error) {
       stopOutput();
@@ -64,7 +78,7 @@ function drainStashed(id: number): { chunks: string[]; exit: number | null | und
   stashedChunks.delete(id);
   const exit = stashedExits.get(id);
   stashedExits.delete(id);
-  return { chunks, exit };
+  return { chunks, exit: exit?.code };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,6 +171,7 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
     }
 
     term.onData((data) => {
+      if (data === '\x03') cancelPtyObservation(id);
       if (!exitedRef.current) void ptyWrite(id, data);
     });
     term.onTitleChange((title) => onTitle(id, title));

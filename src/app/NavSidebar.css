@@ -466,3 +466,63 @@
   color: var(--accent);
   background: var(--accent-tint-1);
 }
+
+/* ---- search: filters the menu items and the branch / tag / stash lists ---- */
+.nav-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 6px 8px 4px;
+}
+
+.nav-search__icon {
+  position: absolute;
+  left: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.nav-search__input {
+  width: 100%;
+  height: 28px;
+  padding: 0 26px 0 28px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+  outline: none;
+}
+
+.nav-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+.nav-search__input:focus {
+  border-color: var(--accent-tint-3);
+}
+
+.nav-search__clear {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.nav-search__clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+
+.nav-search__empty {
+  margin: 8px 14px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}

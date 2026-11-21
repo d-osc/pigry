@@ -1390,6 +1390,19 @@ pub async fn write_worktree_file(
 }
 
 #[tauri::command]
+pub async fn write_worktree_binary(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    data: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::write_worktree_binary(&repo_path, &path, &data)
+}
+
+#[tauri::command]
 pub async fn delete_worktree_file(
     state: State<'_, Mutex<AppState>>,
     path: String,
@@ -2027,8 +2040,7 @@ pub async fn browser_devtools(
                 &url,
                 wait,
             )
-            .await?;
-            Ok("opened".to_string())
+            .await
         }
         "eval" => {
             let js = js.ok_or("action \"eval\" requires js")?;
@@ -2048,8 +2060,45 @@ pub async fn browser_devtools(
             let repo_path = repo_path.ok_or_else(|| {
                 "open a repository first — screenshots save under .pigry/devtools".to_string()
             })?;
-            crate::devtools::devtools_screenshot(&repo_path).await
+            // For "screenshot" the `url` field carries the optional `save_as` path.
+            crate::devtools::devtools_screenshot(&repo_path, url.as_deref(), js.as_deref()).await
         }
+        // Test evidence. `url` carries the workspace-relative save_as path;
+        // for network_export `js` is the filter ("api" keeps XHR/fetch only).
+        "network_export" => {
+            let repo_path = repo_path.ok_or("open a repository first — evidence saves under .pigry/")?;
+            let save_as = url.ok_or("network_export requires a save_as path")?;
+            let api_only = js.as_deref().map(|value| value != "all").unwrap_or(true);
+            crate::devtools::devtools_network_export(&repo_path, &save_as, api_only).await
+        }
+        "record_start" => {
+            let repo_path = repo_path.ok_or("open a repository first — evidence saves under .pigry/")?;
+            let save_as = url.ok_or("record_start requires a save_as path")?;
+            crate::devtools::devtools_record_start(&repo_path, &save_as).await
+        }
+        "record_stop" => crate::devtools::devtools_record_stop().await,
+        "init_script" => crate::devtools::devtools_init_script(js.as_deref().unwrap_or("")).await,
+        // Trusted input, cookies (httpOnly too), extra headers and the web-security switch for the E2E runner.
+        "input" => crate::devtools::devtools_input(js.as_deref().unwrap_or("[]")).await,
+        "cookies" => crate::devtools::devtools_cookies().await,
+        "set_cookie" => crate::devtools::devtools_set_cookie(js.as_deref().unwrap_or("{}")).await,
+        "clear_cookies" => crate::devtools::devtools_clear_cookies(js.as_deref()).await,
+        "headers" => crate::devtools::devtools_headers(js.as_deref().unwrap_or("{}")).await,
+        "websecurity" => {
+            crate::devtools::set_web_security(js.as_deref() != Some("off"));
+            Ok("web security setting applies to the next browser launch".to_string())
+        }
+        // CSS / responsive testing. `js` carries "width,height[,mobile]" (width 0
+        // clears) for viewport, or "light" / "dark" / "" for color_scheme.
+        "viewport" => {
+            let spec = js.unwrap_or_default();
+            let mut parts = spec.split(',').map(str::trim);
+            let width = parts.next().and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+            let height = parts.next().and_then(|v| v.parse::<i64>().ok()).unwrap_or(800);
+            let mobile = parts.next().map(|v| v == "true" || v == "mobile").unwrap_or(false);
+            crate::devtools::devtools_viewport(width, height, mobile).await
+        }
+        "color_scheme" => crate::devtools::devtools_color_scheme(js.as_deref().unwrap_or("")).await,
         "dom" => {
             let limit = waitMs.unwrap_or(16_000) as usize;
             crate::devtools::devtools_dom(limit).await
@@ -2139,8 +2188,17 @@ pub async fn browser(
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("url must start with http:// or https://".to_string());
     }
-    tauri_plugin_opener::open_url(url.clone(), None::<&str>)
-        .map_err(|e| format!("failed to open browser: {e}"))?;
+    if let Err(primary) = tauri_plugin_opener::open_url(url.clone(), None::<&str>) {
+        // Fallback: let the Windows shell hand the URL to the default
+        // browser (rundll32 keeps `&` in query strings intact, unlike cmd start).
+        let status = std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &url])
+            .status()
+            .map_err(|e| format!("failed to open browser: {primary}; fallback: {e}"))?;
+        if !status.success() {
+            return Err(format!("failed to open browser: {primary}"));
+        }
+    }
     Ok(format!("opened {url} in the default browser"))
 }
 

@@ -24,10 +24,11 @@
 
 .terminal-panel__tabsbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
   justify-content: space-between;
-  gap: 8px;
-  height: 32px;
+  gap: 0 8px;
+  min-height: 32px;
   flex-shrink: 0;
   padding: 0 4px 0 0;
   background: var(--bg-statusbar);
@@ -36,6 +37,7 @@
 
 .terminal-panel__tabs {
   display: flex;
+  flex: 1 1 120px;
   align-items: stretch;
   min-width: 0;
   overflow-x: auto;
@@ -48,6 +50,7 @@
 
 .terminal-panel__tab {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 2px;
   padding: 0 6px 0 8px;
@@ -248,6 +251,35 @@
   min-height: 0;
   display: flex;
   background: var(--bg-panel);
+}
+
+.terminal-panel__agent-log {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 6px 10px;
+  font: 12px/1.45 var(--font-mono);
+  color: var(--text-primary);
+  user-select: text;
+}
+
+.terminal-panel__agent-command + .terminal-panel__agent-command {
+  margin-top: 9px;
+}
+
+.terminal-panel__agent-command pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.terminal-panel__agent-prompt {
+  color: var(--accent);
+}
+
+.terminal-panel__agent-status {
+  color: var(--text-muted);
 }
 
 .terminal-panel__split {

@@ -60,6 +60,8 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
           case 'pty_create_ssh':
             sshConnection = args;
             return { id: 271, label: 'SSH · ' + args.host, shellName: 'ssh' };
+          case 'pty_create':
+            return { id: ++setupId, label: 'Fixture shell', shellName: 'Fixture shell' };
           case 'pty_start_ssh_workspace':
             sshPath = args.path;
             return { id: ++setupId, label: 'PIGRY Server · ' + sshConnection.host, shellName: 'pigry-server' };

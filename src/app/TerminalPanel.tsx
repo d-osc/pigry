@@ -4,7 +4,7 @@
  * Terminals live in GROUPS: a group is one split tree (a lone terminal is a
  * one-leaf tree, splitting nests two panes). The pane area renders the
  * active group; the tab bar lists every terminal across groups. */
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore, type Ref } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -19,15 +19,18 @@ import {
   ptyCreate,
   ptyKill,
   ptyListShells,
+  type PtyExitEvent,
   type ShellProfile,
 } from '../lib/tauriClient';
-import { PtyTerminalView } from './PtyTerminalView';
+import { cancelPtyObservation, ensurePtyListener, observePtyExit, PtyTerminalView } from './PtyTerminalView';
 import { ResizeHandle } from './ResizeHandle';
 import { useTerminalTheme } from '../hooks/useTerminalTheme';
 import { useRepository } from '../hooks/useRepository';
+import { agentTerminalFor } from '../lib/agentTerminal';
 import './TerminalPanel.css';
 
 interface TerminalPanelProps {
+  ref?: Ref<TerminalPanelHandle>;
   /** Repository root — new terminals start here. */
   cwd: string;
   /** Panel visibility; hidden panels keep their PTY sessions + scrollback. */
@@ -35,6 +38,9 @@ interface TerminalPanelProps {
   onClose: () => void;
 }
 
+export interface TerminalPanelHandle {
+  runCommand(command: string): Promise<{ exit: Promise<PtyExitEvent> }>;
+}
 interface TerminalTab {
   /** Backend PTY session id. */
   id: number;
@@ -109,12 +115,26 @@ function adjustWeights(node: PaneNode, splitId: number, index: 0 | 1, delta: num
 
 // ---------------------------------------------------------------------------
 
-export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
-  const sshWorkspace = !!useRepository().state?.sshWorkspace;
+export function TerminalPanel({ cwd, visible, onClose, ref }: TerminalPanelProps) {
+  const { state } = useRepository();
+  const sshWorkspace = !!state?.sshWorkspace;
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const transcript = agentTerminalFor(state?.activePath ?? cwd);
+  const commands = useSyncExternalStore(transcript.subscribe, transcript.getSnapshot);
+  const latestCommand = commands[commands.length - 1]?.id;
+  const [agentTabClosedAt, setAgentTabClosedAt] = useState<number | undefined>();
+  const [terminalSelectedAt, setTerminalSelectedAt] = useState<number | undefined>();
+  const agentTabOpen = latestCommand !== undefined && latestCommand !== agentTabClosedAt;
+  const agentSelected = agentTabOpen && (activeId === null || terminalSelectedAt !== latestCommand);
+  const agentLog = useRef<HTMLDivElement>(null);
+  const followLog = useRef(true);
+  useLayoutEffect(() => {
+    const log = agentLog.current;
+    if (log && followLog.current) log.scrollTop = log.scrollHeight;
+  }, [commands, agentSelected, visible]);
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [groups, setGroups] = useState<TerminalGroup[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<number | null>(null);
-  const [activeId, setActiveId] = useState<number | null>(null);
   const [shells, setShells] = useState<ShellProfile[]>([]);
   const [lastShellId, setLastShellId] = useState<string | null>(() => localStorage.getItem(SHELL_KEY));
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -129,6 +149,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   const theme = useTerminalTheme();
   const tabsRef = useRef<TerminalTab[]>([]);
   const groupsRef = useRef<TerminalGroup[]>([]);
+  const mounted = useRef(false);
 
   useEffect(() => {
     tabsRef.current = tabs;
@@ -141,8 +162,13 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   // Kill every session when the panel unmounts (repository switch — the
   // panel is keyed by repo path, so unmount = the workspace went away).
   useEffect(() => {
+    mounted.current = true;
     return () => {
-      for (const tab of tabsRef.current) void ptyKill(tab.id);
+      mounted.current = false;
+      for (const tab of tabsRef.current) {
+        cancelPtyObservation(tab.id);
+        void ptyKill(tab.id);
+      }
     };
   }, []);
 
@@ -152,11 +178,22 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   }, []);
 
   const createTerminal = useCallback(
-    async (shellId?: string | null) => {
-      if (!isTauri()) return;
-      const chosen = sshWorkspace ? null : shellId ?? lastShellId ?? shells[0]?.id ?? null;
+    async (shellId?: string | null, command?: string) => {
+      if (!isTauri()) {
+        if (command) throw new Error('Starting a project from the terminal requires the desktop app.');
+        return;
+      }
+      const chosen = sshWorkspace || command ? null : shellId ?? lastShellId ?? shells[0]?.id ?? null;
+      const existingCommands = transcript.getSnapshot();
+      const commandAtLaunch = existingCommands[existingCommands.length - 1]?.id;
       try {
-        const info = await ptyCreate(chosen, cwd);
+        if (command) await ensurePtyListener();
+        const info = await ptyCreate(chosen, cwd, command);
+        if (!mounted.current) {
+          await ptyKill(info.id);
+          return;
+        }
+        const exit = command ? observePtyExit(info.id) : undefined;
         if (chosen) {
           setLastShellId(chosen);
           localStorage.setItem(SHELL_KEY, chosen);
@@ -173,12 +210,22 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         setGroups((prev) => [...prev, group]);
         setActiveGroupId(group.id);
         setActiveId(info.id);
+        setTerminalSelectedAt(commandAtLaunch);
+        return exit ? { exit } : undefined;
       } catch (error) {
+        if (command) throw error;
         console.warn('terminal spawn failed', error);
       }
     },
-    [cwd, lastShellId, shells, sshWorkspace],
+    [cwd, lastShellId, shells, sshWorkspace, transcript],
   );
+  useImperativeHandle(ref, () => ({
+    async runCommand(command) {
+      const run = await createTerminal(null, command);
+      if (!run) throw new Error('The project terminal did not start.');
+      return run;
+    },
+  }), [createTerminal]);
 
   // Load the shell profile list once.
   useEffect(() => {
@@ -191,7 +238,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   useEffect(() => {
     if (bootedRef.current || !isTauri() || !cwd || (sshWorkspace && !visible)) return;
     bootedRef.current = true;
-    void createTerminal();
+    if (transcript.getSnapshot().length === 0) void createTerminal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, sshWorkspace, visible]);
 
@@ -200,6 +247,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
 
   const killTerminal = useCallback(
     (id: number) => {
+      cancelPtyObservation(id);
       void ptyKill(id);
       const current = tabsRef.current;
       const nextTabs = current.filter((tab) => tab.id !== id);
@@ -321,10 +369,11 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
   }, [renamingId, renameValue]);
 
   const activateTab = useCallback((id: number) => {
+    setTerminalSelectedAt(latestCommand);
     setActiveId(id);
     const group = groupOf(id, groupsRef.current);
     if (group) setActiveGroupId(group.id);
-  }, []);
+  }, [latestCommand]);
 
   const renderNode = (node: PaneNode): React.ReactNode => {
     if (node.kind === 'leaf') {
@@ -332,7 +381,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
         <PtyTerminalView
           key={`pty-${node.id}`}
           id={node.id}
-          focused={node.id === activeId}
+          focused={node.id === activeId && !agentSelected}
           theme={theme}
           onFocused={setActiveId}
           onTitle={handleTitle}
@@ -368,7 +417,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
     );
   };
 
-  const activeTab = tabs.find((tab) => tab.id === activeId) ?? null;
+  const activeTab = agentSelected ? null : tabs.find((tab) => tab.id === activeId) ?? null;
   const activeTree = groups.find((group) => group.id === activeGroupId)?.tree ?? null;
   const demo = !isTauri();
 
@@ -392,7 +441,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
           {tabs.map((tab) => (
             <div
               key={tab.id}
-              className={`terminal-panel__tab${tab.id === activeId ? ' terminal-panel__tab--active' : ''}${tab.exited ? ' terminal-panel__tab--exited' : ''}`}
+              className={`terminal-panel__tab${tab.id === activeId && !agentSelected ? ' terminal-panel__tab--active' : ''}${tab.exited ? ' terminal-panel__tab--exited' : ''}`}
               onMouseDown={() => activateTab(tab.id)}
               onDoubleClick={() => {
                 setRenamingId(tab.id);
@@ -424,6 +473,7 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
                   type="button"
                   className="terminal-panel__tab-btn"
                   title={`${tab.shellName} — ${cwd}`}
+                  onClick={() => activateTab(tab.id)}
                 >
                   <SquareTerminal size={12} strokeWidth={1.6} />
                   <span className="terminal-panel__tab-label">{tab.label}</span>
@@ -443,6 +493,27 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
               </button>
             </div>
           ))}
+          {agentTabOpen && (
+            <div className={`terminal-panel__tab${agentSelected ? ' terminal-panel__tab--active' : ''}`}>
+              <button type="button" className="terminal-panel__tab-btn" aria-pressed={agentSelected}
+                onClick={() => {
+                  followLog.current = true;
+                  setTerminalSelectedAt(undefined);
+                }}>
+                <SquareTerminal size={12} strokeWidth={1.6} />
+                <span className="terminal-panel__tab-label">Agent commands</span>
+              </button>
+              <button
+                type="button"
+                className="terminal-panel__tab-close"
+                aria-label="Close Agent commands"
+                title="Close Agent commands"
+                onClick={() => setAgentTabClosedAt(latestCommand)}
+              >
+                <X size={11} strokeWidth={1.75} />
+              </button>
+            </div>
+          )}
         </div>
         <div className="terminal-panel__actions">
           <button
@@ -535,9 +606,26 @@ export function TerminalPanel({ cwd, visible, onClose }: TerminalPanelProps) {
           <div className="terminal-panel__demo">
             <p>The integrated terminal runs in the desktop app — a real PTY (ConPTY) needs Tauri.</p>
           </div>
-        ) : activeTree ? (
-          renderNode(activeTree)
-        ) : null}
+        ) : (
+          <>
+            {activeTree && <div style={{ display: agentSelected ? 'none' : 'contents' }}>{renderNode(activeTree)}</div>}
+            {agentSelected && (
+              <div className="terminal-panel__agent-log" ref={agentLog} role="log" aria-label="Agent commands"
+                onScroll={(event) => {
+                  const log = event.currentTarget;
+                  followLog.current = log.scrollHeight - log.scrollTop - log.clientHeight < 24;
+                }}>
+                {commands.map((entry) => (
+                  <div key={entry.id} className="terminal-panel__agent-command">
+                    <pre className="terminal-panel__agent-prompt">$ {entry.command}</pre>
+                    {entry.output && <pre>{entry.output}</pre>}
+                    <span className="terminal-panel__agent-status">{entry.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {tabMenu && (

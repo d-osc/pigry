@@ -11,7 +11,6 @@ import { useFileBlame } from '../../hooks/useFileBlame';
 import { useLineChanges } from '../../hooks/useLineChanges';
 import { relativeTime } from '../../lib/relativeTime';
 import type { WorktreeFileContent } from '../../types/repository';
-import { TerminalPanel } from '../../app/TerminalPanel';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { FileHistoryPanel } from './FileHistoryPanel';
 import { MergePanel } from './MergePanel';
@@ -30,8 +29,6 @@ interface EditorPaneProps {
   revealLine?: number | null;
   revealColumn?: number | null;
   /** Integrated terminal panel, shown between the editor and the footer. */
-  terminalOpen?: boolean;
-  onToggleTerminal?: () => void;
   /** Reports the current buffer + dirty flag so tabs and the header stay in sync. */
   onBufferChange: (
     buffer: { content: string; language: string; dirty: boolean } | null,
@@ -88,8 +85,6 @@ export function EditorPane({
   path,
   revealLine,
   revealColumn,
-  terminalOpen,
-  onToggleTerminal,
   onBufferChange,
   onJumpToCommit,
   onSelectionChange,
@@ -790,14 +785,6 @@ export function EditorPane({
         />
       )}
 
-      {/* Always mounted — hidden terminals keep their PTY sessions and
-          scrollback alive (keyed by repo so sessions die with the repo). */}
-      <TerminalPanel
-        key={repository?.localPath ?? 'no-repo'}
-        cwd={repository?.localPath ?? ''}
-        visible={!!terminalOpen}
-        onClose={() => onToggleTerminal?.()}
-      />
     </div>
   );
 }

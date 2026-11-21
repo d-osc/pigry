@@ -1537,6 +1537,33 @@ pub fn write_worktree_file(repo_path: &Path, path: &str, content: &str) -> Resul
     Ok(())
 }
 
+/// Writes a binary file (base64 payload) — only under `.pigry/` and only for
+/// image/video evidence and exports, so a tool can never drop arbitrary
+/// binaries elsewhere in the workspace.
+pub fn write_worktree_binary(repo_path: &Path, path: &str, data_base64: &str) -> Result<()> {
+    let rel = path.trim().replace('\\', "/");
+    let ext_ok = [".png", ".jpg", ".jpeg", ".webp", ".webm"]
+        .iter()
+        .any(|ext| rel.to_ascii_lowercase().ends_with(ext));
+    if !rel.starts_with(".pigry/") || !ext_ok || rel.contains("..") || rel.contains(':') {
+        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.webm".to_string());
+    }
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.trim())
+        .map_err(|e| format!("invalid base64 data: {e}"))?;
+    if bytes.len() > MAX_BINARY_BYTES {
+        return Err(format!("file too large (over {} MB)", MAX_BINARY_BYTES / 1_000_000));
+    }
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, &rel, false)?;
+    if let Some(parent) = full.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    std::fs::write(&full, bytes).map_err(|e| format!("failed to write {rel}: {e}"))?;
+    Ok(())
+}
+
 /// Remove a file from the worktree (the deletion shows up in git status).
 pub fn delete_worktree_file(repo_path: &Path, path: &str) -> Result<()> {
     let repo = Repository::discover(repo_path).map_err(err)?;
@@ -3455,4 +3482,20 @@ pub fn line_changes(repo_path: &Path, path: &str) -> Result<Vec<LineChange>> {
     }
     changes.sort_by_key(|c| c.line);
     Ok(changes)
+}
+
+#[cfg(test)]
+mod binary_write_tests {
+    use super::write_worktree_binary;
+    use std::path::Path;
+
+    #[test]
+    fn binary_writes_are_limited_to_pigry_images() {
+        let repo = Path::new(".");
+        for bad in ["src/a.png", ".pigry/../a.png", ".pigry/a.exe", ".pigry/a.txt", "C:/x.png", "/etc/a.png", ""] {
+            assert!(write_worktree_binary(repo, bad, "AA==").is_err(), "should reject {bad}");
+        }
+        let err = write_worktree_binary(repo, ".pigry/a.png", "not base64!!").unwrap_err();
+        assert!(err.contains("base64"), "bad payloads are rejected before touching the disk: {err}");
+    }
 }

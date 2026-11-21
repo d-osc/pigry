@@ -684,7 +684,7 @@ export function CommitGraphScreen({
           <ResizeHandle
             orientation="v"
             label="Resize AI panel"
-            onDelta={(dx) => setAiWidth((w) => Math.min(480, Math.max(280, w - dx)))}
+            onDelta={(dx) => setAiWidth((w) => Math.min(window.innerWidth * 0.65, Math.max(280, w - dx)))}
           />
         )}
         {aiOpen ? (

@@ -1,6 +1,7 @@
 import {
   Activity,
   Bot,
+  FlaskConical,
   CircleDot,
   FileDiff,
   FolderTree,
@@ -22,10 +23,17 @@ import {
   Cherry,
   Copy,
   Pencil,
+  Workflow,
+  PenTool,
+  StickyNote,
 } from 'lucide-react';
 
 export type NavId =
   | 'explorer'
+  | 'diagram'
+  | 'design'
+  | 'board'
+  | 'e2e'
   | 'commit-graph'
   | 'working-changes'
   | 'merge-branch'
@@ -61,6 +69,10 @@ export interface NavItem {
 
 export const workspaceNav: NavItem[] = [
   { id: 'explorer', label: 'Explorer', icon: FolderTree },
+  { id: 'diagram', label: 'Diagram', icon: Workflow },
+  { id: 'design', label: 'Design', icon: PenTool },
+  { id: 'board', label: 'Board', icon: StickyNote },
+  { id: 'e2e', label: 'E2E Testing', icon: FlaskConical },
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },

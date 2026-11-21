@@ -1,5 +1,5 @@
 /** Typed wrappers around the Tauri commands defined in src-tauri/src/commands.rs. */
-import { invoke } from '@tauri-apps/api/core';
+import { Channel, invoke } from '@tauri-apps/api/core';
 import { memoryScope } from './teamStore';
 import type {
   AppStatePayload,
@@ -725,6 +725,7 @@ export interface PtyChunkEvent {
 export interface PtyExitEvent {
   id: number;
   code: number | null;
+  output?: string;
 }
 
 export async function ptyListShells(): Promise<ShellProfile[]> {
@@ -732,9 +733,9 @@ export async function ptyListShells(): Promise<ShellProfile[]> {
   return invoke('pty_list_shells');
 }
 
-export async function ptyCreate(shellId: string | null, cwd: string): Promise<PtySessionInfo> {
+export async function ptyCreate(shellId: string | null, cwd: string, startupCommand?: string): Promise<PtySessionInfo> {
   if (!isTauri()) throw new Error('The integrated terminal needs the desktop app.');
-  return invoke('pty_create', { shellId, cwd });
+  return invoke('pty_create', { shellId, cwd, ...(startupCommand ? { startupCommand } : {}) });
 }
 
 export async function ptyCreateSsh(host: string, username: string | null, port: number | null, browseFolders: boolean): Promise<PtySessionInfo> {
@@ -772,7 +773,7 @@ export interface AgentShellOutput {
 }
 
 /** Run one command through a private Pigry Bash session (agent terminal tool). */
-export async function agentShellRun(command: string, timeoutSecs?: number): Promise<AgentShellOutput> {
+export async function agentShellRun(command: string, timeoutSecs?: number, onOutput?: (text: string) => void): Promise<AgentShellOutput> {
   if (!isTauri()) {
     return {
       output: `Browser preview cannot run commands — launch the desktop app.\n$ ${command}`,
@@ -780,7 +781,7 @@ export async function agentShellRun(command: string, timeoutSecs?: number): Prom
       timedOut: false,
     };
   }
-  return invoke('agent_shell_run', { command, timeoutSecs });
+  return invoke('agent_shell_run', { command, timeoutSecs, onOutput: new Channel<string>(onOutput) });
 }
 
 export async function readBinaryFile(
@@ -801,6 +802,12 @@ export async function readWorktreeFile(path: string): Promise<WorktreeFileConten
 export async function writeWorktreeFile(path: string, content: string): Promise<void> {
   if (!isTauri()) return;
   return invoke('write_worktree_file', { path, content });
+}
+
+/** Writes an image/video (base64) — the backend only accepts paths under .pigry/. */
+export async function writeWorktreeBinary(path: string, dataBase64: string): Promise<void> {
+  if (!isTauri()) return;
+  return invoke('write_worktree_binary', { path, data: dataBase64 });
 }
 
 export async function deleteWorktreeFile(path: string): Promise<void> {  if (!isTauri()) return;
@@ -1029,7 +1036,10 @@ export async function browserPage(url: string, waitMs?: number): Promise<Browser
   return invoke('browser_page', { url, waitMs: waitMs ?? null });
 }
 
-export type DevtoolsAction = 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'network' | 'close';
+export type DevtoolsAction =
+  | 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'network' | 'close'
+  | 'network_export' | 'record_start' | 'record_stop' | 'viewport' | 'color_scheme' | 'init_script'
+  | 'input' | 'cookies' | 'set_cookie' | 'clear_cookies' | 'headers' | 'websecurity';
 
 export async function openInBrowser(url: string): Promise<string> {
   return invoke('browser', { url });

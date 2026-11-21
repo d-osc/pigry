@@ -357,17 +357,17 @@ export function FileTree({
   const nodes = useMemo(() => buildTree(visibleEntries), [visibleEntries]);
   const rows = useMemo(() => flattenVisibleTree(nodes, expanded), [nodes, expanded]);
   const virtual = rows.length > 500;
-  const rootOffset = (repoName || branch) && !filter ? 26 : 0;
-  const count = Math.ceil(viewportHeight / 26) + 16;
-  const start = Math.min(Math.max(0, rows.length - count), Math.max(0, Math.floor((scrollTop - rootOffset) / 26) - 8));
+  const rootOffset = (repoName || branch) && !filter ? 32 : 0;
+  const count = Math.ceil(viewportHeight / 32) + 16;
+  const start = Math.min(Math.max(0, rows.length - count), Math.max(0, Math.floor((scrollTop - rootOffset) / 32) - 8));
   useEffect(() => {
     const host = treeRef.current;
     if (!virtual || !host) return;
     const index = rows.findIndex(({ node }) => node.path === (renamingPath ?? selectedPath));
     if (index < 0) return;
-    const top = rootOffset + index * 26;
+    const top = rootOffset + index * 32;
     if (top < host.scrollTop) host.scrollTop = top;
-    else if (top + 24 > host.scrollTop + host.clientHeight) host.scrollTop = top + 24 - host.clientHeight;
+    else if (top + 30 > host.scrollTop + host.clientHeight) host.scrollTop = top + 30 - host.clientHeight;
   }, [virtual, rows, selectedPath, renamingPath, rootOffset]);
   const statusMap = useMemo(
     () => new Map((tree?.changed ?? []).map((file) => [file.path, file.status])),
@@ -418,9 +418,9 @@ export function FileTree({
         <div className="file-tree__empty">No files match this filter</div>
       )}
       {virtual ? (
-        <div style={{ position: 'relative', height: rows.length * 26, flexShrink: 0 }}>
+        <div style={{ position: 'relative', height: rows.length * 32, flexShrink: 0 }}>
           {rows.slice(start, start + count).map(({ node, depth }, index) => (
-            <div key={node.path} className="file-tree__virtual-row" style={{ position: 'absolute', top: (start + index) * 26, width: '100%', height: 24 }}>
+            <div key={node.path} className="file-tree__virtual-row" style={{ position: 'absolute', top: (start + index) * 32, width: '100%', height: 30 }}>
               <TreeRow node={node} depth={depth} flat selectedPath={selectedPath}
                 statusMap={statusMap} unpushedSet={unpushedSet} expanded={expanded}
                 onToggle={onToggleFolder} onSelect={onSelect} onContextMenu={onItemContextMenu}

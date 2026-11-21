@@ -293,6 +293,15 @@ const GIT_REVIEW_TOOLS = [
   'git_status', 'read_history', 'read_commit', 'read_diff', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts',
 ];
 
+/** The Diagram editor tools (src/lib/diagramTools.ts). */
+const DIAGRAM_TOOL_NAMES = ['diagram_list', 'diagram_read', 'diagram_write', 'diagram_edit', 'diagram_export', 'diagram_open'];
+/** The Design editor tools (src/lib/designTools.ts). */
+/** The Board editor tools (src/lib/boardTools.ts). */
+const BOARD_TOOL_NAMES = ['board_list', 'board_read', 'board_write', 'board_edit', 'board_preview', 'board_export', 'board_open'];
+/** The E2E Testing tools (src/lib/e2e/e2eTools.ts). */
+const E2E_TOOL_NAMES = ['e2e_list', 'e2e_read', 'e2e_write', 'e2e_edit', 'e2e_run', 'e2e_results', 'e2e_stats', 'e2e_selector', 'e2e_fixture', 'e2e_config', 'e2e_open'];
+const DESIGN_TOOL_NAMES = ['design_list', 'design_read', 'design_write', 'design_edit', 'design_check', 'design_preview', 'design_export', 'design_open'];
+
 /** Tier 1 defaults for untagged turns in every workspace menu. */
 const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | 'team' | 'tier'>> = {
   explorer: {
@@ -302,6 +311,38 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     emoji: '🔍',
     tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'git_status', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
     skills: ['file-navigation'],
+  },
+  e2e: {
+    username: 'e2e',
+    role: 'E2E test assistant',
+    description: 'Writes, runs and debugs Cypress-style end-to-end specs in the E2E Testing menu — selectors, network stubs, assertions — and explains failures from the command log, code frame and screenshots.',
+    emoji: '🧪',
+    tools: [...E2E_TOOL_NAMES, 'browser_e2e', 'browser_screenshot', 'read_file', 'list_files', 'search_code', 'write_file', 'agent_lookup', 'agent_contacts'],
+    skills: ['cypress-e2e-testing'],
+  },
+  board: {
+    username: 'board',
+    role: 'Whiteboard facilitator',
+    description: 'Runs workshops on the Board editor — brainstorms, retros, journey maps, prioritisation matrices — by adding sections and sticky notes, clustering ideas, voting and summarising the result.',
+    emoji: '🗒️',
+    tools: [...BOARD_TOOL_NAMES, 'read_file', 'list_files', 'search_code', 'write_file', 'agent_lookup', 'agent_contacts'],
+    skills: ['board-editor', 'workshop-facilitation'],
+  },
+  design: {
+    username: 'design',
+    role: 'Design assistant',
+    description: 'Designs screens and components in the Design editor — frames, auto layout, colour tokens — and previews, reviews and exports them.',
+    emoji: '🎨',
+    tools: [...DESIGN_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
+    skills: ['design-editor', 'ui-design-system'],
+  },
+  diagram: {
+    username: 'diagram',
+    role: 'Diagram assistant',
+    description: 'Draws and edits diagrams in the Diagram editor — flowcharts, ER diagrams, use cases and architecture — from a description or from the code in the repository.',
+    emoji: '🗺️',
+    tools: [...DIAGRAM_TOOL_NAMES, 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
+    skills: ['diagram-editor', 'diagram-modeling'],
   },
   'commit-graph': {
     username: 'commit-graph',
@@ -476,7 +517,39 @@ type WorkspaceBaseAgentSpec = Omit<BuiltinSpec, 'team' | 'tier'>;
 
 const DEVELOPMENT_FILES = ['list_files', 'search_code', 'read_file', 'read_diff', 'git_status', 'write_file'];
 
+/** SA — the system analyst. Offered in Explorer, Diagram and Copilot. */
+const SA_BASE_AGENT: WorkspaceBaseAgentSpec = {
+  username: 'sa',
+  name: 'SA',
+  role: 'System analyst',
+  description: 'Turns requirements into analysis and design: actors and use cases, process flows, ER diagrams and data dictionaries. Draws them in the Diagram editor and documents the results as Markdown.',
+  emoji: '📐',
+  tools: [...DEVELOPMENT_FILES, ...DIAGRAM_TOOL_NAMES, ...BOARD_TOOL_NAMES],
+  skills: ['system-analysis', 'diagram-modeling', 'diagram-editor', 'board-editor', 'discovery-mapping'],
+};
+
+/** QA — the tester. Offered in Explorer, E2E Testing and Copilot. */
+const QA_BASE_AGENT: WorkspaceBaseAgentSpec = {
+  username: 'qa',
+  name: 'QA',
+  role: 'Software tester',
+  description: 'Verifies software against its requirements, writes Markdown test cases, writes and runs Cypress-style end-to-end specs with screenshots, network and video evidence, and checks CSS, layout and themes.',
+  emoji: '🧪',
+  tools: [...DEVELOPMENT_FILES, 'run_command', 'browser_e2e', 'browser_screenshot', ...E2E_TOOL_NAMES],
+  skills: ['cypress-e2e-testing', 'qa-test-cases-and-e2e', 'qa-css-style-testing', 'run-tests'],
+};
+
 const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
+  {
+    username: 'database-designer',
+    name: 'Database Designer',
+    role: 'Database schema and migration design',
+    description: 'Designs schemas, relationships, indexes, and migration plans using the project’s database conventions.',
+    emoji: '🗄️',
+    tools: DEVELOPMENT_FILES,
+    skills: ['database-design'],
+  },
+  SA_BASE_AGENT,
   {
     username: 'coder',
     name: 'Coder',
@@ -495,15 +568,7 @@ const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
     tools: [...DEVELOPMENT_FILES, 'run_command'],
     skills: ['unit-testing-and-bug-reporting', 'run-tests'],
   },
-  {
-    username: 'qa',
-    name: 'QA',
-    role: 'Software tester',
-    description: 'Verifies software against its requirements, writes Markdown test cases, and runs end-to-end tests.',
-    emoji: '🧪',
-    tools: [...DEVELOPMENT_FILES, 'run_command', 'browser_e2e'],
-    skills: ['qa-test-cases-and-e2e', 'run-tests'],
-  },
+  QA_BASE_AGENT,
   {
     username: 'white-hat',
     name: 'White Hat Hacker',
@@ -526,6 +591,18 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
     skills: ['refactor-safety'],
   }, ...DEVELOPMENT_BASE_AGENTS],
+  diagram: [{ ...SA_BASE_AGENT, username: 'diagram-sa' }],
+  board: [{ ...SA_BASE_AGENT, username: 'board-sa', skills: ['discovery-mapping', 'workshop-facilitation', 'board-editor', 'system-analysis', 'diagram-modeling', 'diagram-editor'] }],
+  e2e: [{ ...QA_BASE_AGENT, username: 'e2e-qa' }],
+  design: [{
+    username: 'uxui',
+    name: 'UX/UI Designer',
+    role: 'UX and UI designer',
+    description: 'Designs user flows, wireframes and polished UI in the Design editor: auto-layout screens, a consistent design system with colour tokens, accessibility and usability review, previews its own work and hands off HTML/CSS and specs.',
+    emoji: '🖌️',
+    tools: ['list_files', 'search_code', 'read_file', 'write_file', 'read_image', 'web_search', ...DESIGN_TOOL_NAMES, ...DIAGRAM_TOOL_NAMES],
+    skills: ['ux-design-process', 'ui-design-system', 'design-editor'],
+  }],
   'ai-agent': [{
     username: 'workspace-guide',
     name: 'Workspace Guide',

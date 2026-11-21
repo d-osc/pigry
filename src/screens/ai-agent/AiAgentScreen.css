@@ -687,6 +687,9 @@
    the body — width is driven by the flex layout, not the inline value. */
 .agent-screen__body .explorer-ai {
   width: 100% !important;
+  /* The panel sets an inline max-width (65vw) for the narrow rail — lift it
+   * here or the page leaves an empty strip on the right. */
+  max-width: none !important;
   flex: 1;
   min-width: 0;
   border-left: none;

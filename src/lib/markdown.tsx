@@ -46,12 +46,75 @@ export function extractHeadings(source: string): Heading[] {
 
 const INLINE_PATTERN = /(`[^`]+`)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\s][^*]*\*)|(!?\[[^\]]*\]\([^)\s]+\))/;
 
+/* ---------- workspace file references ---------- */
+
+const FILE_EXT = 'tsx?|jsx?|mjs|cjs|json|mdx?|rs|toml|ya?ml|css|scss|html?|txt|ps1|sh|py|go|java|kt|swift|lock|cmd|bat|xml|svg|sql|env|conf|csv|c|h|cpp|hpp|cs|rb|php|vue';
+const LINE_SUFFIX = '(?::(\\d+)(?::\\d+)?|#L(\\d+))?';
+/** A relative path with at least one folder, found inside running text. */
+const PLAIN_FILE_PATTERN = new RegExp(
+  `(?<![\\w/\\\\.:@-])((?:\\.{1,2}/)?(?:[\\w.@()-]+[\\\\/])+[\\w.@()-]+\\.(?:${FILE_EXT}))${LINE_SUFFIX}(?!\\w)`,
+  'i',
+);
+/** A whole `code span` / link target that is a relative path or bare file name. */
+const WHOLE_FILE_PATTERN = new RegExp(
+  `^((?:\\.{1,2}/)?[\\w.@()-]+(?:[\\\\/][\\w.@()-]+)*\\.(?:${FILE_EXT}))${LINE_SUFFIX}$`,
+  'i',
+);
+
+/** `name`, `Class.method`, `name()` or `name(args)` — group 2 is the symbol. */
+const SYMBOL_PATTERN = /^(?:[A-Za-z_$][\w$]*\.)*([A-Za-z_$][\w$]*)(?:\([^`]*\))?$/;
+const COMMON_WORDS = new Set(['true', 'false', 'null', 'undefined', 'this', 'self', 'string', 'number', 'boolean', 'void', 'any', 'Promise', 'Array', 'Object', 'Map', 'Set', 'JSON', 'console', 'window', 'document', 'React']);
+
+/** Only link names that read like code: a call `fn()`, camelCase, PascalCase or snake_case. */
+function looksLikeSymbol(name: string, code: string): boolean {
+  if (name.length < 3 || COMMON_WORDS.has(name)) return false;
+  return /\(.*\)$/.test(code.trim()) || /[a-z][A-Z]/.test(name) || /^[A-Z][a-z]+[A-Z]/.test(name) || name.includes('_');
+}
+
+/** When set, workspace file references render as clickable buttons (the chat
+ * panel handles the click). Set only for the duration of a renderMarkdown call. */
+let fileLinksEnabled = false;
+
+function fileLink(match: RegExpMatchArray, display: string, key: string, code = false): ReactNode {
+  const path = match[1].replace(/\\/g, '/').replace(/^\.\//, '');
+  const line = match[2] ?? match[3];
+  return (
+    <button
+      key={key}
+      type="button"
+      className={`md-file-link${code ? ' md-file-link--code' : ''}`}
+      data-file-path={path}
+      data-file-line={line}
+      title={`Open ${path}${line ? ` at line ${line}` : ''} in the editor`}
+    >
+      {display}
+    </button>
+  );
+}
+
 function renderInline(raw: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let rest = raw;
   let index = 0;
   const pushPlain = (text: string, at: number) => {
-    if (text) pushWithMentions(nodes, text, `${keyBase}-p${at}`);
+    if (!text) return;
+    if (!fileLinksEnabled) {
+      pushWithMentions(nodes, text, `${keyBase}-p${at}`);
+      return;
+    }
+    let remaining = text;
+    let part = 0;
+    while (remaining) {
+      const found = remaining.match(PLAIN_FILE_PATTERN);
+      if (!found || found.index === undefined) {
+        pushWithMentions(nodes, remaining, `${keyBase}-p${at}-${part}`);
+        break;
+      }
+      if (found.index > 0) pushWithMentions(nodes, remaining.slice(0, found.index), `${keyBase}-p${at}-${part}`);
+      nodes.push(fileLink(found, found[0], `${keyBase}-f${at}-${part}`));
+      remaining = remaining.slice(found.index + found[0].length);
+      part += 1;
+    }
   };
   while (rest) {
     const match = rest.match(INLINE_PATTERN);
@@ -64,7 +127,26 @@ function renderInline(raw: string, keyBase: string): ReactNode[] {
     const key = `${keyBase}-${index}`;
     index += 1;
     if (token.startsWith('`')) {
-      nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
+      const code = token.slice(1, -1);
+      const file = fileLinksEnabled ? code.trim().match(WHOLE_FILE_PATTERN) : null;
+      const symbol = fileLinksEnabled && !file ? code.trim().match(SYMBOL_PATTERN) : null;
+      if (file) {
+        nodes.push(fileLink(file, code, key, true));
+      } else if (symbol && looksLikeSymbol(symbol[1], code)) {
+        nodes.push(
+          <button
+            key={key}
+            type="button"
+            className="md-file-link md-file-link--code"
+            data-symbol={symbol[1]}
+            title={`Go to definition of ${symbol[1]}`}
+          >
+            {code}
+          </button>,
+        );
+      } else {
+        nodes.push(<code key={key}>{code}</code>);
+      }
     } else if (token.startsWith('**') || token.startsWith('__')) {
       nodes.push(<strong key={key}>{renderInline(token.slice(2, -2), key)}</strong>);
     } else if (token.startsWith('*')) {
@@ -84,6 +166,12 @@ function renderInline(raw: string, keyBase: string): ReactNode[] {
       if (link) {
         const href = link[2];
         const internal = !/^https?:/.test(href);
+        const file = fileLinksEnabled && internal ? href.match(WHOLE_FILE_PATTERN) : null;
+        if (file) {
+          nodes.push(fileLink(file, link[1] || href, key));
+          rest = rest.slice((match.index ?? 0) + token.length);
+          continue;
+        }
         nodes.push(
           <a
             key={key}
@@ -152,7 +240,16 @@ function renderFence(lines: string[], key: string): ReactNode {
 }
 
 /** Renders a markdown source string into React elements. */
-export function renderMarkdown(source: string): ReactNode[] {
+export function renderMarkdown(source: string, options?: { fileLinks?: boolean }): ReactNode[] {
+  fileLinksEnabled = options?.fileLinks === true;
+  try {
+    return renderMarkdownBlocks(source);
+  } finally {
+    fileLinksEnabled = false;
+  }
+}
+
+function renderMarkdownBlocks(source: string): ReactNode[] {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
   let index = 0;

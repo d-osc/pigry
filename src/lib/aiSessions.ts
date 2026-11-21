@@ -15,6 +15,8 @@ export interface AiChatMessage {
   context?: string;
   /** Editor selection attached at send time — shown as a code card. */
   selection?: { path: string; startLine: number; endLine: number; text: string } | null;
+  /** Design-editor layers that were selected at send time — shown as chips. */
+  layers?: Array<{ id: string; name: string; type: string }>;
   images?: string[];
   error?: boolean;
   /** Wall-clock timestamp (ms) shown next to the sender name. */
@@ -23,6 +25,8 @@ export interface AiChatMessage {
   agent?: string;
   /** Repo-owner username that wrote this message (user side). */
   owner?: string;
+  /** Agent that initiated an internal handoff displayed in the thread. */
+  handoffFrom?: string;
   /** Model (+ effort) this reply actually used, e.g. "gpt-6.1-sol · high". */
   used?: string;
   /** Tool calls the agent made this turn (display only). */

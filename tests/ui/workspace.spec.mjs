@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { workspaceNav } from '../../src/app/navigation.ts';
 
-const pages = ['Explorer', 'Copilot', 'Working changes', 'Push Commits', 'Pull commit', 'Merge branch',
+const pages = ['Explorer', 'Diagram', 'Design', 'Board', 'E2E Testing', 'Copilot', 'Working changes', 'Push Commits', 'Pull commit', 'Merge branch',
   'Compare branch', 'Stashes Code', 'Cherry Pick', 'Duplicate commit', 'Edit commit', 'Rebase Branch', 'Pull requests', 'Commit graph',
   'Branches', 'Releases', 'Actions', 'Security and quality', 'Issues', 'Projects', 'Wiki', 'Insights'];
 
@@ -49,6 +49,10 @@ test('every workspace menu has a default agent and a mentionable base agent', as
   };
   const baseHandleByScreen = {
     explorer: 'refactorer',
+    diagram: 'diagram-sa',
+    design: 'uxui',
+    board: 'board-sa',
+    e2e: 'e2e-qa',
     'ai-agent': 'workspace-guide',
     'working-changes': 'code-reviewer',
     'push-commits': 'push-checklist',
@@ -71,8 +75,9 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     wiki: 'docs-writer',
     insights: 'activity-analyst',
   };
-  const hint = page.locator('.ai-composer__hint');
-  const composer = page.getByRole('textbox', { name: 'Ask AI' });
+  // Screens that keep their agent panel mounted while hidden: only the visible one counts.
+  const hint = page.locator('.ai-composer__hint:visible');
+  const composer = page.getByRole('textbox', { name: 'Ask AI' }).and(page.locator(':visible'));
   const picker = page.getByRole('listbox', { name: 'Mention an agent' });
   for (const { id, label } of workspaceNav) {
     await page.locator('.nav-item').filter({

@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Agents';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Board' | 'E2E' | 'Agents';
   description: string;
 }
 
@@ -56,8 +56,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'web-search', name: 'web_search', group: 'Web', description: 'Search the web (DuckDuckGo) and read top results' },
   { id: 'web-browser', name: 'playwright', group: 'Web', description: 'Open a URL in headless Edge/Chrome and read the rendered page text' },
   { id: 'web-devtools', name: 'browser_devtools', group: 'Web', description: 'Persistent browser session — open URLs, eval JavaScript, read console logs, screenshots and DOM' },
-  { id: 'web-panel', name: 'browser_panel', group: 'Web', description: 'Open the in-app floating browser panel and navigate its active tab to a URL' },
-  { id: 'web-e2e', name: 'browser_e2e', group: 'Web', description: 'E2E-test the page shown in the in-app browser panel — goto / fill / click / assert URL & title / read live text with PASS-FAIL results' },
+  { id: 'web-panel', name: 'browser_panel', group: 'Web', description: 'Open a URL in the default external browser' },
+  { id: 'web-e2e', name: 'browser_e2e', group: 'Web', description: 'Run and verify E2E steps in a visible external test browser' },
   { id: 'browser-screenshot', name: 'browser_screenshot', group: 'Web', description: 'Screenshot the live page shown in the in-app browser panel (PNG, saved to disk)' },
   { id: 'browser-pdf', name: 'browser_pdf', group: 'Web', description: 'Save the live page shown in the in-app browser panel as PDF' },
   { id: 'browser-network', name: 'browser_network_requests', group: 'Web', description: 'List network requests captured from the in-app browser panel page' },
@@ -66,6 +66,42 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'doc-word', name: 'read_word', group: 'Files', description: 'Extract the text of a .docx Word document' },
   { id: 'doc-excel', name: 'read_excel', group: 'Files', description: 'Extract every sheet of an .xlsx as CSV rows' },
 
+  // Diagram (the Diagram editor — files under .pigry/diagrams/)
+  { id: 'diagram_list', name: 'diagram_list', group: 'Diagram', description: 'List the diagrams saved in the workspace' },
+  { id: 'diagram_read', name: 'diagram_read', group: 'Diagram', description: 'Read a diagram as a summary, JSON or Mermaid' },
+  { id: 'diagram_write', name: 'diagram_write', group: 'Diagram', description: 'Create a diagram from nodes and edges with automatic layout' },
+  { id: 'diagram_edit', name: 'diagram_edit', group: 'Diagram', description: 'Add, change, connect or remove nodes and edges in a diagram' },
+  { id: 'diagram_export', name: 'diagram_export', group: 'Diagram', description: 'Export a diagram as SVG or Mermaid for reports' },
+  { id: 'diagram_open', name: 'diagram_open', group: 'Diagram', description: 'Open a diagram in the Diagram editor' },
+  // Design (the Design editor — files under .pigry/designs/<agent>/)
+  { id: 'design_list', name: 'design_list', group: 'Design', description: 'List the designs saved in the workspace' },
+  { id: 'design_read', name: 'design_read', group: 'Design', description: 'Read a design as an outline or JSON' },
+  { id: 'design_write', name: 'design_write', group: 'Design', description: 'Create a design from a tree of frames, shapes and text with auto layout' },
+  { id: 'design_edit', name: 'design_edit', group: 'Design', description: 'Add, change, move, group or remove layers in a design' },
+  { id: 'design_check', name: 'design_check', group: 'Design', description: 'UX/UI review: contrast, text size, touch targets, overflow, spacing grid' },
+  { id: 'design_preview', name: 'design_preview', group: 'Design', description: 'Render a frame to an image you can see on the next turn' },
+  { id: 'design_export', name: 'design_export', group: 'Design', description: 'Export a design as SVG, PNG or static HTML + CSS' },
+  { id: 'design_open', name: 'design_open', group: 'Design', description: 'Open a design in the Design editor' },
+  // Board (the Board editor — files under .pigry/boards/<agent>/)
+  { id: 'board_list', name: 'board_list', group: 'Board', description: 'List the boards saved in the workspace' },
+  { id: 'board_read', name: 'board_read', group: 'Board', description: 'Read a board as an outline, Markdown or JSON' },
+  { id: 'board_write', name: 'board_write', group: 'Board', description: 'Create a board of sections, sticky notes, shapes and connectors with automatic placement' },
+  { id: 'board_edit', name: 'board_edit', group: 'Board', description: 'Add, change, move, group, connect, vote on or remove items on a board' },
+  { id: 'board_preview', name: 'board_preview', group: 'Board', description: 'Render a board to an image you can see on the next turn' },
+  { id: 'board_export', name: 'board_export', group: 'Board', description: 'Export a board as Markdown, SVG or PNG' },
+  { id: 'board_open', name: 'board_open', group: 'Board', description: 'Open a board in the Board editor' },
+  // E2E (the E2E Testing menu — Cypress-style specs under .pigry/e2e/specs/<agent>/)
+  { id: 'e2e_list', name: 'e2e_list', group: 'E2E', description: 'List E2E specs with their last result, fixtures and settings' },
+  { id: 'e2e_read', name: 'e2e_read', group: 'E2E', description: 'Read a spec with line numbers (optionally with its last run)' },
+  { id: 'e2e_write', name: 'e2e_write', group: 'E2E', description: 'Create a Cypress-style spec (cy.visit/get/click/type/intercept…) in your own folder' },
+  { id: 'e2e_edit', name: 'e2e_edit', group: 'E2E', description: 'Change a spec by exact text replacement' },
+  { id: 'e2e_run', name: 'e2e_run', group: 'E2E', description: 'Run a spec or all specs in the test browser: PASS/FAIL per test with errors, code frames and evidence' },
+  { id: 'e2e_results', name: 'e2e_results', group: 'E2E', description: 'Last run of a spec: summary, command log of one test, or JSON' },
+  { id: 'e2e_stats', name: 'e2e_stats', group: 'E2E', description: 'Analytics over stored runs: failing, flaky and slowest tests' },
+  { id: 'e2e_selector', name: 'e2e_selector', group: 'E2E', description: 'Selector playground: count matches in the open page and suggest a stable selector' },
+  { id: 'e2e_fixture', name: 'e2e_fixture', group: 'E2E', description: 'Write a JSON fixture for cy.fixture() and cy.intercept()' },
+  { id: 'e2e_config', name: 'e2e_config', group: 'E2E', description: 'Read or change E2E settings: baseUrl, viewport, timeouts, retries, video, env' },
+  { id: 'e2e_open', name: 'e2e_open', group: 'E2E', description: 'Open a spec in the E2E editor, optionally starting the run' },
   // Agents (agent_lookup — registry introspection for the agent itself)
   { id: 'agents-lookup', name: 'agent_lookup', group: 'Agents', description: "Look up agent profiles — list every agent or read one agent's full details by @username" },
   { id: 'agents-contacts', name: 'agent_contacts', group: 'Agents', description: 'The workspace contact book — every enabled agent grouped by team, one line each' },
@@ -123,7 +159,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Agents'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Board', 'E2E', 'Agents'];
 
 export function selectAgentTools(
   tools: ToolSpec[],

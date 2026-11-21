@@ -260,6 +260,7 @@ pub fn run() {
             commands::read_binary_file,
             commands::open_path_external,
             commands::write_worktree_file,
+            commands::write_worktree_binary,
             commands::delete_worktree_file,
             commands::rename_worktree_file,
             commands::delete_worktree_folder,

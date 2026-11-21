@@ -35,6 +35,8 @@ import {
 import { FileTree } from './FileTree';
 import { EditorPane } from './EditorPane';
 import { AiAgentPanel } from './AiAgentPanel';
+import { TerminalPanel, type TerminalPanelHandle } from '../../app/TerminalPanel';
+import { projectStartupCommand } from '../../lib/projectStartup';
 import type { EditorStatusInfo } from '../../app/StatusBar';
 import { teamForScreen } from '../../lib/agentExtras';
 import './ExplorerScreen.css';
@@ -81,11 +83,12 @@ function languageTag(path: string): string {
 }
 
 export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, terminalOpen, onToggleTerminal, onEditorStatus, onUnsavedFilesChange }: ExplorerScreenProps) {
+  const terminalRef = useRef<TerminalPanelHandle>(null);
   const { repository, stage, unstage, discard, notify } = useRepository();
   const [treeError, setTreeError] = useState<string | null>(null);
   const [treeAttempt, setTreeAttempt] = useState(0);
   const [tree, setTree] = useState<FileTreeData | null>(null);
-  // Remounted by AppShell on openPath change (key), so the initializer runs.
+  const lastOpenPath = useRef(openPath);
   // VS Code-style editor groups — each group owns a tab strip; splitting
   // copies the focused editor into a new group beside it (up to MAX_GROUPS).
   const [groups, setGroups] = useState<EditorGroup[]>(
@@ -295,6 +298,12 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     },
     [safeActiveGroup, implicitTab],
   );
+
+  useEffect(() => {
+    if (lastOpenPath.current === openPath) return;
+    lastOpenPath.current = openPath;
+    if (openPath) handleSelectFile(openPath);
+  }, [openPath, handleSelectFile]);
 
   const handleCloseTab = useCallback(
     (path: string) => {
@@ -1164,6 +1173,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
           />
         )}
 
+        <div className="explorer-screen__editor">
         <div className="explorer-screen__groups" ref={groupsRowRef}>
           {unionTabs.length === 0 && !implicitTab ? (
             <div className="explorer-screen__placeholder">Select a file to open it</div>
@@ -1295,8 +1305,6 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
                             ? revealTarget.column
                             : null
                         }
-                        terminalOpen={focused ? terminalOpen : false}
-                        onToggleTerminal={onToggleTerminal}
                         onBufferChange={handleBufferChange}
                         onJumpToCommit={onJumpToCommit}
                         onSelectionChange={setEditorSelection}
@@ -1314,12 +1322,20 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             })
           )}
         </div>
+          <TerminalPanel
+            ref={terminalRef}
+            key={repository?.localPath}
+            cwd={repository?.localPath ?? ''}
+            visible={!!terminalOpen}
+            onClose={() => onToggleTerminal?.()}
+          />
+        </div>
 
         {aiOpen && (
           <ResizeHandle
             orientation="v"
             label="Resize AI panel"
-            onDelta={(dx) => setAiWidth((w) => Math.min(480, Math.max(280, w - dx)))}
+            onDelta={(dx) => setAiWidth((w) => Math.min(window.innerWidth * 0.65, Math.max(280, w - dx)))}
           />
         )}
 
@@ -1333,6 +1349,16 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             }
             selection={editorSelection}
             defaultTeam={teamForScreen('explorer')}
+            onStartProject={async () => {
+              const manifest = await readWorktreeFile('package.json');
+              if (manifest.binary || manifest.tooLarge) throw new Error('Cannot read package.json.');
+              const command = projectStartupCommand(manifest.content);
+              const terminal = terminalRef.current;
+              if (!terminal) throw new Error('The workspace terminal is unavailable.');
+              window.dispatchEvent(new Event('pigry:show-terminal'));
+              const { exit } = await terminal.runCommand(command);
+              return { command, exit };
+            }}
             onCollapse={() => setAiOpen(false)}
             onOpenFile={(path, line) => {
               handleSelectFile(path);
