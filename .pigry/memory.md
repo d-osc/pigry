@@ -1,4 +1,27 @@
-# Project memory
+# Memory
 
+Scopes: project / team:<Team> / agent:<Team>:<username>
+
+## Project memory
 - pigry is a Git desktop client built with React + Tauri
 - Rust tests must run serially on Windows
+
+## Agent memory — @explorer (team Explorer)
+- Security audit by @white-hat on this Tauri Git desktop app (with remote AI-agent extension + static site hosting) confirmed 6 vulnerabilities, incl. WH-01 Critical: real API key committed to source; full reports + handoff saved in `.pigry/reports/white-hat/`.
+- @coder is tasked with defensive-only remediation of the 6 audit findings: validate each from real source review with ordinary regression tests, no exploit development/reproduction/live probing; work was in progress (reading the 2 reports in `.pigry/reports/white-hat/`).
+- Project test procedure before commits: run `cargo test -- --test-threads=1` from `src-tauri/`; user communicates in Thai.
+- รายงานการตรวจสอบความปลอดภัยของ @white-hat ยืนยัน 6 จุดที่มีช่องโหว่ในแอปเดสก์ท็อป Tauri Git นี้ (พร้อมส่วนขยาย AI-agent และการโฮสต์ static-site); WH-01 เป็นระดับ Critical — มีการเขียน API key จริง (`sk-sp-H.DIMED…`, 93 ตัวอักษร) ลงในซอร์สโค้ด; รายงานและเอกสารส่งมอบงานถูกบันทึกไว้ใน .pigry/reports/white-hat/
+- @coder ได้รับมอบหมายให้ทำการแก้ไขเชิงป้องกันสำหรับ 6 จุดดังกล่าว โดยให้ตรวจสอบความถูกต้องจากการตรวจทานซอร์สโค้ดและการทดสอบการย้อนกลับ (regression tests) ทั่วไปเท่านั้น — ไม่ต้องพัฒนาโค้ดสำหรับโจมตี (exploit), ทำซ้ำช่องโหว่ หรือการสอดส่องแบบเรียลไทม์ (live probing)
+- ผู้ใช้สื่อสารเป็นภาษาไทย; ทุกครั้งก่อนที่จะ commit ให้รัน `cargo test -- --test-threads=1` จากโฟลเดอร์ src-tauri
+- Security audit by @white-hat confirmed 6 vulnerabilities (WH-01–WH-06) in the Tauri Git desktop app; most critical is WH-01: real API keys committed at src/lib/aiProviders.ts:17-20 (sk-sp-H.DIMED… 93 chars + a second seed key), with report and handoff docs saved in .pigry/reports/white-hat/.
+- User works in Thai and delegates a fixed pipeline: @white-hat does defensive source-only audits (no live probing/exploits) then hands off to @coder for remediation with ordinary regression tests.
+- Progress: @coder read both .pigry/reports/white-hat/ reports and validated findings but had not yet edited any source via write_file or run regression tests when the session ended; user then questioned why WH-01's seed keys still remain at src/lib/aiProviders.ts:17-20.
+- Security audit by @white-hat confirmed 6 findings (WH-01..WH-06) in this Tauri Git desktop app with AI-agent extensions and static-site hosting; critical WH-01 is a real committed API key (sk-sp-..., ~93 chars) at src/lib/aiProviders.ts:17-20, with audit reports and handoff docs saved under .pigry/reports/white-hat/.
+- Progress: @coder was assigned the defensive fixes but as of the last turn had only completed reconnaissance/prep — no write_file source edits and no regression tests run, so WH-01's seed keys at src/lib/aiProviders.ts:17-20 remain unfixed (user explicitly asked why they are still there).
+- User-set working constraint: remediation only — validate findings via source review and ordinary regression tests; no exploit development, vulnerability reproduction, or live probing; run `cargo test -- --test-threads=1` from src-tauri before commits.
+- User works in Thai and drives a multi-agent security workflow on this Tauri Git desktop app (src-tauri + AI-provider panels + static-site hosting): @white-hat performs defensive, source-only audits and hands off to @coder, whose scope is remediation only — no exploit development, vulnerability reproduction, or live probing — with findings validated via source review and ordinary regression tests; run `cargo test -- --test-threads=1` from src-tauri before every commit.
+- @white-hat's audit confirmed 6 vulnerabilities (WH-01…WH-06); top finding WH-01 = Critical, real API keys committed in source at src/lib/aiProviders.ts:17-20; audit reports and handoff docs are saved in .pigry/reports/white-hat/ (security-review-pigry-desktop.md, security-fix-handoff-coder.md) and .pigry/reports/ (security-review-pigry-desktop-verified.md, handoff-coder-security-fixes.md).
+- Progress at session end: @coder completed only reconnaissance/prep — zero write_file source edits and no regression tests run, so remediation is unfinished; the user's open question to @coder is why WH-01 seed keys at src/lib/aiProviders.ts:17-20 still exist, though current source there now contains only SHA-256 digests of the seed keys (raw keys removed, `dropTestProviders` drops seeded entries), which needs to be explained to close WH-01.
+- Repo security-audit progress: @white-hat's defensive, source-only audit of this Tauri Git desktop app confirmed 6 vulnerabilities (WH-01–WH-06); reports live in `.pigry/reports/white-hat/`; WH-01 is Critical — real API key(s) committed at src/lib/aiProviders.ts:17-20.
+- Remediation status: @coder was ordered to apply defensive fixes (explicitly no exploit development, reproduction, or live probing) but, as of the last update, had only finished reconnaissance/prep — no source edits via write_file and no regression tests run yet; user is now challenging why WH-01 seed keys at src/lib/aiProviders.ts:17-20 are still unfixed.
+- Conventions/preferences: user communicates in Thai (replies in Thai expected); run `cargo test -- --test-threads=1` from src-tauri before commits; agent reports/handoffs saved as Markdown under each agent's own folder `.pigry/reports/<agent-username>/` (the earlier @white-hat reports were moved to `.pigry/reports/white-hat/`).
