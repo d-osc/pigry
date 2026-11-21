@@ -116,7 +116,7 @@ test('Design agent tools: write in the agent folder, edit live, review, preview,
 
   const result = await page.evaluate(async () => {
     const { DESIGN_TOOLS } = await import('/src/lib/designTools.ts');
-    const { pendingImages } = await import('/src/lib/pendingImages.ts');
+    const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => DESIGN_TOOLS.find((t) => t.name === name).run({ agent: 'uxui', ...input });
     const out = {};
     out.write = await run('design_write', {
@@ -143,9 +143,9 @@ test('Design agent tools: write in the agent folder, edit live, review, preview,
     ] });
     out.check = await run('design_check', { name: 'login-screen', severity: 'warn' });
     out.preview = await run('design_preview', { name: 'login-screen', save_as: '.pigry/designs/uxui/login-preview.png' });
-    out.attached = pendingImages.length;
-    out.attachedIsPng = pendingImages[0]?.startsWith('data:image/png;base64,') ?? false;
-    pendingImages.length = 0;
+    const attachedImages = takeImages('uxui');
+    out.attached = attachedImages.length;
+    out.attachedIsPng = attachedImages[0]?.startsWith('data:image/png;base64,') ?? false;
     out.svg = await run('design_export', { name: 'login-screen', format: 'svg' });
     out.png = await run('design_export', { name: 'login-screen', format: 'png', node: 'Mobile — Login' });
     out.html = await run('design_export', { name: 'login-screen', format: 'html' });

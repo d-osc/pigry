@@ -1,6 +1,7 @@
 import { useEffectEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PauseGate } from '../../lib/pauseGate';
-import { beginFanOut, claimWrite, endFanOut } from '../../lib/writeGuard';
+import { isReadOnlyCall, runInBatches } from '../../lib/toolBatch';
+import { beginFanOut, endFanOut, exclusive, guardedChange, isFanOut, noteRead, type Snapshot } from '../../lib/writeGuard';
 import { findDefinition } from '../../lib/symbolLookup';
 import { DIAGRAM_TOOLS } from '../../lib/diagramTools';
 import { DESIGN_TOOLS } from '../../lib/designTools';
@@ -8,7 +9,7 @@ import { BOARD_TOOLS } from '../../lib/boardTools';
 import { E2E_TOOLS as E2E_RUNNER_TOOLS, getOpenE2e } from '../../lib/e2e/e2eTools';
 import { getOpenBoard } from '../../lib/boardStore';
 import { getOpenDesign } from '../../lib/designStore';
-import { pendingImages } from '../../lib/pendingImages';
+import { clearImages, hasImages, queueImage, takeImages } from '../../lib/pendingImages';
 import { getOpenDiagram } from '../../lib/diagramStore';
 import { assertStyleScript, checkLayoutScript, stylesScript } from '../../lib/cssChecks';
 import {
@@ -459,9 +460,28 @@ function shellTool(workspace: string): ToolSpec {
 /** Whether the CURRENT turn's model accepts image input. Set per turn from
  * the active AiModelEntry — explicit inputTypes govern; entries without them
  * (legacy/built-in) keep the old always-send behavior. */
-let imageGate = true;
-function setImageGate(spec: { inputTypes?: string[] } | null | undefined) {
-  imageGate = !spec?.inputTypes || spec.inputTypes.includes('image');
+function acceptsImages(spec: { inputTypes?: string[] } | null | undefined): boolean {
+  return !spec?.inputTypes || spec.inputTypes.includes('image');
+}
+
+/** Whole-file content as it is on disk right now (null when the file does not exist) — what the write guard compares. */
+const diskSnapshot: Snapshot = async (path) => {
+  try {
+    const file = await readWorktreeFile(path);
+    return file.binary ? '(binary file)' : file.tooLarge ? '(file too large)' : file.content;
+  } catch {
+    return null;
+  }
+};
+
+/** Tools that change repo-wide state (shell, index, history): only one agent runs one at a time during a fan-out. */
+const REPO_WIDE_TOOLS = new Set(['run_command', 'stage_changes', 'commit', 'stash']);
+
+/** The files a mutating tool call will touch. */
+function changedPaths(name: string, input: Record<string, unknown>): string[] {
+  if (name === 'write_file' || name === 'delete_file') return [String(input.path ?? '')];
+  if (name === 'rename_file') return [String(input.old_path ?? ''), String(input.new_path ?? '')];
+  return [];
 }
 
 /** Resolves the saved settings for the model selected for this turn. */
@@ -500,7 +520,7 @@ const READ_IMAGE_TOOL: ToolSpec = {
       return `error: ${path} is not an image (${img.mime})`;
     }
     const dataUrl = `data:${img.mime};base64,${img.data}`;
-    pendingImages.push(dataUrl);
+    queueImage(dataUrl, typeof input.agent === 'string' && input.agent ? input.agent : undefined);
     return `read_image → ${path} (${img.mime}, ${Math.round(img.size / 1024)} KB) — the image is attached to your next turn`;
   },
 };
@@ -1736,7 +1756,7 @@ interface AgentTurnContext {
  setReplyingAs: React.Dispatch<React.SetStateAction<string>>;
  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
  messageDepthRef: React.RefObject<number>;
- dmBubblesRef: React.RefObject<ChatMessage[]>;
+ dmBubblesRef: React.RefObject<Array<{ from: string; bubble: ChatMessage }>>;
  signal?: AbortSignal;
  pause?: PauseGate;
 }
@@ -1757,11 +1777,22 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     agent?: string,
   ): Promise<string> => {
     // Diagram/design tools keep files per agent (.pigry/<kind>/<agent>/…) — tell them who is calling.
-    const input = agent && (name.startsWith('diagram_') || name.startsWith('design_') || name.startsWith('board_') || name.startsWith('e2e_')) ? { ...rawInput, agent } : rawInput;
+    const input = agent && (name.startsWith('diagram_') || name.startsWith('design_') || name.startsWith('board_') || name.startsWith('e2e_') || name === 'read_image') ? { ...rawInput, agent } : rawInput;
     const id = liveStart({ kind: 'tool', title: name, detail: clip(rawInput, 400), status: 'running' });
     try {
-      const refused = name === 'write_file' ? claimWrite(String(rawInput.path ?? ''), agent) : null;
-      const output = refused ?? await toolRequest(tool, name, input);
+      const paths = changedPaths(name, rawInput);
+      const gateOptions = {
+        signal,
+        onWait: (writer: string) => liveEnd(id, { detail: `waiting for @${writer} to finish — ${clip(rawInput, 300)}` }),
+      };
+      // Parallel agents: queue behind another agent changing the same file (or the repo), re-read when it changed.
+      const run = () => toolRequest(tool, name, input);
+      const output = paths.length > 0
+        ? await guardedChange(paths, agent, run, diskSnapshot, gateOptions)
+        : REPO_WIDE_TOOLS.has(name) && !isReadOnlyCall(name, rawInput)
+          ? await exclusive('repo', agent, run, gateOptions)
+          : await run();
+      if (name === 'read_file') await noteRead(String(rawInput.path ?? ''), agent, diskSnapshot);
       liveEnd(id, { status: /^error\b/i.test(String(output)) ? 'error' : 'done', result: clip(output, 800) });
       return output;
     } catch (error) {
@@ -2051,7 +2082,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const baseSpec = modelSpecOf(provider);
     // The agent's own effort selection wins over the model entry's.
     const spec = { ...baseSpec, effort: target.effort || baseSpec.effort };
-    setImageGate(spec);
+    const imageGate = acceptsImages(spec);
     const languageInstruction = textOutputLanguageInstruction(spec.textOutputLanguage);
     // What this turn actually used — shown on the reply bubble.
     const usedLabel = provider.model
@@ -2060,6 +2091,10 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const repliedAs = target.username;
     const skillContext = await untilStopped(() => buildSkillContext(last.text, target.skills));
     if (isCliProvider(provider)) {
+      // A CLI provider edits files on its own, outside every guard, so it cannot share a parallel run with other agents.
+      if (isFanOut()) {
+        throw new Error(`@${target.username} uses a CLI provider (${provider.type}), which cannot run in parallel with other agents — mention it on its own, or switch it to an API model.`);
+      }
       // The provider type IS the CLI binary (claude-code → claude,
       // zcode-cli → zcode).
       const cli =
@@ -2173,7 +2208,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
           agent: to,
           owner: target ? 'self' : 'self',
         };
-        dmBubblesRef.current = [...dmBubblesRef.current, bubble];
+        dmBubblesRef.current = [...dmBubblesRef.current, { from: target.username, bubble }];
         setMessages((current) => [...current, bubble]);
         return 'reply from @' + to + ':\n' + reply;
       },
@@ -2287,17 +2322,20 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
         }
         apiMessages.push({ role: 'assistant', content: blocks });
         const results: Array<Record<string, unknown>> = [];
-        for (const call of calls) {
-          const tool = tools.find((t) => t.name === call.name);
-          const input = call.input ?? {};
+        // Read-only calls in one reply run at the same time; anything that changes something runs alone, in order.
+        const outputs = await runInBatches(calls, (call) => isReadOnlyCall(String(call.name), call.input ?? {}), (call) => {
           setActivity(activityForTool(String(call.name)));
-          const output = await loggedTool(tool, String(call.name), input, repliedAs);
+          return loggedTool(tools.find((t) => t.name === call.name), String(call.name), call.input ?? {}, repliedAs);
+        });
+        for (const [index, call] of calls.entries()) {
+          const input = call.input ?? {};
+          const output = outputs[index];
           toolEvents.push(toolLabel(String(call.name), input, output));
           results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
         }
         apiMessages.push({ role: 'user', content: results });
-        if (imageGate && pendingImages.length > 0) {
-          const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+        if (imageGate && hasImages(repliedAs)) {
+          const imgs = takeImages(repliedAs).map((dataUrl) => ({ dataUrl }));
           apiMessages.push({
             role: 'user',
             content: [
@@ -2329,21 +2367,25 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
           liveStart({ kind: 'note', title: 'Agent', detail: clip(message.content, 1500) });
         }
         apiMessages.push({ role: 'assistant', content: message?.content ?? '', tool_calls: calls });
-        for (const call of calls) {
-          const name = String(call.function?.name ?? '');
+        const parsedCalls = calls.map((call) => {
           let input: Record<string, unknown> = {};
           try {
             input = JSON.parse(call.function?.arguments || '{}') as Record<string, unknown>;
           } catch {
             // malformed arguments — runToolCall reports the failure
           }
-          const tool = tools.find((t) => t.name === name);
-          setActivity(activityForTool(name));
-          const output = await loggedTool(tool, name, input, repliedAs);
+          return { call, name: String(call.function?.name ?? ''), input };
+        });
+        const outputs = await runInBatches(parsedCalls, (parsed) => isReadOnlyCall(parsed.name, parsed.input), (parsed) => {
+          setActivity(activityForTool(parsed.name));
+          return loggedTool(tools.find((t) => t.name === parsed.name), parsed.name, parsed.input, repliedAs);
+        });
+        for (const [index, { call, name, input }] of parsedCalls.entries()) {
+          const output = outputs[index];
           toolEvents.push(toolLabel(name, input, output));
           apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
-          if (imageGate && pendingImages.length > 0) {
-            const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+          if (imageGate && hasImages(repliedAs)) {
+            const imgs = takeImages(repliedAs).map((dataUrl) => ({ dataUrl }));
             apiMessages.push({
               role: 'user',
               content: [
@@ -2407,7 +2449,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const baseSpec = modelSpecOf(provider);
     // A tagged agent's own effort selection wins over the model entry's.
     const spec = { ...baseSpec, effort: target?.effort || baseSpec.effort };
-    setImageGate(spec);
+    const imageGate = acceptsImages(spec);
     const languageInstruction = textOutputLanguageInstruction(spec.textOutputLanguage);
     // What this turn actually used — shown on the reply bubble.
     const usedLabel = provider.model
@@ -2432,9 +2474,11 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
             : provider.type;
       // DM bubbles collected during send_message calls — keep them visible
       // across every later setMessages(working) write.
-      if (dmBubblesRef.current.length > 0) {
-        history = [...history, ...dmBubblesRef.current];
-        dmBubblesRef.current = [];
+      // Only this agent's own bubbles — parallel agents keep theirs separate.
+      const ownBubbles = dmBubblesRef.current.filter((entry) => entry.from === repliedAs);
+      if (ownBubbles.length > 0) {
+        history = [...history, ...ownBubbles.map((entry) => entry.bubble)];
+        dmBubblesRef.current = dmBubblesRef.current.filter((entry) => entry.from !== repliedAs);
       }
       let working = history;
       try {
@@ -2600,7 +2644,7 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     const toolEvents: string[] = [];
     /** Last turn's provider-reported token usage (context % badge). */
     let turnTokens: number | null = null;
-    pendingImages.length = 0;
+    clearImages(repliedAs);
     const apiMessages: Array<Record<string, unknown>> = [
       ...recentChatContext(history.slice(0, -1)),
       { role: 'user', content },
@@ -2680,18 +2724,21 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
             }
             apiMessages.push({ role: 'assistant', content: blocks });
             const results: Array<Record<string, unknown>> = [];
-            for (const call of calls) {
-              const tool = tools.find((t) => t.name === call.name);
-              const input = call.input ?? {};
+            // Read-only calls in one reply run at the same time; anything that changes something runs alone, in order.
+            const outputs = await runInBatches(calls, (call) => isReadOnlyCall(String(call.name), call.input ?? {}), (call) => {
               setActivity(activityForTool(String(call.name)));
-              const output = await loggedTool(tool, String(call.name), input, repliedAs);
+              return loggedTool(tools.find((t) => t.name === call.name), String(call.name), call.input ?? {}, repliedAs);
+            });
+            for (const [index, call] of calls.entries()) {
+              const input = call.input ?? {};
+              const output = outputs[index];
               if (call.name === 'write_file' && output.startsWith('wrote ')) wroteFile = true;
               toolEvents.push(toolLabel(String(call.name), input, output));
               results.push({ type: 'tool_result', tool_use_id: call.id, content: output });
             }
             apiMessages.push({ role: 'user', content: results });
-            if (imageGate && pendingImages.length > 0) {
-              const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+            if (imageGate && hasImages(repliedAs)) {
+              const imgs = takeImages(repliedAs).map((dataUrl) => ({ dataUrl }));
               apiMessages.push({
                 role: 'user',
                 content: [
@@ -2725,22 +2772,26 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
               liveStart({ kind: 'note', title: 'Agent', detail: clip(message.content, 1500) });
             }
             apiMessages.push({ role: 'assistant', content: message?.content ?? '', tool_calls: calls });
-            for (const call of calls) {
-              const name = String(call.function?.name ?? '');
+            const parsedCalls = calls.map((call) => {
               let input: Record<string, unknown> = {};
               try {
                 input = JSON.parse(call.function?.arguments || '{}') as Record<string, unknown>;
               } catch {
                 // malformed arguments — runToolCall reports the failure
               }
-              const tool = tools.find((t) => t.name === name);
-              setActivity(activityForTool(name));
-              const output = await loggedTool(tool, name, input, repliedAs);
+              return { call, name: String(call.function?.name ?? ''), input };
+            });
+            const outputs = await runInBatches(parsedCalls, (parsed) => isReadOnlyCall(parsed.name, parsed.input), (parsed) => {
+              setActivity(activityForTool(parsed.name));
+              return loggedTool(tools.find((t) => t.name === parsed.name), parsed.name, parsed.input, repliedAs);
+            });
+            for (const [index, { call, name, input }] of parsedCalls.entries()) {
+              const output = outputs[index];
               if (name === 'write_file' && output.startsWith('wrote ')) wroteFile = true;
               toolEvents.push(toolLabel(name, input, output));
               apiMessages.push({ role: 'tool', tool_call_id: call.id ?? name, content: output });
-              if (imageGate && pendingImages.length > 0) {
-                const imgs = pendingImages.splice(0).map((dataUrl) => ({ dataUrl }));
+              if (imageGate && hasImages(repliedAs)) {
+                const imgs = takeImages(repliedAs).map((dataUrl) => ({ dataUrl }));
                 apiMessages.push({
                   role: 'user',
                   content: [
@@ -3646,7 +3697,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
    * them into the thread (agent-to-agent; budget-capped, each agent speaks
    * at most once per chain so it always ends). Returns the updated history. */
   const messageDepthRef = useRef(0);
-  const dmBubblesRef = useRef<ChatMessage[]>([]);
+  const dmBubblesRef = useRef<Array<{ from: string; bubble: ChatMessage }>>([]);
   const turnRunner = (signal?: AbortSignal, pause?: PauseGate) => createAgentTurnRunner({allProviders, active, ownerName, agentUsername, team, repository, workspace: state?.activePath ?? repository?.localPath ?? '', setSending, setActivity, setLiveSteps, setReplyingAs, setMessages, messageDepthRef, dmBubblesRef, signal, pause});
   const runForegroundTurn = async (run: (runner: ReturnType<typeof createAgentTurnRunner>) => Promise<unknown>) => {
     if (activeTurn.current) return;

@@ -14,7 +14,7 @@ import { ownerSlug, parseRefName, refKey, type OwnedRef } from './ownedFiles';
 import { svgSize, svgToPng } from './designRaster';
 import { canonicalizeEmbeds, collectEmbeds } from './boardEmbeds';
 import { checkCodes, collectCodes } from './boardCode';
-import { pendingImages } from './pendingImages';
+import { queueImage } from './pendingImages';
 import { writeWorktreeBinary, writeWorktreeFile } from './tauriClient';
 
 function asArray(value: unknown): unknown[] | null {
@@ -202,7 +202,7 @@ export const BOARD_TOOLS: ToolSpec[] = [
       const { width, height } = svgSize(svg);
       try {
         const png = await svgToPng(svg, width, height, Math.min(2, 1400 / Math.max(width, 1)));
-        pendingImages.push(png.dataUrl);
+        queueImage(png.dataUrl, typeof input.agent === 'string' && input.agent ? input.agent : undefined);
         let saved = '';
         if (input.save_as) {
           const target = exportPath(input.save_as, '', '.png');

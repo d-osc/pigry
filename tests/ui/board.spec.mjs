@@ -124,7 +124,7 @@ test('Board agent tools: write in the agent folder, edit live, preview, export, 
 
   const result = await page.evaluate(async () => {
     const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
-    const { pendingImages } = await import('/src/lib/pendingImages.ts');
+    const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => BOARD_TOOLS.find((t) => t.name === name).run({ agent: 'sa', ...input });
     const out = {};
     out.write = await run('board_write', {
@@ -151,9 +151,9 @@ test('Board agent tools: write in the agent folder, edit live, preview, export, 
     out.png = await run('board_export', { name: 'checkout-retro', format: 'png' });
     out.bad = await run('board_export', { name: 'checkout-retro', format: 'svg', path: 'docs/x.svg' });
     out.preview = await run('board_preview', { name: 'checkout-retro', save_as: '.pigry/boards/sa/preview.png' });
-    out.attached = pendingImages.length;
-    out.attachedIsPng = pendingImages[0]?.startsWith('data:image/png;base64,') ?? false;
-    pendingImages.length = 0;
+    const attachedImages = takeImages('sa');
+    out.attached = attachedImages.length;
+    out.attachedIsPng = attachedImages[0]?.startsWith('data:image/png;base64,') ?? false;
     out.opened = await run('board_open', { name: 'checkout-retro', item: 'Guest checkout' });
     out.files = [...window.__worktree.keys()];
     out.binary = [...window.__binary.keys()];
@@ -315,7 +315,7 @@ test('Board embeds diagrams and designs, keeps them live, and opens the source',
   // Agent tools can embed too: references are canonicalised, missing sources are reported, previews and exports draw them
   const result = await page.evaluate(async () => {
     const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
-    const { pendingImages } = await import('/src/lib/pendingImages.ts');
+    const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => BOARD_TOOLS.find((t) => t.name === name).run({ agent: 'sa', ...input });
     const out = {};
     out.write = await run('board_write', { name: 'context', items: [
@@ -329,7 +329,7 @@ test('Board embeds diagrams and designs, keeps them live, and opens the source',
     out.svg = await run('board_export', { name: 'context', format: 'svg' });
     out.svgFile = window.__worktree.get('.pigry/boards/sa/context.svg');
     out.preview = await run('board_preview', { name: 'context' });
-    out.attached = pendingImages.length;
+    out.attached = takeImages('sa').length;
     out.json = JSON.parse(window.__worktree.get('.pigry/boards/sa/context.board.json'));
     return out;
   });
