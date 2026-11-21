@@ -524,3 +524,47 @@ test('dashboard accounts: invitations, password reset tokens and sessions that s
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('dashboard accounts: invitations and reset tokens are handed to --mail-webhook', { timeout: 240000 }, async () => {
+  const mails = [];
+  const mailer = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => { mails.push(JSON.parse(body)); res.writeHead(204); res.end(); });
+  });
+  await new Promise((resolve) => mailer.listen(0, '127.0.0.1', resolve));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pigry-e2e-mail-'));
+  const child = spawn(process.execPath, [path.resolve('scripts/e2e-cli.mjs'), '--serve', '0', '--accounts', '--dir', 'dashboard', '--mail-webhook', `http://127.0.0.1:${mailer.address().port}/send`, '--public-url', 'https://e2e.example.com/'], { cwd: dir });
+  try {
+    const base = await new Promise((resolve, reject) => {
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; const m = /dashboard (http:\/\/[^\s]+)/.exec(out); if (m) resolve(m[1]); });
+      child.on('close', () => reject(new Error(`dashboard exited: ${out}`)));
+      setTimeout(() => reject(new Error('dashboard did not start')), 60000);
+    });
+    const call = async (method, p, body, cookie) => {
+      const res = await fetch(`${base}${p}`, { method, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, json: await res.json().catch(() => null), cookie: (res.headers.get('set-cookie') ?? '').split(';')[0] };
+    };
+    const ada = await call('POST', '/auth/signup', { email: 'ada@example.com', password: 'correct horse battery', name: 'Ada' });
+    const orgId = (await call('GET', '/api/me', null, ada.cookie)).json.orgs[0].id;
+    const inv = await call('POST', `/api/orgs/${orgId}/invites`, { email: 'bob@example.com', role: 'viewer' }, ada.cookie);
+    assert.equal(inv.json.sent, true);
+    assert.equal(mails.length, 1);
+    assert.equal(mails[0].type, 'invite');
+    assert.equal(mails[0].to, 'bob@example.com');
+    assert.equal(mails[0].link, `https://e2e.example.com/login?invite=${inv.json.token}`);
+    const bob = await call('POST', '/auth/signup', { email: 'bob@example.com', password: 'bobs long password', invite: inv.json.token });
+    assert.equal(bob.status, 200);
+    const reset = await call('POST', `/api/orgs/${orgId}/reset`, { email: 'bob@example.com' }, ada.cookie);
+    assert.equal(reset.json.sent, true);
+    assert.equal(mails[1].type, 'password-reset');
+    assert.equal(mails[1].to, 'bob@example.com');
+    assert.equal(mails[1].token, reset.json.token);
+    assert.equal(mails[1].resetUrl, 'https://e2e.example.com/auth/reset');
+  } finally {
+    await new Promise((resolve) => { if (child.exitCode !== null) { resolve(); return; } child.once('close', resolve); child.kill(); });
+    mailer.close();
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

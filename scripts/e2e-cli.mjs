@@ -42,6 +42,8 @@ const HELP = `Usage: node scripts/e2e-cli.mjs [options]
   --merge <dirs>         do not run anything: merge the results of several --out directories (comma separated, e.g. CI shards) into --out: junit.xml, summary.json, report.html
   --serve [port]         run the self-hosted dashboard (our Cypress Cloud): records runs, balances specs across machines, flaky tests, Test Replay (--dir, --host, --token, --projects)
   --accounts             dashboard with user accounts: sign-up/sign-in (scrypt + session cookie), organizations with owner/member/viewer roles, projects with record keys created in the UI (the first sign-up bootstraps; --open-signup lets anyone register)
+  --mail-webhook <url>   with --accounts: POST every invitation and password reset ({type, to, link|token, ...}) to this URL so your own mailer can send it (the tokens are still returned to the owner)
+  --public-url <url>     with --accounts: the address people use to reach the dashboard (used in the links sent to --mail-webhook)
   --projects <file>      dashboard with several projects: {"projects": {"web": {"recordKey": "...", "readKey": "..."}}} — a key opens only its own project's runs (the --token key sees all)
   --record <url>         upload every spec result to a dashboard (--ci-build-id, --group, --key, --balance)
   --project <name>       with the --token key: which project the run belongs to (project keys decide it themselves)
@@ -77,6 +79,8 @@ function parseArgs(argv) {
     else if (a === '--token') o.token = next();
     else if (a === '--projects') o.projects = next();
     else if (a === '--accounts') o.accounts = true;
+    else if (a === '--mail-webhook') o.mailWebhook = next();
+    else if (a === '--public-url') o.publicUrl = next();
     else if (a === '--open-signup') o.openSignup = true;
     else if (a === '--dir') o.dir = next();
     else if (a === '--record') o.record = next();
@@ -351,6 +355,12 @@ function serveDashboard(runner, opts) {
   const roleIn = (user, orgId) => accounts.orgs.find((o) => o.id === orgId)?.members[user.id] ?? null;
   const publicOrg = (user, org) => ({ id: org.id, name: org.name, role: org.members[user.id] ?? null, members: Object.entries(org.members).map(([id, role]) => ({ email: accounts.users.find((u) => u.id === id)?.email, role })),
     projects: accounts.projects.filter((p) => p.orgId === org.id).map((p) => ({ id: p.id, name: p.name })) });
+  /** Hands invitations and reset tokens to the operator's own mailer: nothing is sent unless --mail-webhook is set. */
+  const notify = async (payload) => {
+    if (!opts.mailWebhook) return false;
+    try { const res = await fetch(opts.mailWebhook, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); return res.ok; } catch { return false; }
+  };
+  const publicBase = (req) => (opts.publicUrl ?? `http://${req.headers.host}`).replace(/\/+$/, '');
   const secureCookie = (token, maxAge) => `pigry_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
 
   const accountRoute = async (req, res, url, parts, who) => {
@@ -456,7 +466,8 @@ function serveDashboard(runner, opts) {
         accounts.invites = accounts.invites.filter((i) => !(i.orgId === org.id && i.email === email));
         accounts.invites.push({ hash: sha(token), orgId: org.id, email, role: body.role, exp: Date.now() + 7 * 86_400_000 });
         saveAccounts();
-        return json(200, { token, link: `/login?invite=${token}`, expiresInDays: 7, note: 'Send this link to the person — it works once, only for that email, and is not shown again.' });
+        const sent = await notify({ type: 'invite', to: email, organization: org.name, role: body.role, invitedBy: user.email, link: `${publicBase(req)}/login?invite=${token}`, expiresInDays: 7 });
+        return json(200, { token, link: `/login?invite=${token}`, sent, expiresInDays: 7, note: 'Send this link to the person — it works once, only for that email, and is not shown again.' });
       }
       if (parts[3] === 'reset') {
         const target = accounts.users.find((u) => u.email === String(body.email ?? '').trim().toLowerCase());
@@ -465,7 +476,8 @@ function serveDashboard(runner, opts) {
         accounts.resets = accounts.resets.filter((r) => r.userId !== target.id);
         accounts.resets.push({ hash: sha(token), userId: target.id, exp: Date.now() + 86_400_000 });
         saveAccounts();
-        return json(200, { token, expiresInHours: 24, note: 'Give this token to the person; they set a new password with POST /auth/reset { token, password }. It is not shown again.' });
+        const sent = await notify({ type: 'password-reset', to: target.email, token, resetUrl: `${publicBase(req)}/auth/reset`, expiresInHours: 24 });
+        return json(200, { token, sent, expiresInHours: 24, note: 'Give this token to the person; they set a new password with POST /auth/reset { token, password }. It is not shown again.' });
       }
       if (parts[3] === 'projects') {
         const name = String(body.name ?? '').trim().slice(0, 60);
