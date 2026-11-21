@@ -238,6 +238,8 @@ export function TerminalPanel({ cwd, visible, onClose, ref }: TerminalPanelProps
   useEffect(() => {
     if (bootedRef.current || !isTauri() || !cwd || (sshWorkspace && !visible)) return;
     bootedRef.current = true;
+    // Spawning the first shell is the point of this effect: it syncs the panel with an external PTY.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (transcript.getSnapshot().length === 0) void createTerminal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cwd, sshWorkspace, visible]);

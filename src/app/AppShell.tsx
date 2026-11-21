@@ -290,11 +290,8 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
   const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'board' || screen === 'e2e';
-  useEffect(() => {
-    if (keepAgentScreen) {
-      setVisitedAgentScreens((visited) => visited.includes(screen) ? visited : [...visited, screen]);
-    }
-  }, [keepAgentScreen, screen]);
+  // Adjusting state while rendering (not in an effect) keeps visited screens mounted without a cascading render.
+  if (keepAgentScreen && !visitedAgentScreens.includes(screen)) setVisitedAgentScreens([...visitedAgentScreens, screen]);
   // Section the settings page should open on (null = default). Set by
   // TitleBar account actions like "Add account" so users land on the
   // Accounts section instead of the Appearance section.

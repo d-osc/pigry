@@ -302,6 +302,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
   useEffect(() => {
     if (lastOpenPath.current === openPath) return;
     lastOpenPath.current = openPath;
+    // Opening the requested file in the editor syncs this screen with the route's openPath prop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (openPath) handleSelectFile(openPath);
   }, [openPath, handleSelectFile]);
 
