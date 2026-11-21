@@ -465,3 +465,62 @@ test('dashboard accounts: sign-up, sign-in, organizations with roles and project
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('dashboard accounts: invitations, password reset tokens and sessions that survive a restart', { timeout: 240000 }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pigry-e2e-inv-'));
+  const startDash = () => {
+    const child = spawn(process.execPath, [path.resolve('scripts/e2e-cli.mjs'), '--serve', '0', '--accounts', '--dir', 'dashboard'], { cwd: dir });
+    const ready = new Promise((resolve, reject) => {
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; const m = /dashboard (http:\/\/[^\s]+)/.exec(out); if (m) resolve(m[1]); });
+      child.on('close', () => reject(new Error(`dashboard exited: ${out}`)));
+      setTimeout(() => reject(new Error('dashboard did not start')), 60000);
+    });
+    return { child, ready };
+  };
+  const stop = (child) => new Promise((resolve) => { if (child.exitCode !== null || child.signalCode) { resolve(); return; } child.once('close', resolve); child.kill(); });
+  let d = startDash();
+  try {
+    let base = await d.ready;
+    const call = async (method, p, body, cookie) => {
+      const res = await fetch(`${base}${p}`, { method, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, json: await res.json().catch(() => null), cookie: (res.headers.get('set-cookie') ?? '').split(';')[0] };
+    };
+    const ada = await call('POST', '/auth/signup', { email: 'ada@example.com', password: 'correct horse battery', name: 'Ada' });
+    const orgId = (await call('GET', '/api/me', null, ada.cookie)).json.orgs[0].id;
+
+    // sign-up is closed, but an owner's invitation (for that email only, usable once) opens it
+    const inv = await call('POST', `/api/orgs/${orgId}/invites`, { email: 'bob@example.com', role: 'member' }, ada.cookie);
+    assert.equal(inv.status, 200);
+    assert.match(inv.json.token, /^pgi_[0-9a-f]{48}$/);
+    assert.equal((await call('POST', '/auth/signup', { email: 'eve@example.com', password: 'a perfectly fine password', invite: inv.json.token })).status, 400, 'another email cannot use the invitation');
+    assert.equal((await call('POST', '/auth/signup', { email: 'eve@example.com', password: 'a perfectly fine password' })).status, 403);
+    const bob = await call('POST', '/auth/signup', { email: 'bob@example.com', password: 'bobs long password', name: 'Bob', invite: inv.json.token });
+    assert.equal(bob.status, 200);
+    const bobMe = (await call('GET', '/api/me', null, bob.cookie)).json;
+    assert.equal(bobMe.orgs.length, 1, 'the invited user joins the organization instead of getting their own');
+    assert.equal(bobMe.orgs[0].role, 'member');
+    assert.equal((await call('POST', '/auth/signup', { email: 'bob2@example.com', password: 'bobs long password', invite: inv.json.token })).status, 400, 'an invitation works once');
+
+    // an owner hands out a password reset token; the old password and the old session stop working
+    assert.equal((await call('POST', `/api/orgs/${orgId}/reset`, { email: 'bob@example.com' }, bob.cookie)).status, 403, 'members cannot reset passwords');
+    const reset = await call('POST', `/api/orgs/${orgId}/reset`, { email: 'bob@example.com' }, ada.cookie);
+    assert.match(reset.json.token, /^pgr_/);
+
+    // sessions survive a restart
+    await stop(d.child);
+    d = startDash();
+    base = await d.ready;
+    assert.equal((await call('GET', '/api/me', null, ada.cookie)).status, 200, 'the session is still valid after a restart');
+
+    assert.equal((await call('POST', '/auth/reset', { token: 'pgr_nope', password: 'a brand new password' })).status, 400);
+    assert.equal((await call('POST', '/auth/reset', { token: reset.json.token, password: 'a brand new password' })).status, 200);
+    assert.equal((await call('POST', '/auth/reset', { token: reset.json.token, password: 'another new password' })).status, 400, 'a reset token works once');
+    assert.equal((await call('GET', '/api/me', null, bob.cookie)).status, 401, 'the old session was ended');
+    assert.equal((await call('POST', '/auth/login', { email: 'bob@example.com', password: 'bobs long password' })).status, 401);
+    assert.equal((await call('POST', '/auth/login', { email: 'bob@example.com', password: 'a brand new password' })).status, 200);
+  } finally {
+    await stop(d.child).catch(() => undefined);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

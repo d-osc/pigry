@@ -329,8 +329,11 @@ function serveDashboard(runner, opts) {
   const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
   const accountsFile = path.join(dir, 'accounts.json');
   const accounts = readJson(accountsFile) ?? { users: [], orgs: [], projects: [] };
+  accounts.invites ??= []; accounts.resets ??= [];
   const saveAccounts = () => fs.writeFileSync(accountsFile, JSON.stringify(accounts, null, 2));
-  const sessions = new Map();
+  const sessionsFile = path.join(dir, 'sessions.json');
+  const sessions = new Map(Object.entries(readJson(sessionsFile) ?? {}).filter(([, v]) => v.exp > Date.now()));
+  const saveSessions = () => fs.writeFileSync(sessionsFile, JSON.stringify(Object.fromEntries(sessions)));
   const attempts = new Map();
   const ROLES = ['owner', 'member', 'viewer'];
   const newId = () => crypto.randomBytes(6).toString('hex');
@@ -356,7 +359,7 @@ function serveDashboard(runner, opts) {
     if (req.method === 'GET' && parts[0] === 'login' && !parts[1]) {
       send(res, 200, `<!doctype html><html><head><meta charset="utf-8"><title>Sign in</title><style>body{font:14px system-ui;max-width:340px;margin:80px auto;padding:0 16px}input,button{display:block;width:100%;box-sizing:border-box;margin:6px 0;padding:8px}</style></head><body><h1>Pigry E2E dashboard</h1><form id="f"><input name="email" type="email" placeholder="Email" required autocomplete="username"><input name="password" type="password" placeholder="Password (10+ characters)" required autocomplete="current-password"><input name="name" placeholder="Name (sign up only)"><button name="act" value="login">Sign in</button><button name="act" value="signup" type="button" id="su">Create account</button></form><p id="msg" role="alert"></p><script>`
         + `var f=document.getElementById("f"),msg=document.getElementById("msg");`
-        + `function go(act){fetch("/auth/"+act,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:f.email.value,password:f.password.value,name:f.name.value})}).then(function(r){return r.json().then(function(j){if(r.ok)location.href="/";else msg.textContent=j.error||"failed";});});}`
+        + `function go(act){fetch("/auth/"+act,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:f.email.value,password:f.password.value,name:f.name.value,invite:new URLSearchParams(location.search).get("invite")||undefined})}).then(function(r){return r.json().then(function(j){if(r.ok)location.href="/";else msg.textContent=j.error||"failed";});});}`
         + `f.addEventListener("submit",function(e){e.preventDefault();go("login");});document.getElementById("su").addEventListener("click",function(){go("signup");});`
         + `</script></body></html>`, 'text/html');
       return true;
@@ -369,19 +372,35 @@ function serveDashboard(runner, opts) {
       const body = await readBody(req);
       const email = String(body.email ?? '').trim().toLowerCase();
       const password = String(body.password ?? '');
-      if (parts[1] === 'logout') { sessions.delete(sha(cookieOf(req, 'pigry_session'))); return json(200, { ok: true }, { 'set-cookie': secureCookie('', 0) }); }
+      if (parts[1] === 'logout') { sessions.delete(sha(cookieOf(req, 'pigry_session'))); saveSessions(); return json(200, { ok: true }, { 'set-cookie': secureCookie('', 0) }); }
+      if (parts[1] === 'reset') {
+        const hit = accounts.resets.find((r) => r.hash === sha(body.token ?? '') && r.exp > Date.now());
+        if (!hit) return json(400, { error: 'this reset link is invalid or has expired' });
+        if (password.length < 10) return json(400, { error: 'the password needs at least 10 characters' });
+        const target = accounts.users.find((u) => u.id === hit.userId);
+        if (!target) return json(400, { error: 'unknown account' });
+        target.salt = crypto.randomBytes(16).toString('hex'); target.hash = hashPassword(password, target.salt);
+        accounts.resets = accounts.resets.filter((r) => r !== hit); saveAccounts();
+        for (const [k, v] of sessions) if (v.userId === target.id) sessions.delete(k);
+        saveSessions();
+        return json(200, { ok: true });
+      }
       if (!/^[^@\s]+@[^@\s]+$/.test(email) || email.length > 200) return json(400, { error: 'enter a valid email' });
       const tries = (attempts.get(email) ?? []).filter((t) => t > Date.now() - 600_000);
       if (tries.length >= 8) return json(429, { error: 'too many attempts — try again in a few minutes' });
       attempts.set(email, [...tries, Date.now()]);
+      let invite = null;
       if (parts[1] === 'signup') {
         if (password.length < 10) return json(400, { error: 'the password needs at least 10 characters' });
         if (accounts.users.some((u) => u.email === email)) return json(409, { error: 'an account with this email already exists' });
-        if (accounts.users.length > 0 && !opts.openSignup) return json(403, { error: 'sign-ups are closed — ask an organization owner to add you (or start the dashboard with --open-signup)' });
+        invite = accounts.invites.find((i) => i.hash === sha(body.invite ?? '') && i.exp > Date.now() && i.email === email) ?? null;
+        if (body.invite && !invite) return json(400, { error: 'this invitation is invalid, expired or for another email' });
+        if (accounts.users.length > 0 && !opts.openSignup && !invite) return json(403, { error: 'sign-ups are closed — ask an organization owner to add you (or start the dashboard with --open-signup)' });
         const salt = crypto.randomBytes(16).toString('hex');
         const created = { id: newId(), email, name: String(body.name ?? '').slice(0, 80), salt, hash: hashPassword(password, salt), createdAt: Date.now() };
         accounts.users.push(created);
-        accounts.orgs.push({ id: newId(), name: `${created.name || email.split('@')[0]}'s organization`, members: { [created.id]: 'owner' } });
+        if (invite) { const org = accounts.orgs.find((o) => o.id === invite.orgId); if (org) org.members[created.id] = invite.role; accounts.invites = accounts.invites.filter((i) => i !== invite); }
+        else accounts.orgs.push({ id: newId(), name: `${created.name || email.split('@')[0]}'s organization`, members: { [created.id]: 'owner' } });
         saveAccounts();
       } else if (parts[1] !== 'login') return json(404, { error: 'not found' });
       const found = accounts.users.find((u) => u.email === email);
@@ -390,6 +409,7 @@ function serveDashboard(runner, opts) {
       attempts.delete(email);
       const token = crypto.randomBytes(32).toString('hex');
       sessions.set(sha(token), { userId: found.id, exp: Date.now() + 7 * 86_400_000 });
+      saveSessions();
       return json(200, { ok: true }, { 'set-cookie': secureCookie(token, 7 * 86_400) });
     }
     if (parts[0] === 'api' && (parts[1] === 'me' || parts[1] === 'orgs')) {
@@ -406,6 +426,14 @@ function serveDashboard(runner, opts) {
         accounts.orgs.push(org); saveAccounts();
         return json(200, publicOrg(user, org));
       }
+      if (parts[1] === 'orgs' && parts[2] === 'accept') {
+        const hit = accounts.invites.find((i) => i.hash === sha(body.invite ?? '') && i.exp > Date.now() && i.email === user.email);
+        if (!hit) return json(400, { error: 'this invitation is invalid, expired or for another email' });
+        const target = accounts.orgs.find((o) => o.id === hit.orgId);
+        if (target) target.members[user.id] = hit.role;
+        accounts.invites = accounts.invites.filter((i) => i !== hit); saveAccounts();
+        return json(200, { ok: true });
+      }
       const org = accounts.orgs.find((o) => o.id === parts[2]);
       const role = org ? roleIn(user, org.id) : null;
       if (!org || !role) return json(404, { error: 'unknown organization' });
@@ -419,6 +447,25 @@ function serveDashboard(runner, opts) {
         if (org.members[target.id] === 'owner' && body.role !== 'owner' && owners < 2) return json(400, { error: 'an organization needs at least one owner' });
         org.members[target.id] = body.role; saveAccounts();
         return json(200, publicOrg(user, org));
+      }
+      if (parts[3] === 'invites') {
+        const email = String(body.email ?? '').trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+$/.test(email)) return json(400, { error: 'enter a valid email' });
+        if (!ROLES.includes(body.role)) return json(400, { error: `role must be one of ${ROLES.join(', ')}` });
+        const token = `pgi_${crypto.randomBytes(24).toString('hex')}`;
+        accounts.invites = accounts.invites.filter((i) => !(i.orgId === org.id && i.email === email));
+        accounts.invites.push({ hash: sha(token), orgId: org.id, email, role: body.role, exp: Date.now() + 7 * 86_400_000 });
+        saveAccounts();
+        return json(200, { token, link: `/login?invite=${token}`, expiresInDays: 7, note: 'Send this link to the person — it works once, only for that email, and is not shown again.' });
+      }
+      if (parts[3] === 'reset') {
+        const target = accounts.users.find((u) => u.email === String(body.email ?? '').trim().toLowerCase());
+        if (!target || !org.members[target.id]) return json(404, { error: 'that person is not in this organization' });
+        const token = `pgr_${crypto.randomBytes(24).toString('hex')}`;
+        accounts.resets = accounts.resets.filter((r) => r.userId !== target.id);
+        accounts.resets.push({ hash: sha(token), userId: target.id, exp: Date.now() + 86_400_000 });
+        saveAccounts();
+        return json(200, { token, expiresInHours: 24, note: 'Give this token to the person; they set a new password with POST /auth/reset { token, password }. It is not shown again.' });
       }
       if (parts[3] === 'projects') {
         const name = String(body.name ?? '').trim().slice(0, 60);
