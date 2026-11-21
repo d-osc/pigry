@@ -379,3 +379,89 @@ test('dashboard projects: each key sees and records only its own project', { tim
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test('dashboard accounts: sign-up, sign-in, organizations with roles and project record keys', { timeout: 240000 }, async () => {
+  const { server, url } = await serve();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pigry-e2e-acc-'));
+  const startDash = (extra) => {
+    const child = spawn(process.execPath, [path.resolve('scripts/e2e-cli.mjs'), '--serve', '0', '--accounts', ...extra, '--dir', 'dashboard'], { cwd: dir });
+    const ready = new Promise((resolve, reject) => {
+      let out = '';
+      child.stdout.on('data', (d) => { out += d; const m = /dashboard (http:\/\/[^\s]+)/.exec(out); if (m) resolve(m[1]); });
+      child.on('close', () => reject(new Error(`dashboard exited: ${out}`)));
+      setTimeout(() => reject(new Error('dashboard did not start')), 60000);
+    });
+    return { child, ready };
+  };
+  const stop = (child) => new Promise((resolve) => { if (child.exitCode !== null || child.signalCode) { resolve(); return; } child.once('close', resolve); child.kill(); });
+  const first = startDash([]);
+  let second = null;
+  try {
+    const dashUrl = await first.ready;
+    const call = async (base, method, p, body, cookie) => {
+      const res = await fetch(`${base}${p}`, { method, redirect: 'manual', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body ? JSON.stringify(body) : undefined });
+      const text = await res.text();
+      let json = null; try { json = JSON.parse(text); } catch { /* html */ }
+      return { status: res.status, json, text, cookie: (res.headers.get('set-cookie') ?? '').split(';')[0], headers: res.headers };
+    };
+    const c = (method, p, body, cookie) => call(dashUrl, method, p, body, cookie);
+
+    // nothing is visible without signing in
+    const anon = await c('GET', '/');
+    assert.equal(anon.status, 302);
+    assert.equal(anon.headers.get('location'), '/login');
+    assert.equal((await c('GET', '/api/runs')).status, 401);
+    assert.match((await c('GET', '/login')).text, /Create account/);
+
+    // the first account bootstraps the dashboard; later sign-ups are closed
+    assert.equal((await c('POST', '/auth/signup', { email: 'ada@example.com', password: 'short' })).status, 400);
+    const ada = await c('POST', '/auth/signup', { email: 'ada@example.com', password: 'correct horse battery', name: 'Ada' });
+    assert.equal(ada.status, 200);
+    assert.match(ada.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+    assert.equal((await c('POST', '/auth/signup', { email: 'bob@example.com', password: 'another long password' })).status, 403);
+    assert.equal((await c('POST', '/auth/login', { email: 'ada@example.com', password: 'wrong password!!' })).status, 401);
+
+    const me = (await c('GET', '/api/me', null, ada.cookie)).json;
+    assert.equal(me.email, 'ada@example.com');
+    assert.equal(me.orgs.length, 1);
+    assert.equal(me.orgs[0].role, 'owner');
+
+    // an owner creates a project and gets a record key once; runs recorded with it belong to the organization
+    const project = (await c('POST', `/api/orgs/${me.orgs[0].id}/projects`, { name: 'web' }, ada.cookie)).json;
+    assert.match(project.recordKey, /^pgk_[0-9a-f]{48}$/);
+    const specs = path.join(dir, '.pigry/e2e/specs/a');
+    fs.mkdirSync(specs, { recursive: true });
+    fs.writeFileSync(path.join(specs, 'about.cy.js'), "describe('about', () => { it('works', () => { cy.visit('/about'); cy.get('h1').should('have.text', 'About us'); }); });\n");
+    const rec = await runCli(['--base-url', url, '--record', dashUrl, '--key', project.recordKey, '--ci-build-id', 'a1', '--reporter', 'json', '--out', 'out'], dir);
+    assert.equal(rec.code, 0, rec.stdout + rec.stderr);
+    assert.deepEqual((await c('GET', '/api/runs', null, ada.cookie)).json.map((r) => r.buildId), ['a1']);
+    assert.equal((await c('POST', '/api/runs', { specs: ['x'] }, ada.cookie)).status, 401, 'a signed-in user cannot record without a record key');
+    assert.match((await c('GET', '/', null, ada.cookie)).text, /ada@example\.com/);
+
+    // logging out ends the session
+    await c('POST', '/auth/logout', {}, ada.cookie);
+    assert.equal((await c('GET', '/api/me', null, ada.cookie)).status, 401);
+
+    // accounts persist across restarts; with open sign-up a second user is outside the organization until an owner adds them
+    await stop(first.child);
+    second = startDash(['--open-signup']);
+    const url2 = await second.ready;
+    const c2 = (method, p, body, cookie) => call(url2, method, p, body, cookie);
+    const adaLogin = await c2('POST', '/auth/login', { email: 'ada@example.com', password: 'correct horse battery' });
+    assert.equal(adaLogin.status, 200);
+    const bob = await c2('POST', '/auth/signup', { email: 'bob@example.com', password: 'another long password', name: 'Bob' });
+    assert.equal(bob.status, 200);
+    assert.deepEqual((await c2('GET', '/api/runs', null, bob.cookie)).json, [], 'a user outside the organization sees no runs');
+    const orgId = (await c2('GET', '/api/me', null, adaLogin.cookie)).json.orgs[0].id;
+    assert.equal((await c2('POST', `/api/orgs/${orgId}/members`, { email: 'bob@example.com', role: 'viewer' }, bob.cookie)).status, 404, 'a non-member cannot add people');
+    assert.equal((await c2('POST', `/api/orgs/${orgId}/members`, { email: 'bob@example.com', role: 'viewer' }, adaLogin.cookie)).status, 200);
+    assert.equal((await c2('GET', '/api/runs', null, bob.cookie)).json.length, 1, 'the viewer now sees the organization runs');
+    assert.equal((await c2('POST', `/api/orgs/${orgId}/projects`, { name: 'x' }, bob.cookie)).status, 403, 'a viewer cannot create projects');
+    assert.equal((await c2('POST', `/api/orgs/${orgId}/members`, { email: 'ada@example.com', role: 'viewer' }, adaLogin.cookie)).status, 400, 'the last owner cannot be demoted');
+  } finally {
+    await stop(first.child).catch(() => undefined);
+    if (second) await stop(second.child).catch(() => undefined);
+    server.close();
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

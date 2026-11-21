@@ -7,6 +7,7 @@
  * It bundles the same runner the app uses (src/lib/e2e) and drives Playwright browsers (chromium, firefox,
  * webkit) instead of the app's DevTools test window. Exit code: 0 all passed, 1 test failures, 2 setup errors. */
 import { exec as execCb } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -40,6 +41,7 @@ const HELP = `Usage: node scripts/e2e-cli.mjs [options]
   --replay               keep DOM snapshots of the last commands of every failed test and embed them in report.html (Test Replay, works offline)
   --merge <dirs>         do not run anything: merge the results of several --out directories (comma separated, e.g. CI shards) into --out: junit.xml, summary.json, report.html
   --serve [port]         run the self-hosted dashboard (our Cypress Cloud): records runs, balances specs across machines, flaky tests, Test Replay (--dir, --host, --token, --projects)
+  --accounts             dashboard with user accounts: sign-up/sign-in (scrypt + session cookie), organizations with owner/member/viewer roles, projects with record keys created in the UI (the first sign-up bootstraps; --open-signup lets anyone register)
   --projects <file>      dashboard with several projects: {"projects": {"web": {"recordKey": "...", "readKey": "..."}}} — a key opens only its own project's runs (the --token key sees all)
   --record <url>         upload every spec result to a dashboard (--ci-build-id, --group, --key, --balance)
   --project <name>       with the --token key: which project the run belongs to (project keys decide it themselves)
@@ -74,6 +76,8 @@ function parseArgs(argv) {
     else if (a === '--host') o.host = next();
     else if (a === '--token') o.token = next();
     else if (a === '--projects') o.projects = next();
+    else if (a === '--accounts') o.accounts = true;
+    else if (a === '--open-signup') o.openSignup = true;
     else if (a === '--dir') o.dir = next();
     else if (a === '--record') o.record = next();
     else if (a === '--ci-build-id') o.ciBuildId = next();
@@ -309,15 +313,138 @@ function serveDashboard(runner, opts) {
   if (opts.projects && !projectsFile?.projects) { console.error(`${opts.projects} must look like {"projects": {"name": {"recordKey": "...", "readKey": "..."}}}`); return Promise.resolve(2); }
   /** Who is asking: { project, write } — project '*' is the admin token (sees every project); null = refused. */
   const authOf = (req, url) => {
+    const session = sessionOf(req);
+    if (session) return session;
     const key = (req.headers.authorization ?? '').replace(/^Bearer /, '') || url.searchParams.get('key') || '';
     if (opts.token && key === opts.token) return { project: '*', write: true };
     for (const [name, k] of Object.entries(projectsFile?.projects ?? {})) {
       if (k.recordKey && key === k.recordKey) return { project: name, write: true };
       if (k.readKey && key === k.readKey) return { project: name, write: false };
     }
+    if (opts.accounts && key.startsWith('pgk_')) { const hit = accounts.projects.find((p) => p.keyHash === sha(key)); if (hit) return { project: hit.id, write: true }; }
     return null;
   };
-  const visible = (run, who) => who.project === '*' || (run.project ?? '') === who.project;
+  const visible = (run, who) => who.project === '*' || Boolean(who.allowed?.has(run.project ?? '')) || (who.project !== undefined && (run.project ?? '') === who.project);
+  /* ---- accounts (--accounts): users, organizations with roles, projects with record keys ---- */
+  const sha = (v) => crypto.createHash('sha256').update(String(v)).digest('hex');
+  const accountsFile = path.join(dir, 'accounts.json');
+  const accounts = readJson(accountsFile) ?? { users: [], orgs: [], projects: [] };
+  const saveAccounts = () => fs.writeFileSync(accountsFile, JSON.stringify(accounts, null, 2));
+  const sessions = new Map();
+  const attempts = new Map();
+  const ROLES = ['owner', 'member', 'viewer'];
+  const newId = () => crypto.randomBytes(6).toString('hex');
+  const hashPassword = (password, salt) => crypto.scryptSync(password, salt, 64).toString('hex');
+  const cookieOf = (req, name) => { for (const part of String(req.headers.cookie ?? '').split(';')) { const [k, ...v] = part.trim().split('='); if (k === name) return v.join('='); } return ''; };
+  const sessionOf = (req) => {
+    if (!opts.accounts) return null;
+    const hit = sessions.get(sha(cookieOf(req, 'pigry_session')));
+    if (!hit || hit.exp < Date.now()) return null;
+    const user = accounts.users.find((u) => u.id === hit.userId);
+    if (!user) return null;
+    const orgIds = new Set(accounts.orgs.filter((o) => o.members[user.id]).map((o) => o.id));
+    return { user, write: false, allowed: new Set(accounts.projects.filter((p) => orgIds.has(p.orgId)).map((p) => p.id)) };
+  };
+  const roleIn = (user, orgId) => accounts.orgs.find((o) => o.id === orgId)?.members[user.id] ?? null;
+  const publicOrg = (user, org) => ({ id: org.id, name: org.name, role: org.members[user.id] ?? null, members: Object.entries(org.members).map(([id, role]) => ({ email: accounts.users.find((u) => u.id === id)?.email, role })),
+    projects: accounts.projects.filter((p) => p.orgId === org.id).map((p) => ({ id: p.id, name: p.name })) });
+  const secureCookie = (token, maxAge) => `pigry_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+
+  const accountRoute = async (req, res, url, parts, who) => {
+    const json = (code, body, headers) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...(headers ?? {}) }); res.end(JSON.stringify(body)); return true; };
+    const user = who?.user ?? null;
+    if (req.method === 'GET' && parts[0] === 'login' && !parts[1]) {
+      send(res, 200, `<!doctype html><html><head><meta charset="utf-8"><title>Sign in</title><style>body{font:14px system-ui;max-width:340px;margin:80px auto;padding:0 16px}input,button{display:block;width:100%;box-sizing:border-box;margin:6px 0;padding:8px}</style></head><body><h1>Pigry E2E dashboard</h1><form id="f"><input name="email" type="email" placeholder="Email" required autocomplete="username"><input name="password" type="password" placeholder="Password (10+ characters)" required autocomplete="current-password"><input name="name" placeholder="Name (sign up only)"><button name="act" value="login">Sign in</button><button name="act" value="signup" type="button" id="su">Create account</button></form><p id="msg" role="alert"></p><script>`
+        + `var f=document.getElementById("f"),msg=document.getElementById("msg");`
+        + `function go(act){fetch("/auth/"+act,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email:f.email.value,password:f.password.value,name:f.name.value})}).then(function(r){return r.json().then(function(j){if(r.ok)location.href="/";else msg.textContent=j.error||"failed";});});}`
+        + `f.addEventListener("submit",function(e){e.preventDefault();go("login");});document.getElementById("su").addEventListener("click",function(){go("signup");});`
+        + `</script></body></html>`, 'text/html');
+      return true;
+    }
+    if (req.method === 'GET' && parts.length === 0) {
+      if (!user) { res.writeHead(302, { location: '/login' }); res.end(); return true; }
+      return false; // the normal index, with the account panel added
+    }
+    if (parts[0] === 'auth' && req.method === 'POST') {
+      const body = await readBody(req);
+      const email = String(body.email ?? '').trim().toLowerCase();
+      const password = String(body.password ?? '');
+      if (parts[1] === 'logout') { sessions.delete(sha(cookieOf(req, 'pigry_session'))); return json(200, { ok: true }, { 'set-cookie': secureCookie('', 0) }); }
+      if (!/^[^@\s]+@[^@\s]+$/.test(email) || email.length > 200) return json(400, { error: 'enter a valid email' });
+      const tries = (attempts.get(email) ?? []).filter((t) => t > Date.now() - 600_000);
+      if (tries.length >= 8) return json(429, { error: 'too many attempts — try again in a few minutes' });
+      attempts.set(email, [...tries, Date.now()]);
+      if (parts[1] === 'signup') {
+        if (password.length < 10) return json(400, { error: 'the password needs at least 10 characters' });
+        if (accounts.users.some((u) => u.email === email)) return json(409, { error: 'an account with this email already exists' });
+        if (accounts.users.length > 0 && !opts.openSignup) return json(403, { error: 'sign-ups are closed — ask an organization owner to add you (or start the dashboard with --open-signup)' });
+        const salt = crypto.randomBytes(16).toString('hex');
+        const created = { id: newId(), email, name: String(body.name ?? '').slice(0, 80), salt, hash: hashPassword(password, salt), createdAt: Date.now() };
+        accounts.users.push(created);
+        accounts.orgs.push({ id: newId(), name: `${created.name || email.split('@')[0]}'s organization`, members: { [created.id]: 'owner' } });
+        saveAccounts();
+      } else if (parts[1] !== 'login') return json(404, { error: 'not found' });
+      const found = accounts.users.find((u) => u.email === email);
+      const ok = found && crypto.timingSafeEqual(Buffer.from(hashPassword(password, found.salt), 'hex'), Buffer.from(found.hash, 'hex'));
+      if (!ok) return json(401, { error: 'wrong email or password' });
+      attempts.delete(email);
+      const token = crypto.randomBytes(32).toString('hex');
+      sessions.set(sha(token), { userId: found.id, exp: Date.now() + 7 * 86_400_000 });
+      return json(200, { ok: true }, { 'set-cookie': secureCookie(token, 7 * 86_400) });
+    }
+    if (parts[0] === 'api' && (parts[1] === 'me' || parts[1] === 'orgs')) {
+      if (!user) return json(401, { error: 'sign in first' });
+      const mine = accounts.orgs.filter((o) => o.members[user.id]);
+      if (parts[1] === 'me' && req.method === 'GET') return json(200, { email: user.email, name: user.name, orgs: mine.map((o) => publicOrg(user, o)) });
+      if (parts[1] === 'orgs' && !parts[2] && req.method === 'GET') return json(200, mine.map((o) => publicOrg(user, o)));
+      if (req.method !== 'POST') return json(405, { error: 'method not allowed' });
+      const body = await readBody(req);
+      if (parts[1] === 'orgs' && !parts[2]) {
+        const name = String(body.name ?? '').trim().slice(0, 80);
+        if (!name) return json(400, { error: 'name the organization' });
+        const org = { id: newId(), name, members: { [user.id]: 'owner' } };
+        accounts.orgs.push(org); saveAccounts();
+        return json(200, publicOrg(user, org));
+      }
+      const org = accounts.orgs.find((o) => o.id === parts[2]);
+      const role = org ? roleIn(user, org.id) : null;
+      if (!org || !role) return json(404, { error: 'unknown organization' });
+      if (role !== 'owner') return json(403, { error: 'only organization owners can do this' });
+      if (parts[3] === 'members') {
+        const email = String(body.email ?? '').trim().toLowerCase();
+        const target = accounts.users.find((u) => u.email === email);
+        if (!target) return json(404, { error: 'that person has no account yet — they must sign up first' });
+        if (!ROLES.includes(body.role)) return json(400, { error: `role must be one of ${ROLES.join(', ')}` });
+        const owners = Object.values(org.members).filter((r) => r === 'owner').length;
+        if (org.members[target.id] === 'owner' && body.role !== 'owner' && owners < 2) return json(400, { error: 'an organization needs at least one owner' });
+        org.members[target.id] = body.role; saveAccounts();
+        return json(200, publicOrg(user, org));
+      }
+      if (parts[3] === 'projects') {
+        const name = String(body.name ?? '').trim().slice(0, 60);
+        if (!name) return json(400, { error: 'name the project' });
+        const key = `pgk_${crypto.randomBytes(24).toString('hex')}`;
+        const project = { id: `${org.id}-${newId()}`, orgId: org.id, name, keyHash: sha(key) };
+        accounts.projects.push(project); saveAccounts();
+        return json(200, { id: project.id, name, recordKey: key, note: 'Copy the record key now — it is only shown once.' });
+      }
+    }
+    return false;
+  };
+
+  const accountPanel = (who) => {
+    const mine = accounts.orgs.filter((o) => who.user && o.members[who.user.id]).map((o) => publicOrg(who.user, o));
+    return `<p>${esc(who.user.email)} · <a href="#" id="logout">Sign out</a></p><h2>Organizations</h2>${mine.map((o) => `<div><b>${esc(o.name)}</b> (${esc(o.role)}) — ${o.members.map((m) => `${esc(m.email)} ${esc(m.role)}`).join(', ')}<br>Projects: ${o.projects.map((p) => esc(p.name)).join(', ') || 'none yet'}${o.role === 'owner' ? ` <button data-org="${esc(o.id)}" data-act="project">New project</button> <button data-org="${esc(o.id)}" data-act="member">Add member</button>` : ''}</div>`).join('')}<p><button data-act="org">New organization</button></p>`
+      + '<script>'
+      + 'function post(p,b){return fetch(p,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(b||{})}).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||"failed");return j;});});}'
+      + 'document.getElementById("logout").addEventListener("click",function(e){e.preventDefault();post("/auth/logout").then(function(){location.href="/login";});});'
+      + 'document.querySelectorAll("button[data-act]").forEach(function(b){b.addEventListener("click",function(){var org=b.getAttribute("data-org"),act=b.getAttribute("data-act");'
+      + 'if(act==="org"){var n=prompt("Organization name");if(n)post("/api/orgs",{name:n}).then(function(){location.reload();}).catch(function(e){alert(e.message);});}'
+      + 'else if(act==="project"){var p=prompt("Project name");if(p)post("/api/orgs/"+org+"/projects",{name:p}).then(function(j){alert("Record key (shown once):"+String.fromCharCode(10)+j.recordKey);location.reload();}).catch(function(e){alert(e.message);});}'
+      + 'else{var m=prompt("Email of an existing account");var r=m&&prompt("Role: owner, member or viewer","member");if(m&&r)post("/api/orgs/"+org+"/members",{email:m,role:r}).then(function(){location.reload();}).catch(function(e){alert(e.message);});}'
+      + '});});</script>';
+  };
+
   for (const id of fs.readdirSync(runsDir)) { const meta = readJson(path.join(runsDir, id, 'run.json')); if (meta) runs.set(id, meta); }
   const save = (run) => { fs.mkdirSync(path.join(runsDir, run.id), { recursive: true }); fs.writeFileSync(path.join(runsDir, run.id, 'run.json'), JSON.stringify(run)); };
   const resultsOf = (run) => readResults(path.join(runsDir, run.id, 'results'));
@@ -368,12 +495,13 @@ function serveDashboard(runner, opts) {
     try {
       const url = new URL(req.url ?? '/', 'http://x');
       const parts = url.pathname.split('/').filter(Boolean);
-      const secured = Boolean(projectsFile);
-      const openMode = !opts.token && !projectsFile;
+      const secured = Boolean(projectsFile) || Boolean(opts.accounts);
+      const openMode = !opts.token && !projectsFile && !opts.accounts;
       const who = authOf(req, url) ?? (openMode ? { project: '*', write: true } : secured ? null : { project: '*', write: false });
       const q = url.searchParams.get('key') ? `?key=${encodeURIComponent(url.searchParams.get('key'))}` : '';
+      if (opts.accounts && (await accountRoute(req, res, url, parts, who))) return;
       if (!who && (secured || req.method !== 'GET')) return send(res, 401, { error: 'missing or wrong key' });
-      if (req.method === 'GET' && parts.length === 0) return send(res, 200, indexHtml(who, q), 'text/html');
+      if (req.method === 'GET' && parts.length === 0) return send(res, 200, who.user ? indexHtml(who, q).replace('<h2>Runs</h2>', `${accountPanel(who)}<h2>Runs</h2>`) : indexHtml(who, q), 'text/html');
       if (req.method === 'GET' && parts[0] === 'runs' && parts[1]) {
         const run = runs.get(parts[1]); if (!run || !visible(run, who)) return send(res, 404, { error: 'unknown run' });
         const replays = {}; const rs = resultsOf(run);
