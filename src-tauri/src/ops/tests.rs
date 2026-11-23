@@ -268,6 +268,45 @@ fn edit_commit_replay_conflicts_can_be_staged_and_continued() {
 }
 
 #[test]
+fn revert_abort_restores_the_branch_after_a_conflicting_revert() {
+    let dir = std::env::temp_dir().join(format!("pigry-ops-revert-abort-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    Repository::init(&dir).unwrap();
+    let mut config = Repository::open(&dir).unwrap().config().unwrap();
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@pigry.dev").unwrap();
+    drop(config);
+
+    // Three commits rewriting the same line: reverting the middle one conflicts with the last.
+    let commit_file = |content: &str, message: &str| {
+        fs::write(dir.join("file.txt"), content).unwrap();
+        let repo = Repository::open(&dir).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = git2::Signature::now("Test User", "test@pigry.dev").unwrap();
+        let parents: Vec<git2::Commit> = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).into_iter().collect();
+        let refs: Vec<&git2::Commit> = parents.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &refs).unwrap().to_string()
+    };
+    commit_file("one\n", "first");
+    let middle = commit_file("two\n", "second");
+    let last = commit_file("three\n", "third");
+
+    assert!(crate::ops::revert_commit(&dir, &middle).is_err(), "reverting the middle commit must conflict");
+    crate::ops::revert_abort(&dir).unwrap();
+
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id().to_string(), last, "HEAD is unchanged");
+    assert_eq!(fs::read_to_string(dir.join("file.txt")).unwrap().lines().collect::<Vec<_>>(), vec!["three"]);
+    assert!(repo.state() == git2::RepositoryState::Clean, "no revert left in progress");
+
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn revert_commit_creates_undo_commit() {
     let dir = std::env::temp_dir().join(format!("pigry-ops-revert-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);

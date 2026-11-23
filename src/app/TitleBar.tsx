@@ -3,6 +3,7 @@ import {
   CircleUserRound,
   FolderOpen,
   GitFork,
+  Info,
   LogIn,
   LogOut,
   Minus,
@@ -32,9 +33,11 @@ interface TitleBarProps {
   /** Opens app settings; pass a section id to land there (account actions
    * use the Accounts section). */
   onOpenSettings: (section?: 'accounts') => void;
+  /** Opens the guide of the active menu; omitted where no menu is showing (home, settings). */
+  onOpenHelp?: () => void;
 }
 
-export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarProps) {
+export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings, onOpenHelp }: TitleBarProps) {
   const nativeControls = isMac && isTauri();
   const { repository, openRepository, pickRepository, notify } = useRepository();
 
@@ -382,6 +385,18 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings }: TitleBarPr
           <span className="command-search__input">Search or jump to…</span>
           <kbd className="command-search__kbd">⌘ K</kbd>
         </button>
+
+        {onOpenHelp && (
+          <button
+            type="button"
+            className="help-button"
+            aria-label="Guide for this menu"
+            title="Guide for this menu — how to use it, tips and cautions"
+            onClick={onOpenHelp}
+          >
+            <Info size={17} strokeWidth={1.25} />
+          </button>
+        )}
 
         <span ref={profileWrapRef} className="profile-wrap">
           <button

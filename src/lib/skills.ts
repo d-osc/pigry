@@ -431,6 +431,20 @@ export const BUILTIN_SKILLS: BaseSkill[] = [
     ].join('\n'),
   },
   {
+    id: 'revert-commit',
+    name: 'Revert commit',
+    description: 'Undo a commit with a new revert commit; conflicts stop for resolution.',
+    content: [
+      '# Revert commit',
+      '',
+      '- Use git_status to confirm the checked-out branch, then read_commit to review the commit and what a revert would undo.',
+      '- Check read_history for later commits that touch the same files; they are the likely cause of conflicts.',
+      '- In Revert commit, revert the selected commit: Git creates a new commit that undoes it and keeps the history. Merge commits are not offered.',
+      '- If Git reports conflicts, resolve them in Working changes and commit to finish the revert, or abort the revert to restore the branch.',
+      '- A commit that is already pushed should be reverted rather than rewritten; mention that the revert still needs to be pushed.',
+    ].join('\n'),
+  },
+  {
     id: 'duplicate-commit',
     name: 'Duplicate commit',
     description: 'Check whether a commit can be copied from one local branch to another.',

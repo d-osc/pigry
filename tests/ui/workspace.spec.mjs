@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { workspaceNav } from '../../src/app/navigation.ts';
 
-const pages = ['Explorer', 'Diagram', 'Design', 'Board', 'E2E Testing', 'Copilot', 'Working changes', 'Push Commits', 'Pull commit', 'Merge branch',
-  'Compare branch', 'Stashes Code', 'Cherry Pick', 'Duplicate commit', 'Edit commit', 'Rebase Branch', 'Pull requests', 'Commit graph',
+const pages = ['Explorer', 'Diagram', 'Design', 'Board', 'E2E Testing', 'Reports', 'Copilot', 'Working changes', 'Push Commits', 'Pull commit', 'Merge branch',
+  'Compare branch', 'Stashes Code', 'Cherry Pick', 'Revert commit', 'Duplicate commit', 'Edit commit', 'Rebase Branch', 'Pull requests', 'Commit graph',
   'Branches', 'Releases', 'Actions', 'Security and quality', 'Issues', 'Projects', 'Wiki', 'Insights'];
 
 for (const theme of ['light', 'dark']) {
@@ -53,6 +53,7 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     design: 'uxui',
     board: 'board-sa',
     e2e: 'e2e-qa',
+    reports: 'report-reviewer',
     'ai-agent': 'workspace-guide',
     'working-changes': 'code-reviewer',
     'push-commits': 'push-checklist',
@@ -61,6 +62,7 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     'compare-branch': 'branch-diff-reviewer',
     stashes: 'stash-inspector',
     'cherry-pick': 'pick-reviewer',
+    'revert-commit': 'revert-checker',
     'duplicate-commit': 'transfer-check',
     'edit-commit': 'amend-reviewer',
     'rebase-branch': 'rebase-plan-reviewer',

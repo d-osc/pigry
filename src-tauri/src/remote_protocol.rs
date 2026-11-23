@@ -98,6 +98,7 @@ pub fn is_workspace_command(method: &str) -> bool {
             | "cherry_pick"
             | "cherry_pick_abort"
             | "revert_commit"
+            | "revert_abort"
             | "duplicate_commit"
             | "duplicate_commit_candidates"
             | "rebase_onto"

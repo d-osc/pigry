@@ -62,6 +62,15 @@ pub fn revert_commit(repo_path: &Path, oid: &str) -> Result<String> {
     run_git_timed(repo_path, &["revert", "--no-edit", oid])
 }
 
+/// Aborts a revert that stopped on conflicts, restoring the branch to where it was before the revert.
+/// Falls back to a hard reset when git has no revert in progress to abort.
+pub fn revert_abort(repo_path: &Path) -> Result<String> {
+    match run_git_timed(repo_path, &["revert", "--abort"]) {
+        Ok(result) => Ok(result),
+        Err(_) => run_git_timed(repo_path, &["reset", "--hard", "HEAD"]),
+    }
+}
+
 /// Cherry-picks a commit onto the current branch (stages the changes).
 pub fn cherry_pick(repo_path: &Path, oid: &str) -> Result<String> {
     run_git_timed(repo_path, &["cherry-pick", "--no-commit", oid])

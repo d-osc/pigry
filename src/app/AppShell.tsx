@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TitleBar } from './TitleBar';
+import { HelpDialog } from './HelpDialog';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar, type EditorStatusInfo } from './StatusBar';
 import { ToastContainer } from './Toast';
@@ -25,6 +26,7 @@ const RebaseBranchScreen = lazy(() => import('../screens/rebase-branch/RebaseBra
 const PushCommitsScreen = lazy(() => import('../screens/push-commits/PushCommitsScreen').then((module) => ({ default: module.PushCommitsScreen })));
 const PullCommitsScreen = lazy(() => import('../screens/pull-commits/PullCommitsScreen').then((module) => ({ default: module.PullCommitsScreen })));
 const StashesScreen = lazy(() => import('../screens/stashes/StashesScreen').then((module) => ({ default: module.StashesScreen })));
+const RevertCommitScreen = lazy(() => import('../screens/revert-commit/RevertCommitScreen').then((module) => ({ default: module.RevertCommitScreen })));
 const CherryPickScreen = lazy(() => import('../screens/cherry-pick/CherryPickScreen').then((module) => ({ default: module.CherryPickScreen })));
 const DuplicateCommitScreen = lazy(() => import('../screens/duplicate-commit/DuplicateCommitScreen').then((module) => ({ default: module.DuplicateCommitScreen })));
 const EditCommitScreen = lazy(() => import('../screens/edit-commit/EditCommitScreen').then((module) => ({ default: module.EditCommitScreen })));
@@ -39,6 +41,7 @@ const DiagramScreen = lazy(() => import('../screens/diagram/DiagramScreen').then
 const ExplorerScreen = lazy(() => import('../screens/explorer/ExplorerScreen').then((module) => ({ default: module.ExplorerScreen })));
 const ProjectsScreen = lazy(() => import('../screens/projects/ProjectsScreen').then((module) => ({ default: module.ProjectsScreen })));
 const PullRequestsScreen = lazy(() => import('../screens/pull-requests/PullRequestsScreen').then((module) => ({ default: module.PullRequestsScreen })));
+const ReportsScreen = lazy(() => import('../screens/reports/ReportsScreen').then((module) => ({ default: module.ReportsScreen })));
 const AiAgentScreen = lazy(() => import('../screens/ai-agent/AiAgentScreen').then((module) => ({ default: module.AiAgentScreen })));
 const ReleasesScreen = lazy(() => import('../screens/releases/ReleasesScreen').then((module) => ({ default: module.ReleasesScreen })));
 const IssuesScreen = lazy(() => import('../screens/issues/IssuesScreen').then((module) => ({ default: module.IssuesScreen })));
@@ -224,6 +227,8 @@ function renderScreen(
       return <StashesScreen />;
     case 'cherry-pick':
       return <CherryPickScreen />;
+    case 'revert-commit':
+      return <RevertCommitScreen />;
     case 'duplicate-commit':
       return <DuplicateCommitScreen />;
     case 'edit-commit':
@@ -251,6 +256,8 @@ function renderScreen(
       return <BoardScreen />;
     case 'e2e':
       return <E2eScreen />;
+    case 'reports':
+      return <ReportsScreen />;
     case 'design':
       return <DesignScreen />;
     case 'diagram':
@@ -288,6 +295,7 @@ function AppShellInner() {
     return 'explorer';
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
   const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'board' || screen === 'e2e';
   // Adjusting state while rendering (not in an effect) keeps visited screens mounted without a cascading render.
@@ -645,6 +653,7 @@ function AppShellInner() {
           setPaletteMode('quick');
           setPaletteOpen(true);
         }}
+        onOpenHelp={!showHome && showWorkspace && screen !== 'app-settings' ? () => setHelpOpen(true) : undefined}
       />
       <GitMissingBanner />
       <ErrorBoundary><Suspense fallback={<div className="screen-loading" role="status">Loading…</div>}>
@@ -815,6 +824,7 @@ function AppShellInner() {
         <SettingsModal onClose={() => setSettingsOpen(false)} notify={repository.notify} />
       )}
       {shortcutsOpen && <ShortcutSheet onClose={() => setShortcutsOpen(false)} />}
+      {helpOpen && !showHome && showWorkspace && screen !== 'app-settings' && <HelpDialog key={screen} screen={screen} onClose={() => setHelpOpen(false)} />}
       {rebaseBase && <RebaseModal baseOid={rebaseBase} onClose={() => setRebaseBase(null)} />}
       <ToastContainer toasts={repository.toasts} />
       </Suspense></ErrorBoundary>

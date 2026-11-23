@@ -380,6 +380,24 @@ button.title-bar__brand:hover .title-bar__name {
   background: var(--accent-tint-2);
 }
 
+.help-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.help-button:hover {
+  color: var(--text-primary);
+  background: var(--accent-tint-2);
+}
+
 .profile-menu-overlay {
   position: fixed;
   inset: 0;

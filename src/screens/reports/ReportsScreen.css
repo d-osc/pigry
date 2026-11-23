@@ -1,0 +1,38 @@
+/* The Reports menu reuses the Wiki layout (list | article | outline); these are its few own pieces. */
+.reports-count {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+}
+
+.reports-path {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.reports-note {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.reports-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.reports-text {
+  margin: 12px 0 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}

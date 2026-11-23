@@ -320,6 +320,14 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     tools: [...E2E_TOOL_NAMES, 'browser_e2e', 'browser_screenshot', 'read_file', 'list_files', 'search_code', 'write_file', 'agent_lookup', 'agent_contacts'],
     skills: ['cypress-e2e-testing'],
   },
+  reports: {
+    username: 'reports',
+    role: 'Report assistant',
+    description: 'Finds, reads and summarises the reports other agents saved under .pigry/reports/ — what was found, what is still open — and writes new reports on request.',
+    emoji: '📑',
+    tools: ['read_file', 'list_files', 'search_code', 'write_file', 'read_diff', 'agent_lookup', 'agent_contacts'],
+    skills: ['docs-writing', 'file-navigation'],
+  },
   board: {
     username: 'board',
     role: 'Whiteboard facilitator',
@@ -407,6 +415,14 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     emoji: '🍒',
     tools: GIT_REVIEW_TOOLS,
     skills: ['cherry-pick-flow'],
+  },
+  'revert-commit': {
+    username: 'revert-commit',
+    role: 'Revert planner',
+    description: 'Reviews a selected commit, explains what a revert would undo and which later commits it may conflict with, and guides the revert and its conflicts.',
+    emoji: '↩️',
+    tools: [...GIT_REVIEW_TOOLS, 'stage_changes', 'commit'],
+    skills: ['revert-commit', 'history-analysis'],
   },
   'duplicate-commit': {
     username: 'duplicate-commit',
@@ -594,6 +610,15 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
   diagram: [{ ...SA_BASE_AGENT, username: 'diagram-sa' }],
   board: [{ ...SA_BASE_AGENT, username: 'board-sa', skills: ['discovery-mapping', 'workshop-facilitation', 'board-editor', 'system-analysis', 'diagram-modeling', 'diagram-editor'] }],
   e2e: [{ ...QA_BASE_AGENT, username: 'e2e-qa' }],
+  reports: [{
+    username: 'report-reviewer',
+    name: 'Report Reviewer',
+    role: 'Report reviewer',
+    description: 'Reads the reports other agents saved, checks their claims against the code and the history, and lists what is confirmed, what is unverified and what still needs action.',
+    emoji: '🧾',
+    tools: ['read_file', 'list_files', 'search_code', 'read_diff', 'read_history', 'git_status', 'agent_lookup', 'agent_contacts'],
+    skills: ['docs-writing', 'code-review', 'history-analysis'],
+  }],
   design: [{
     username: 'uxui',
     name: 'UX/UI Designer',
@@ -682,6 +707,15 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '🍒',
     tools: GIT_REVIEW_TOOLS,
     skills: ['cherry-pick-flow', 'history-analysis'],
+  }],
+  'revert-commit': [{
+    username: 'revert-checker',
+    name: 'Revert Checker',
+    role: 'Revert impact reviewer',
+    description: 'Checks what reverting a commit would undo, finds later commits that touch the same files and warns about conflicts, dependants and commits that are already pushed.',
+    emoji: '↩️',
+    tools: GIT_REVIEW_TOOLS,
+    skills: ['revert-commit', 'history-analysis', 'code-review'],
   }],
   'duplicate-commit': [{
     username: 'transfer-check',

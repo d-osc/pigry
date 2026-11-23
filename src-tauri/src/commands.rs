@@ -1883,6 +1883,19 @@ pub async fn revert_commit(
 }
 
 #[tauri::command]
+pub async fn revert_abort(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::revert_abort(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
 pub async fn cherry_pick(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,

@@ -291,6 +291,7 @@ pub fn run() {
             commands::get_repo_stats,
             commands::verify_commit_sig,
             commands::revert_commit,
+            commands::revert_abort,
             commands::cherry_pick,
             commands::duplicate_commit,
             commands::duplicate_commit_candidates,

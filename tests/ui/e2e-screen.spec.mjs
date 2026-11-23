@@ -221,7 +221,7 @@ describe('Unstable', () => {
   await page.getByRole('button', { name: 'Run spec' }).click();
   await expect(page.getByLabel('Tests and commands').getByText('flaky', { exact: true })).toBeVisible({ timeout: 30000 });
   await expect(page.getByLabel('Tests and commands').getByText('attempt 2')).toBeVisible();
-  await page.getByRole('button', { name: 'Report' }).click();
+  await page.getByRole('button', { name: 'Report', exact: true }).click();
   await expect.poll(async () => page.evaluate(() => window.__worktree.get('.pigry/reports/user/e2e-user-unstable.md') ?? '')).toContain('# E2E report — user/unstable');
   const junit = await page.evaluate(() => window.__worktree.get('.pigry/e2e/results/user/unstable.junit.xml'));
   expect(junit).toContain('<testcase name="Unstable › passes on the second try"');

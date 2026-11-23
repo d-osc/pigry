@@ -26,6 +26,8 @@ import {
   Workflow,
   PenTool,
   StickyNote,
+  ClipboardList,
+  Undo2,
 } from 'lucide-react';
 
 export type NavId =
@@ -34,6 +36,7 @@ export type NavId =
   | 'design'
   | 'board'
   | 'e2e'
+  | 'reports'
   | 'commit-graph'
   | 'working-changes'
   | 'merge-branch'
@@ -43,6 +46,7 @@ export type NavId =
   | 'pull-commits'
   | 'stashes'
   | 'cherry-pick'
+  | 'revert-commit'
   | 'duplicate-commit'
   | 'edit-commit'
   | 'branches'
@@ -73,6 +77,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'design', label: 'Design', icon: PenTool },
   { id: 'board', label: 'Board', icon: StickyNote },
   { id: 'e2e', label: 'E2E Testing', icon: FlaskConical },
+  { id: 'reports', label: 'Reports', icon: ClipboardList },
   { id: 'ai-agent', label: 'Copilot', icon: Bot },
   { id: 'working-changes', label: 'Working changes', icon: FileDiff, badge: 6 },
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
@@ -81,6 +86,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'compare-branch', label: 'Compare branch', icon: GitCompare },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },
+  { id: 'revert-commit', label: 'Revert commit', icon: Undo2 },
   { id: 'duplicate-commit', label: 'Duplicate commit', icon: Copy },
   { id: 'edit-commit', label: 'Edit commit', icon: Pencil },
   { id: 'rebase-branch', label: 'Rebase Branch', icon: History },

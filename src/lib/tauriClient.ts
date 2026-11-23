@@ -1102,6 +1102,10 @@ export async function revertCommit(oid: string): Promise<AppStatePayload> {
   return invoke('revert_commit', { oid });
 }
 
+export async function revertAbort(): Promise<AppStatePayload> {
+  return invoke('revert_abort');
+}
+
 export async function cherryPick(oid: string): Promise<AppStatePayload> {
   return invoke('cherry_pick', { oid });
 }
