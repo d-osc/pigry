@@ -29,6 +29,12 @@ const INCOMING = [
   ]),
 ];
 
+const run = (number, workflowName, workflowId, title, event, branch, shortSha, status, conclusion, daysAgo, minutes) => ({
+  id: number, number, title, workflowName, workflowId, event, branch, sha: shortSha.padEnd(40, '0'), status, conclusion,
+  createdAt: ago(daysAgo), startedAt: ago(daysAgo), updatedAt: new Date(Date.now() - daysAgo * DAY + minutes * 60000).toISOString(), url: '', attempt: 1,
+});
+const step = (number, name, duration) => ({ name, number, status: 'completed', conclusion: 'success', duration });
+
 const people = [
   { name: 'Alex Liu', commits: 42, additions: 3120, deletions: 980 },
   { name: 'Maya Chen', commits: 31, additions: 2290, deletions: 640 },
@@ -42,6 +48,45 @@ const week = (i) => ({
 });
 
 export const GH_MOCKS = {
+  gh_workflow_list: [
+    { id: 1, name: 'CI', path: '.github/workflows/ci.yml', state: 'active' },
+    { id: 2, name: 'Release', path: '.github/workflows/release.yml', state: 'active' },
+    { id: 3, name: 'CodeQL', path: '.github/workflows/codeql.yml', state: 'active' },
+    { id: 4, name: 'Nightly', path: '.github/workflows/nightly.yml', state: 'disabled_manually' },
+  ],
+  gh_run_list: {
+    total: 128,
+    runs: [
+      run(7, 'CI', 1, 'fix: preserve scroll position on refresh', 'push', 'main', 'e7d38b4', 'completed', 'success', 0.1, 4.2),
+      run(6, 'CI', 1, 'feat: add keyboard-first command palette', 'pull_request', 'feat/command-menu', 'a8f2c91', 'completed', 'failure', 0.3, 5.5),
+      run(5, 'CodeQL', 3, 'feat: add keyboard-first command palette', 'pull_request', 'feat/command-menu', 'a8f2c91', 'in_progress', '', 0.01, 0),
+      run(4, 'Release', 2, 'Release v1.4.0', 'push', 'main', 'c4b82e6', 'completed', 'success', 2, 38),
+      run(3, 'CI', 1, 'chore: update dependencies', 'push', 'main', '9d1f6a2', 'completed', 'success', 3, 4.8),
+      run(2, 'CI', 1, 'fix: crash when opening a bare repository', 'workflow_dispatch', 'fix/bare-repo', 'b6a4f20', 'completed', 'cancelled', 4, 1.2),
+      run(1, 'CodeQL', 3, 'chore: update dependencies', 'schedule', 'main', '9d1f6a2', 'completed', 'success', 6, 9.5),
+    ],
+  },
+  gh_run_view: {
+    id: 7, number: 7, title: 'fix: preserve scroll position on refresh', workflowId: 1, workflowName: 'CI', event: 'push', branch: 'main', sha: sha(7),
+    status: 'completed', conclusion: 'success', attempt: 1, createdAt: ago(0.1), startedAt: ago(0.1), updatedAt: new Date(Date.now() - 0.1 * DAY + 4.2 * 60000).toISOString(), url: '',
+    jobs: [
+      { id: 71, name: 'lint', status: 'completed', conclusion: 'success', duration: '48s', url: '', steps: [step(1, 'Set up job', '2s'), step(2, 'Run actions/checkout', '3s'), step(3, 'npm ci', '22s'), step(4, 'npm run lint', '19s')] },
+      { id: 72, name: 'test', status: 'completed', conclusion: 'success', duration: '3m 12s', url: '', steps: [step(1, 'Set up job', '2s'), step(2, 'npm ci', '21s'), step(3, 'npm test', '2m 41s'), step(4, 'Upload coverage', '8s')] },
+      { id: 73, name: 'build', status: 'completed', conclusion: 'success', duration: '1m 05s', url: '', steps: [step(1, 'Set up job', '2s'), step(2, 'npm run build', '59s')] },
+    ],
+  },
+  gh_run_logs: [
+    'test\tnpm test\t2026-11-23T09:12:01.000Z > vitest run',
+    'test\tnpm test\t2026-11-23T09:12:03.000Z ✓ src/lib/reports.test.ts (3 tests)',
+    'test\tnpm test\t2026-11-23T09:12:09.000Z ✓ src/lib/toolBatch.test.ts (5 tests)',
+    'test\tnpm test\t2026-11-23T09:12:41.000Z Test Files  24 passed (24)',
+    'test\tnpm test\t2026-11-23T09:12:41.000Z      Tests  95 passed (95)',
+  ].join('\n'),
+  gh_run_artifacts: [
+    { id: 1, name: 'coverage-report', size: 482_000, expired: false, expiresAt: ago(-80), createdAt: ago(0.1) },
+    { id: 2, name: 'build-output', size: 12_400_000, expired: false, expiresAt: ago(-80), createdAt: ago(0.1) },
+  ],
+
   push_preview: { branch: 'main', upstream: 'origin/main', ahead: PUSH_COMMITS.length, commits: PUSH_COMMITS },
   pull_preview: INCOMING,
 

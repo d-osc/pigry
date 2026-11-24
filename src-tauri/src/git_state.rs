@@ -9,6 +9,7 @@ use git2::{
     Status, StatusOptions,
 };
 use serde::Serialize;
+use crate::CommandNoWindow;
 
 #[cfg(test)]
 #[path = "git_state/tests.rs"]
@@ -1417,6 +1418,8 @@ pub struct BinaryFileContent {
 }
 
 const MAX_BINARY_BYTES: usize = 20_000_000;
+/// Largest text file the worktree reader returns (generated drawings, games and videos are big JSON files).
+const MAX_WORKTREE_TEXT_BYTES: usize = 20_000_000;
 
 /// Mime type by extension for the preview viewers (defaults to octet-stream).
 fn mime_for(path: &str) -> &'static str {
@@ -1469,7 +1472,7 @@ pub fn read_binary_file(repo_path: &Path, path: &str) -> Result<BinaryFileConten
 pub fn open_path_external(repo_path: &Path, path: &str) -> Result<()> {
     let repo = Repository::discover(repo_path).map_err(err)?;
     let full = safe_worktree_path(&repo, path, true)?;
-    std::process::Command::new("cmd")
+    std::process::Command::new("cmd").no_window()
         .args(["/C", "start", "", &full.to_string_lossy()])
         .spawn()
         .map_err(|e| format!("failed to open {path}: {e}"))?;
@@ -1513,7 +1516,7 @@ pub fn read_worktree_file(repo_path: &Path, path: &str) -> Result<WorktreeFileCo
     let bytes = std::fs::read(&full).map_err(|e| format!("failed to read {path}: {e}"))?;
 
     let language = language_for(path);
-    if bytes.len() > MAX_DIFF_BYTES {
+    if bytes.len() > MAX_WORKTREE_TEXT_BYTES {
         return Ok(WorktreeFileContent { content: String::new(), binary: false, too_large: true, language });
     }
     if is_binary(&bytes) {
@@ -1564,6 +1567,79 @@ pub fn write_worktree_binary(repo_path: &Path, path: &str, data_base64: &str) ->
     Ok(())
 }
 
+/// Audio files (imported or recorded sound, exported mixes) may live under `.pigry/audio/` and are far larger than images.
+const MAX_AUDIO_BYTES: u64 = 500_000_000;
+/// Largest piece the chunked reader and writer move in one call.
+const MAX_CHUNK_BYTES: usize = 12_000_000;
+const AUDIO_EXTS: [&str; 9] = [".wav", ".mp3", ".flac", ".ogg", ".oga", ".m4a", ".aac", ".opus", ".webm"];
+
+/// Writes one piece of a large binary (append = false starts the file over). Images follow the usual `.pigry/` rules and
+/// 20 MB limit; audio under `.pigry/audio/` may reach 500 MB, which is why it is sent in pieces instead of one base64 string.
+pub fn write_worktree_binary_chunk(repo_path: &Path, path: &str, data_base64: &str, append: bool) -> Result<u64> {
+    let rel = path.trim().replace('\\', "/");
+    let lower = rel.to_ascii_lowercase();
+    if !rel.starts_with(".pigry/") || rel.contains("..") || rel.contains(':') {
+        return Err("binary files can only be written under .pigry/".to_string());
+    }
+    let audio = lower.starts_with(".pigry/audio/") && AUDIO_EXTS.iter().any(|ext| lower.ends_with(ext));
+    let image = [".png", ".jpg", ".jpeg", ".webp", ".webm"].iter().any(|ext| lower.ends_with(ext));
+    if !audio && !image {
+        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.webm, or audio under .pigry/audio/".to_string());
+    }
+    let limit = if audio { MAX_AUDIO_BYTES } else { MAX_BINARY_BYTES as u64 };
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.trim())
+        .map_err(|e| format!("invalid base64 data: {e}"))?;
+    if bytes.len() > MAX_CHUNK_BYTES.max(MAX_BINARY_BYTES) {
+        return Err("chunk too large".to_string());
+    }
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, &rel, false)?;
+    if let Some(parent) = full.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    use std::io::Write as _;
+    let existing = if append { std::fs::metadata(&full).map(|m| m.len()).unwrap_or(0) } else { 0 };
+    let total = existing + bytes.len() as u64;
+    if total > limit {
+        return Err(format!("file too large (over {} MB)", limit / 1_000_000));
+    }
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(append)
+        .truncate(!append)
+        .open(&full)
+        .map_err(|e| format!("failed to write {rel}: {e}"))?;
+    file.write_all(&bytes).map_err(|e| format!("failed to write {rel}: {e}"))?;
+    Ok(total)
+}
+
+#[derive(serde::Serialize)]
+pub struct BinaryChunk {
+    pub data: String,
+    pub size: u64,
+}
+
+/// Reads `length` bytes (at most 12 MB) of a binary file from `offset` as base64, plus the whole file size, so large audio can be loaded in pieces.
+pub fn read_binary_chunk(repo_path: &Path, path: &str, offset: u64, length: usize) -> Result<BinaryChunk> {
+    use std::io::{Read as _, Seek as _, SeekFrom};
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let full = safe_worktree_path(&repo, path, true)?;
+    let mut file = std::fs::File::open(&full).map_err(|e| format!("failed to read {path}: {e}"))?;
+    let size = file.metadata().map_err(|e| format!("failed to read {path}: {e}"))?.len();
+    if size > MAX_AUDIO_BYTES {
+        return Err(format!("file too large: {path} (over {} MB)", MAX_AUDIO_BYTES / 1_000_000));
+    }
+    file.seek(SeekFrom::Start(offset)).map_err(|e| format!("failed to read {path}: {e}"))?;
+    let want = length.min(MAX_CHUNK_BYTES).min(size.saturating_sub(offset) as usize);
+    let mut buf = vec![0u8; want];
+    file.read_exact(&mut buf).map_err(|e| format!("failed to read {path}: {e}"))?;
+    use base64::Engine as _;
+    Ok(BinaryChunk { data: base64::engine::general_purpose::STANDARD.encode(&buf), size })
+}
+
 /// Remove a file from the worktree (the deletion shows up in git status).
 pub fn delete_worktree_file(repo_path: &Path, path: &str) -> Result<()> {
     let repo = Repository::discover(repo_path).map_err(err)?;
@@ -1602,6 +1678,71 @@ pub fn rename_worktree_folder(repo_path: &Path, old_path: &str, new_path: &str) 
     }
     std::fs::rename(&from, &to).map_err(|e| format!("failed to rename {old_path}: {e}"))?;
     Ok(())
+}
+
+/// Copies a file or a folder (recursively, without any .git inside it) to a new path inside the repository.
+/// Never overwrites: the target must not exist, and a folder cannot be copied into itself.
+pub fn copy_worktree_path(repo_path: &Path, old_path: &str, new_path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let from = safe_worktree_path(&repo, old_path, true)?;
+    let to = safe_worktree_path(&repo, new_path, false)?;
+    if to.exists() {
+        return Err(format!("{new_path} already exists"));
+    }
+    if from.is_dir() {
+        let into_itself = to.starts_with(&from);
+        if into_itself {
+            return Err(format!("cannot copy {old_path} into itself"));
+        }
+        copy_dir_all(&from, &to).map_err(|e| format!("failed to copy {old_path}: {e}"))?;
+    } else {
+        if let Some(parent) = to.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::copy(&from, &to).map_err(|e| format!("failed to copy {old_path}: {e}"))?;
+    }
+    Ok(())
+}
+
+fn copy_dir_all(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        if entry.file_name() == ".git" {
+            continue;
+        }
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Shows a file or folder in the operating system's file manager (selected, where the OS can do that).
+/// An empty path means the repository folder itself.
+pub fn reveal_worktree_path(repo_path: &Path, path: &str) -> Result<()> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let workdir = repo.workdir().ok_or("bare repository")?.to_path_buf();
+    let full = if path.is_empty() { workdir.clone() } else { safe_worktree_path(&repo, path, true)? };
+    let shown = full.to_string_lossy().trim_start_matches(r"\\?\").to_string();
+    #[cfg(target_os = "windows")]
+    let spawned = {
+        let mut command = std::process::Command::new("explorer.exe");
+        command.no_window();
+        if full.is_dir() { command.arg(&shown) } else { command.arg(format!("/select,{shown}")) };
+        command.spawn()
+    };
+    #[cfg(target_os = "macos")]
+    let spawned = std::process::Command::new("open").args(["-R", &shown]).spawn();
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    let spawned = {
+        let folder = if full.is_dir() { full.clone() } else { full.parent().map(Path::to_path_buf).unwrap_or(workdir) };
+        std::process::Command::new("xdg-open").arg(folder).spawn()
+    };
+    spawned.map(|_| ()).map_err(|e| format!("failed to show {path} in the file manager: {e}"))
 }
 
 /// Move a worktree file to a new path inside the repository.
@@ -3236,7 +3377,7 @@ fn commit_stats(repo: &Repository, commit_id: git2::Oid) -> Result<(u32, i64, i6
 pub fn blame_at(repo_path: &Path, path: &str, ref_name: &str) -> Result<Vec<BlameLine>> {
     use std::process::Command;
 
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .args(["blame", "--porcelain", ref_name, "--", path])
         .current_dir(repo_path)
         .output()
@@ -3497,5 +3638,16 @@ mod binary_write_tests {
         }
         let err = write_worktree_binary(repo, ".pigry/a.png", "not base64!!").unwrap_err();
         assert!(err.contains("base64"), "bad payloads are rejected before touching the disk: {err}");
+    }
+
+    #[test]
+    fn chunked_writes_allow_audio_only_under_pigry_audio() {
+        use super::write_worktree_binary_chunk;
+        let repo = Path::new(".");
+        for bad in ["src/a.wav", ".pigry/a.wav", ".pigry/audio/../a.wav", ".pigry/audio/a.exe", ".pigry/audio/a.txt", "C:/x.wav", ""] {
+            assert!(write_worktree_binary_chunk(repo, bad, "AA==", false).is_err(), "should reject {bad}");
+        }
+        let err = write_worktree_binary_chunk(repo, ".pigry/audio/media/a.wav", "not base64!!", false).unwrap_err();
+        assert!(err.contains("base64"), "{err}");
     }
 }

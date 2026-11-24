@@ -20,7 +20,11 @@ test('populated private PR and workflow details render', async ({ page }) => {
   await page.getByText('Private repository pull request', { exact: true }).first().click();
   await expect(page.getByText('Reviewable private PR body')).toBeVisible();
   await page.locator('.nav-item').filter({ hasText: 'Actions' }).click();
-  await expect(page.getByText('Successful CI run', { exact: true }).first()).toBeVisible();
+  // GitHub's layout: the runs are listed first, a run opens on its own page
+  await expect(page.getByRole('complementary', { name: 'Workflows' }).getByRole('button', { name: 'CI' })).toBeVisible();
+  await page.getByText('Successful CI run', { exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: /Successful CI run/ })).toBeVisible();
+  await page.getByRole('button', { name: 'All logs' }).click();
   await expect(page.getByText('CI completed successfully')).toBeVisible();
 });
 
@@ -118,7 +122,7 @@ for (const message of ['HTTP 401: Bad credentials', 'HTTP 403: Resource protecte
 test('workflow artifact error survives a fast response and retry succeeds', async ({ page }) => {
   await page.evaluate(() => { window.testBackend.failures.gh_run_artifacts = 'Artifact access denied'; });
   await page.locator('.nav-item').filter({ hasText: 'Actions' }).click();
-  await page.getByRole('button', { name: /Artifacts/ }).click();
+  await page.getByText('Successful CI run', { exact: true }).first().click();
   await expect(page.getByText('Artifact access denied')).toBeVisible();
   await page.evaluate(() => { delete window.testBackend.failures.gh_run_artifacts; });
   await page.getByRole('button', { name: 'Try again' }).click();

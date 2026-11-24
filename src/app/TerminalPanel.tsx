@@ -40,6 +40,8 @@ interface TerminalPanelProps {
 
 export interface TerminalPanelHandle {
   runCommand(command: string): Promise<{ exit: Promise<PtyExitEvent> }>;
+  /** Opens a new terminal in a folder of the repository ('' is the repository root). */
+  openAt(folder: string): Promise<void>;
 }
 interface TerminalTab {
   /** Backend PTY session id. */
@@ -178,7 +180,7 @@ export function TerminalPanel({ cwd, visible, onClose, ref }: TerminalPanelProps
   }, []);
 
   const createTerminal = useCallback(
-    async (shellId?: string | null, command?: string) => {
+    async (shellId?: string | null, command?: string, folder?: string) => {
       if (!isTauri()) {
         if (command) throw new Error('Starting a project from the terminal requires the desktop app.');
         return;
@@ -188,7 +190,8 @@ export function TerminalPanel({ cwd, visible, onClose, ref }: TerminalPanelProps
       const commandAtLaunch = existingCommands[existingCommands.length - 1]?.id;
       try {
         if (command) await ensurePtyListener();
-        const info = await ptyCreate(chosen, cwd, command);
+        const where = folder ? `${cwd.replace(/[\\/]+$/, '')}/${folder}` : cwd;
+        const info = await ptyCreate(chosen, where, command);
         if (!mounted.current) {
           await ptyKill(info.id);
           return;
@@ -224,6 +227,9 @@ export function TerminalPanel({ cwd, visible, onClose, ref }: TerminalPanelProps
       const run = await createTerminal(null, command);
       if (!run) throw new Error('The project terminal did not start.');
       return run;
+    },
+    async openAt(folder) {
+      await createTerminal(undefined, undefined, folder);
     },
   }), [createTerminal]);
 

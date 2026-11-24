@@ -29,6 +29,11 @@ const PREPARE = {
   explorer: async (page) => { await click(page, page.getByText('package.json', { exact: true })); },
   diagram: async (page) => { await page.evaluate(() => window.__help.run('diagram_open', { name: 'checkout-flow' })); await quiet(page.locator('.dgm__svg').waitFor({ timeout: 4000 })); },
   design: async (page) => { await page.evaluate(() => window.__help.run('design_open', { name: 'login-screen' })); await quiet(page.locator('.dsg__svg, .dsg__stage, svg').first().waitFor({ timeout: 4000 })); await click(page, page.getByRole('button', { name: /fit/i })); },
+  videoeditor: async (page) => { await page.evaluate(() => window.__help.run('video_open', { name: 'launch-teaser' })); await quiet(page.locator('canvas[aria-label="Video preview"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(800); await click(page, page.getByRole('button', { name: /^text clip/ }).first()); await quiet(page.getByLabel('Ruler').click({ position: { x: 222, y: 12 }, timeout: 2500 })); await page.waitForTimeout(700); },
+  audioeditor: async (page) => { await page.evaluate(() => window.__help.run('audio_open', { name: 'podcast-episode' })); await quiet(page.locator('[data-testid="timeline"] canvas').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(1500); await quiet(page.locator('.au-lane').first().click({ position: { x: 330, y: 40 }, timeout: 2500 })); await page.waitForTimeout(500); },
+  gameengine: async (page) => { await page.evaluate(() => window.__help.run('game_open', { name: 'playground' })); await quiet(page.locator('canvas[aria-label="Scene viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Node Player' }).locator('.gm-row-node')); await page.waitForTimeout(600); },
+  model3d: async (page) => { await page.evaluate(() => window.__help.run('model_open', { name: 'workshop-table' })); await quiet(page.locator('canvas[aria-label="3D viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Object Mug' }).locator('.m3d-row')); await page.waitForTimeout(500); },
+  drawing: async (page) => { await page.evaluate(() => window.__help.run('drawing_open', { name: 'harbour-sunset' })); await quiet(page.locator('canvas[aria-label="Painting"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(600); },
   board: async (page) => { await page.evaluate(() => window.__help.run('board_open', { name: 'checkout-retro' })); await quiet(page.locator('.brd__svg').waitFor({ timeout: 4000 })); await click(page, page.getByRole('button', { name: /fit/i })); },
   e2e: async (page) => {
     await click(page, page.getByRole('button', { name: 'home', exact: true }));
@@ -81,6 +86,10 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
         const full = await invoke('get_commit_history', { includeRemotes: false });
         return { ...full, commits: full.commits.slice(6) };
       }
+      if (cmd === 'get_branch_commits' && window.__prShot && args.refName === 'main') {
+        const full = await invoke('get_commit_history', { includeRemotes: false });
+        return { ...full, commits: full.commits.slice(2) };
+      }
       if (cmd === 'get_commit_detail') return { ...(await invoke(cmd, args)), oid: args.oid, isMerge: false };
       // A real backend takes a moment; an instant answer would race the wiki screen's own loading flag.
       if (cmd === 'wiki_read') await new Promise((resolve) => setTimeout(resolve, 250));
@@ -91,10 +100,15 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
 
   // Sample board, design and diagram, written with the same tools the agents use.
   await page.evaluate(async () => {
-    const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
-    const { DESIGN_TOOLS } = await import('/src/lib/designTools.ts');
-    const { DIAGRAM_TOOLS } = await import('/src/lib/diagramTools.ts');
-    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS];
+    const { BOARD_TOOLS } = await import('/src/extensions/board/boardTools.ts');
+    const { DESIGN_TOOLS } = await import('/src/extensions/design/designTools.ts');
+    const { DIAGRAM_TOOLS } = await import('/src/extensions/diagram/diagramTools.ts');
+    const { DRAWING_TOOLS } = await import('/src/extensions/drawing/drawingTools.ts');
+    const { MODEL_TOOLS } = await import('/src/extensions/model3d/model3dTools.ts');
+    const { GAME_TOOLS } = await import('/src/extensions/gameengine/gameTools.ts');
+    const { VIDEO_TOOLS } = await import('/src/extensions/videoeditor/videoTools.ts');
+    const { AUDIO_TOOLS } = await import('/src/extensions/audioeditor/audioTools.ts');
+    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS];
     window.__help = { run: (name, input) => all.find((tool) => tool.name === name).run({ agent: 'user', ...input }) };
     await window.__help.run('board_write', {
       name: 'checkout-retro', title: 'Checkout retro',
@@ -117,6 +131,79 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
           { type: 'frame', name: 'Sign in button', h: 48, radius: 10, fill: '$primary', layout: { dir: 'row', justify: 'center', align: 'center' }, children: [{ type: 'text', name: 'Label', text: 'Sign in', fill: '#ffffff', fontWeight: 600 }] },
         ],
       }],
+    });
+    await window.__help.run('drawing_write', {
+      name: 'harbour-sunset', title: 'Harbour at sunset', width: 960, height: 600, background: '#1d2b4f',
+      ops: [
+        { op: 'layer_edit', layer: 1, name: 'Sky' },
+        { op: 'gradient', layer: 'Sky', x1: 0, y1: 0, x2: 0, y2: 420, from: '#2b3a7a', to: '#ff9a52' },
+        { op: 'layer_add', name: 'Sun glow' },
+        { op: 'gradient', layer: 'Sun glow', x1: 600, y1: 330, x2: 600, y2: 120, from: 'rgba(255,214,120,0.95)', to: 'rgba(255,214,120,0)', kind: 'radial' },
+        { op: 'layer_edit', layer: 'Sun glow', blend: 'screen' },
+        { op: 'layer_add', name: 'Sun' },
+        { op: 'ellipse', layer: 'Sun', x: 560, y: 290, w: 80, h: 80, fill: '#fff1b8' },
+        { op: 'layer_add', name: 'Sea' },
+        { op: 'rect', layer: 'Sea', x: 0, y: 360, w: 960, h: 240, fill: '#173a63' },
+        { op: 'gradient', layer: 'Sea', x1: 0, y1: 360, x2: 0, y2: 600, from: 'rgba(255,154,82,0.55)', to: 'rgba(10,25,60,0.9)' },
+        { op: 'layer_add', name: 'Hills' },
+        { op: 'polygon', layer: 'Hills', points: [[0, 380], [120, 300], [260, 350], [380, 270], [520, 372], [520, 380]], fill: '#17213f' },
+        { op: 'polygon', layer: 'Hills', points: [[700, 380], [820, 310], [960, 250], [960, 380]], fill: '#101a35' },
+        { op: 'layer_add', name: 'Boat' },
+        { op: 'polygon', layer: 'Boat', points: [[250, 430], [370, 430], [345, 460], [275, 460]], fill: '#0b1226' },
+        { op: 'polygon', layer: 'Boat', points: [[310, 340], [310, 428], [360, 428]], fill: '#f7d9a8' },
+        { op: 'line', layer: 'Boat', x1: 310, y1: 330, x2: 310, y2: 430, color: '#0b1226', width: 3 },
+        { op: 'layer_add', name: 'Reflections' },
+        { op: 'stroke', layer: 'Reflections', points: [[560, 380], [600, 392], [640, 380]], color: '#ffe3a1', size: 10, brush: 'airbrush' },
+        { op: 'stroke', layer: 'Reflections', points: [[570, 410], [600, 418], [630, 410]], color: '#ffd08a', size: 8, brush: 'watercolor' },
+        { op: 'text', layer: 'Reflections', x: 24, y: 20, text: 'Harbour at sunset', size: 30, color: '#ffe9c4', weight: 600 },
+        { op: 'select', shape: 'ellipse', x: 80, y: 60, w: 220, h: 120 },
+      ],
+    });
+    await window.__help.run('model_write', {
+      name: 'workshop-table', title: 'Workshop table', starter: true, background: '#9fb4c9',
+      ops: [
+        { op: 'update', target: 'Ground', material: { color: '#d7dbe0', roughness: 0.9 } },
+        { op: 'remove', target: 'Cube' },
+        { op: 'add', kind: 'box', name: 'Table top', position: [0, 0.725, 0], params: { width: 1.6, height: 0.06, depth: 0.9 }, material: { color: '#9b6a3c', roughness: 0.65 } },
+        { op: 'add', kind: 'box', name: 'Table leg', position: [0.72, 0.35, 0.38], params: { width: 0.07, height: 0.7, depth: 0.07 }, material: { color: '#7a5230', roughness: 0.7 }, modifiers: [{ type: 'mirror', axis: 'x' }, { type: 'mirror', axis: 'z' }] },
+        { op: 'add', kind: 'cylinder', name: 'Mug', position: [0.35, 0.805, 0.1], params: { radiusTop: 0.05, radiusBottom: 0.045, height: 0.11 }, material: { color: '#f4f1ea', roughness: 0.35 } },
+        { op: 'add', kind: 'torus', name: 'Mug handle', position: [0.4, 0.805, 0.1], rotation: [0, 0, 0], params: { radius: 0.035, tube: 0.008, segments: 20 }, material: { color: '#f4f1ea', roughness: 0.35 } },
+        { op: 'add', kind: 'sphere', name: 'Ball', position: [-0.45, 0.835, 0.1], params: { radius: 0.09 }, material: { color: '#e07a3f', metalness: 0.1, roughness: 0.4 } },
+        { op: 'add', kind: 'cylinder', name: 'Lamp base', position: [-0.6, 0.77, -0.25], params: { radiusTop: 0.08, radiusBottom: 0.1, height: 0.03 }, material: { color: '#2b2f36', metalness: 0.8, roughness: 0.35 } },
+        { op: 'add', kind: 'cone', name: 'Lamp shade', position: [-0.6, 0.97, -0.25], params: { radius: 0.15, height: 0.22 }, material: { color: '#ffd166', emissive: '#ffb347', emissiveIntensity: 1.2, roughness: 0.5 } },
+        { op: 'add', kind: 'box', name: 'Book', position: [0.05, 0.775, -0.2], rotation: [0, 20, 0], params: { width: 0.3, height: 0.04, depth: 0.22 }, material: { color: '#3b6ea5', roughness: 0.6 } },
+        { op: 'add', kind: 'icosphere', name: 'Rock', position: [1.6, 0.25, -0.6], params: { radius: 0.35, detail: 1 }, material: { color: '#7f8794', roughness: 0.95, flatShading: true } },
+        { op: 'update', target: 'Sun', position: [4, 6, 3], light: { intensity: 3.2 } },
+        { op: 'world', ambient: 0.5 },
+        { op: 'view', position: [2.6, 1.7, 2.8], target: [0, 0.7, 0] },
+      ],
+    });
+    await window.__help.run('game_write', {
+      name: 'playground', title: 'Playground', template: '3d',
+      ops: [
+        { op: 'set', node: 'Environment', props: { background: '#9fb4c9', ambient: 0.6 } },
+        { op: 'add_node', type: 'MeshInstance3D', name: 'Tower', props: { mesh: 'cylinder', size: [1.6, 5, 1.6], position: [-5, 2.5, -4], material: { color: '#c9b79c', roughness: 0.9 } } },
+        { op: 'add_node', type: 'MeshInstance3D', name: 'Roof', props: { mesh: 'cone', size: [2.2, 1.6, 2.2], position: [-5, 5.8, -4], material: { color: '#b5443a', roughness: 0.7 } } },
+        { op: 'add_node', type: 'MeshInstance3D', name: 'Gem', props: { mesh: 'torus', size: [0.8, 0.8, 0.8], position: [3, 1.2, 2], rotation: [90, 0, 0], material: { color: '#35d0ba', emissive: '#35d0ba', emissiveIntensity: 1.4, metalness: 0.3, roughness: 0.25 } } },
+        { op: 'set', node: 'Player/Camera', props: { position: [0, 3.2, 7], rotation: [-18, 0, 0] } },
+      ],
+    });
+    await window.__help.run('video_write', { name: 'launch-teaser', title: 'Launch teaser', template: 'promo' });
+    await window.__help.run('audio_write', {
+      name: 'podcast-episode', title: 'Podcast episode', template: 'podcast',
+      ops: [
+        { op: 'generate', type: 'tone', wave: 'sawtooth', freq: 140, amp: 0.35, track: 't1', start: 0, duration: 3 },
+        { op: 'generate', type: 'chirp', freq: 200, freq2: 3600, amp: 0.4, track: 't1', start: 3, duration: 3 },
+        { op: 'generate', type: 'noise', color: 'pink', amp: 0.25, track: 't1', start: 6, duration: 2 },
+        { op: 'generate', type: 'tone', wave: 'triangle', freq: 220, amp: 0.4, track: 't2', start: 0, duration: 8 },
+        { op: 'generate', type: 'tone', wave: 'triangle', freq: 330, amp: 0.3, track: 't2', start: 1, duration: 7 },
+        { op: 'generate', type: 'click', bpm: 120, amp: 0.5, track: 't3', start: 0, duration: 8 },
+        { op: 'effect', effect: 'eq', params: { low: -3, highmid: 3 }, from: 0, to: 6, track: 't1' },
+        { op: 'effect', effect: 'reverb', params: { room: 0.6, wet: 0.2 }, from: 6, to: 8, track: 't1' },
+        { op: 'fade_in', from: 0, to: 1, track: 't2' }, { op: 'fade_out', from: 6.5, to: 8, track: 't2' },
+        { op: 'track_set', track: 't1', view: 'both', name: 'Voice' },
+        { op: 'label_add', start: 0, text: 'Intro' }, { op: 'label_add', start: 3, end: 6, text: 'Sweep demo' }, { op: 'label_add', start: 6, text: 'Outro' },
+      ],
     });
     await window.__help.run('diagram_write', {
       name: 'checkout-flow', type: 'flowchart', direction: 'TB',
@@ -141,5 +228,37 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
     await page.screenshot({ path: path.join(OUT, `${id}.jpg`), type: 'jpeg', quality: 82 });
     results.push(id);
   }
+  // A second picture for Pull requests: the Open a pull request page.
+  await page.evaluate(() => { window.__prShot = true; });
+  await page.locator('.nav-item').filter({ has: page.locator('.nav-item__label', { hasText: /^Pull requests$/ }) }).click();
+  await page.getByRole('button', { name: 'New pull request' }).first().click();
+  await quiet(page.getByRole('combobox', { name: 'Compare branch' }).selectOption('feat/command-menu', { timeout: 4000 }));
+  await quiet(page.getByRole('textbox', { name: 'Pull request description' }).fill('Adds a keyboard-first command palette with fuzzy search.\n\n- opens with Ctrl+K\n- lists repository actions'));
+  await page.waitForTimeout(900);
+  await page.screenshot({ path: path.join(OUT, 'new-pull-request.jpg'), type: 'jpeg', quality: 82 });
+  await page.evaluate(() => { window.__prShot = false; });
+
+  // A second picture for Actions: one run opened on its own page.
+  await page.locator('.nav-item').filter({ has: page.locator('.nav-item__label', { hasText: /^Actions$/ }) }).click();
+  await page.locator('.actions-main').getByText('fix: preserve scroll position on refresh', { exact: true }).first().click();
+  await quiet(page.getByRole('heading', { name: /preserve scroll position/ }).waitFor({ timeout: 5000 }));
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: path.join(OUT, 'actions-run.jpg'), type: 'jpeg', quality: 82 });
+
+  // The Extension Store is not a workspace menu: install two packs from it, then show Settings > Extensions.
+  await page.locator('.nav-item').filter({ hasText: 'Extension Store' }).click();
+  for (const name of ['Code Quality Pack', 'Documentation Pack']) {
+    await page.getByRole('button', { name: `Install ${name}` }).click();
+    await page.getByRole('dialog', { name: `Install ${name}` }).getByRole('button', { name: 'Install', exact: true }).click();
+  }
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: path.join(OUT, 'extensions.jpg'), type: 'jpeg', quality: 82 });
+  await page.locator('.profile-button').click();
+  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
+  await page.locator('.app-settings__menu').getByRole('button', { name: 'Extensions' }).click();
+  await quiet(page.getByRole('button', { name: 'Details of Code Quality Pack' }).click({ timeout: 3000 }));
+  await quiet(page.locator('.app-settings__content').evaluate((el) => { el.scrollTop = 0; }));
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(OUT, 'extensions-settings.jpg'), type: 'jpeg', quality: 82 });
   expect(results).toHaveLength(workspaceNav.length);
 });

@@ -23,7 +23,6 @@ import {
   ghPrCheckout,
   ghPrClose,
   ghPrComment,
-  ghPrCreate,
   ghPrDetail,
   ghPrList,
   invalidateGhCache,
@@ -31,6 +30,7 @@ import {
 } from '../../lib/tauriClient';
 import type { GhPrDetail, GhPullRequest } from '../../types/repository';
 import { colorOf, initialsOf, relativeTime, reviewDisplay } from '../../lib/ghData';
+import { NewPullRequest } from './NewPullRequest';
 import { PrCommits } from './PrCommits';
 import { PrFiles } from './PrFiles';
 import { PrSummary } from './PrSummary';
@@ -123,9 +123,6 @@ export function PullRequestsScreen() {
   const [reviewEvent, setReviewEvent] = useState<'APPROVE' | 'REQUEST_CHANGES'>('APPROVE');
   const [reviewBody, setReviewBody] = useState('');
   const [newPrOpen, setNewPrOpen] = useState(false);
-  const [newPrTitle, setNewPrTitle] = useState('');
-  const [newPrBody, setNewPrBody] = useState('');
-  const [newPrBase, setNewPrBase] = useState('main');
   const [prMenuOpen, setPrMenuOpen] = useState(false);
   // Bumped by Refresh so the detail effect re-fetches even when the
   // selected PR number did not change.
@@ -283,24 +280,11 @@ export function PullRequestsScreen() {
     }
   };
 
-  const createPr = async () => {
-    const title = newPrTitle.trim();
-    if (!title) return;
-    const head = repository?.currentBranch ?? '';
-    if (!head || head === newPrBase.trim()) {
-      notify('Checkout a feature branch first — cannot merge a branch into itself', 'error');
-      return;
-    }
-    try {
-      const url = await ghPrCreate(title, newPrBody.trim(), head, newPrBase.trim() || 'main');
-      notify(url ? `Pull request created: ${url}` : 'Pull request created', 'success');
-      setNewPrOpen(false);
-      setNewPrTitle('');
-      setNewPrBody('');
-      await loadList();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    }
+  /** The new pull request is saved on GitHub: back to the list, with the new one opened. */
+  const prCreated = async (number: number | null) => {
+    setNewPrOpen(false);
+    await loadList(true);
+    if (number !== null) setSelected(number);
   };
 
   const closePr = async () => {
@@ -366,6 +350,15 @@ export function PullRequestsScreen() {
         </button>
       </header>
 
+      {newPrOpen && repository ? (
+        <NewPullRequest
+          repository={repository}
+          notify={notify}
+          onCancel={() => setNewPrOpen(false)}
+          onCreated={(number) => void prCreated(number)}
+        />
+      ) : (
+      <>
       <div className="screen-toolbar">
         <div className="screen-search pr-screen__search">
           <Search size={14} strokeWidth={1.25} />
@@ -993,6 +986,8 @@ export function PullRequestsScreen() {
           )}
         </section>
       </div>
+      </>
+      )}
 
       {reviewDialogOpen && (
         <div className="commit-history__overlay" onClick={() => setReviewDialogOpen(false)} role="presentation">
@@ -1041,59 +1036,6 @@ export function PullRequestsScreen() {
               </button>
               <button type="button" className="primary-button" onClick={() => void submitReview()}>
                 Submit review
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {newPrOpen && (
-        <div className="commit-history__overlay" onClick={() => setNewPrOpen(false)} role="presentation">
-          <div
-            className="commit-history__branch-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="New pull request"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <strong>New pull request</strong>
-            <span className="commit-history__branch-base">
-              <code>{repository?.currentBranch ?? 'HEAD'}</code> → <code>{newPrBase || 'main'}</code>
-            </span>
-            <input
-              autoFocus
-              placeholder="Pull request title"
-              value={newPrTitle}
-              onChange={(event) => setNewPrTitle(event.target.value)}
-              aria-label="Pull request title"
-              spellCheck={false}
-            />
-            <input
-              placeholder="Base branch (e.g. main)"
-              value={newPrBase}
-              onChange={(event) => setNewPrBase(event.target.value)}
-              aria-label="Base branch"
-              spellCheck={false}
-            />
-            <textarea
-              placeholder="Description (optional)…"
-              value={newPrBody}
-              onChange={(event) => setNewPrBody(event.target.value)}
-              aria-label="Pull request description"
-              rows={5}
-            />
-            <div className="commit-history__branch-actions">
-              <button type="button" className="outline-button" onClick={() => setNewPrOpen(false)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => void createPr()}
-                disabled={!newPrTitle.trim()}
-              >
-                <GitPullRequest size={12} strokeWidth={1.25} />
-                Create pull request
               </button>
             </div>
           </div>

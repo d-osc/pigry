@@ -6,6 +6,7 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::Duration;
+use crate::CommandNoWindow;
 
 mod commit_edit;
 pub use commit_edit::{commit_edit_state, continue_commit_edit, start_commit_edit, CommitEditState};
@@ -16,7 +17,7 @@ type Result<T> = std::result::Result<T, String>;
 fn err<E: std::fmt::Display>(e: E) -> String { e.to_string() }
 
 fn run_git(repo_path: &Path, args: &[String]) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(repo_path)
         .arg("-c")
@@ -807,7 +808,7 @@ pub fn abort_rebase(repo_path: &Path) -> Result<String> {
 }
 
 fn run_git_env(repo_path: &Path, args: &[&str], envs: &[(&str, &str)]) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(repo_path)
         .arg("-c")
@@ -836,7 +837,7 @@ pub fn has_conflicts(repo_path: &Path) -> Result<bool> {
 /// Verifies a commit's GPG signature using git CLI.
 /// Returns "good", "bad", "unsigned", or an error.
 pub fn verify_commit(repo_path: &Path, oid: &str) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(repo_path)
         .args(["verify-commit", oid])

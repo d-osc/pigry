@@ -707,7 +707,7 @@ export function EditorPane({
           <div className="editor-pane__notice">Binary file — cannot edit</div>
         ) : entry.content.tooLarge ? (
           <div className="editor-pane__notice">
-            File is too large to edit (over 1 MB)
+            File is too large to edit (over 20 MB)
           </div>
         ) : (
           <Editor

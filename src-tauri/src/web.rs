@@ -46,6 +46,7 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 
 fn run_curl_output(url: &str, timeout_secs: u64) -> Result<String> {
     let mut cmd = Command::new("curl");
+    cmd.no_window();
     cmd.args([
         "-s",
         "-L",

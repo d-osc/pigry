@@ -3,14 +3,24 @@ import { PauseGate } from '../../lib/pauseGate';
 import { isReadOnlyCall, runInBatches } from '../../lib/toolBatch';
 import { beginFanOut, endFanOut, exclusive, guardedChange, isFanOut, noteRead, type Snapshot } from '../../lib/writeGuard';
 import { findDefinition } from '../../lib/symbolLookup';
-import { DIAGRAM_TOOLS } from '../../lib/diagramTools';
-import { DESIGN_TOOLS } from '../../lib/designTools';
-import { BOARD_TOOLS } from '../../lib/boardTools';
-import { E2E_TOOLS as E2E_RUNNER_TOOLS, getOpenE2e } from '../../lib/e2e/e2eTools';
-import { getOpenBoard } from '../../lib/boardStore';
-import { getOpenDesign } from '../../lib/designStore';
+import { DIAGRAM_TOOLS } from '../../extensions/diagram/diagramTools';
+import { DESIGN_TOOLS } from '../../extensions/design/designTools';
+import { DRAWING_TOOLS } from '../../extensions/drawing/drawingTools';
+import { MODEL_TOOLS } from '../../extensions/model3d/model3dTools';
+import { GAME_TOOLS } from '../../extensions/gameengine/gameTools';
+import { getOpenGame } from '../../extensions/gameengine/gameStore';
+import { VIDEO_TOOLS } from '../../extensions/videoeditor/videoTools';
+import { AUDIO_TOOLS } from '../../extensions/audioeditor/audioTools';
+import { getOpenAudio } from '../../extensions/audioeditor/audioStore';
+import { getOpenVideo } from '../../extensions/videoeditor/videoStore';
+import { getOpenModel } from '../../extensions/model3d/model3dStore';
+import { getOpenDrawing } from '../../extensions/drawing/drawingStore';
+import { BOARD_TOOLS } from '../../extensions/board/boardTools';
+import { E2E_TOOLS as E2E_RUNNER_TOOLS, getOpenE2e } from '../../extensions/e2e/engine/e2eTools';
+import { getOpenBoard } from '../../extensions/board/boardStore';
+import { getOpenDesign } from '../../extensions/design/designStore';
 import { clearImages, hasImages, queueImage, takeImages } from '../../lib/pendingImages';
-import { getOpenDiagram } from '../../lib/diagramStore';
+import { getOpenDiagram } from '../../extensions/diagram/diagramStore';
 import { assertStyleScript, checkLayoutScript, stylesScript } from '../../lib/cssChecks';
 import {
   ArrowRight,
@@ -1334,7 +1344,7 @@ const BROWSER_EXTRAS: ToolSpec[] = [
 
 const RUNTIME_AGENT_TOOLS = [
   ...FILE_TOOLS, ...WORKSPACE_AGENT_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS,
-  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
+  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
 ];
 
 /** Short label shown as a tool-activity chip in the chat bubble. */
@@ -1668,6 +1678,63 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
           'Use design_list / design_read / design_write / design_edit / design_check / design_preview / design_export / design_open — do not hand-edit the JSON with write_file. ' +
           'After building a screen, call design_preview and look at the attached image before reporting it done.' +
           (openDesign ? `\nThe user currently has the design "${openDesign}" open in the editor (read it with design_read before changing it).` : '');
+      }
+    }
+    {
+      const openDrawing = getOpenDrawing();
+      if (team === 'Drawing' || openDrawing) {
+        context +=
+          '\n\n[Drawing editor]\n' +
+          'Drawings live in .pigry/drawings/<agent>/<name>.drawing.json (one folder per agent) and are painted in the Drawing menu: a canvas with raster layers. ' +
+          'Use drawing_list / drawing_read / drawing_write / drawing_edit / drawing_preview / drawing_export / drawing_open — do not hand-edit the JSON with write_file. ' +
+          'Work in layers, and after each major step call drawing_preview and look at the attached image before reporting it done.' +
+          (openDrawing ? `\nThe user currently has the drawing "${openDrawing}" open in the editor (read it with drawing_read before changing it).` : '');
+      }
+    }
+    {
+      const openModel = getOpenModel();
+      if (team === '3D Model' || openModel) {
+        context +=
+          '\n\n[3D Model editor]\n' +
+          '3D scenes live in .pigry/models/<agent>/<name>.model.json (one folder per agent) and are built in the 3D Model menu with three.js: primitives, lights, cameras and PBR materials; units are metres and +Y is up. ' +
+          'Use model_list / model_read / model_write / model_edit / model_preview / model_export / model_open — do not hand-edit the JSON with write_file. ' +
+          'After each major step call model_preview and look at the attached image before reporting it done.' +
+          (openModel ? `\nThe user currently has the 3D scene "${openModel}" open in the editor (read it with model_read before changing it).` : '');
+      }
+    }
+    {
+      const openGame = getOpenGame();
+      if (team === 'Game Engine' || openGame) {
+        context +=
+          '\n\n[Game Engine]\n' +
+          'Games live in .pigry/games/<agent>/<name>.game.json (one folder per agent) and are built in the Game Engine menu: Godot-style scenes of nodes, TypeScript/JavaScript scripts whose class extends the node type, physics, input and UI on three.js. ' +
+          'Use game_list / game_read / game_write / game_edit / game_run / game_preview / game_export / game_open — do not hand-edit the JSON with write_file. ' +
+          'After each change run the game with game_run and fix every ERROR, and use game_preview to look at it before reporting it done.' +
+          (openGame ? `\nThe user currently has the game "${openGame}" open in the editor (read it with game_read before changing it).` : '');
+      }
+    }
+    {
+      const openVideo = getOpenVideo();
+      if (team === 'Video Editor' || openVideo) {
+        context +=
+          '\n\n[Video Editor]\n' +
+          'Videos live in .pigry/videos/<agent>/<name>.video.json (one folder per agent) and are edited in the Video Editor menu: a CapCut-style multi-track timeline of video, image, text, shape, sticker and generated-sound clips with transitions, animations, keyframes, filters and captions. ' +
+          'Use video_list / video_read / video_write / video_edit / video_preview / video_export / video_open — do not hand-edit the JSON with write_file. ' +
+          'You can build a finished video from text, shapes, stickers and synthesised sound without any media file; footage that is already in the workspace is registered with asset_add. ' +
+          'After each change read the Review warnings and look at the result with video_preview before reporting it done.' +
+          (openVideo ? `\nThe user currently has the video "${openVideo}" open in the editor (read it with video_read before changing it).` : '');
+      }
+    }
+    {
+      const openAudio = getOpenAudio();
+      if (team === 'Audio Editor' || openAudio) {
+        context +=
+          '\n\n[Audio Editor]\n' +
+          'Audio projects live in .pigry/audio/<agent>/<name>.audio.json (one folder per agent) and are edited in the Audio Editor menu: an Audacity-style multi-track editor with clips, fades, envelopes, labels and an effect chain per clip (amplify, normalize, loudness normalize, EQ, filters, compressor, limiter, gate, de-esser, noise reduction, click and hum removal, reverb, echo, chorus, distortion) plus a master chain. ' +
+          'Use audio_list / audio_read / audio_write / audio_edit / audio_preview / audio_analyze / audio_export / audio_open — do not hand-edit the JSON with write_file. ' +
+          'Recordings that are already in the workspace are registered with asset_add; tones, noise and silence are made with generate. Fix problems in this order: hum/noise/clicks → cuts → EQ → compression → fades → master limiter/loudness. ' +
+          'After each change read the Review warnings, measure with audio_analyze (LUFS, true peak, clipping) and look at the result with audio_preview before reporting it done. MP3 and FLAC export are not supported (WAV and WebM only).' +
+          (openAudio ? `\nThe user currently has the audio project "${openAudio}" open in the editor (read it with audio_read before changing it).` : '');
       }
     }
     // Project instructions (.pigry/instructions.md) — always ride along.
@@ -4220,6 +4287,15 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
                             <pre className="explorer-ai__msg-selection-code">
                               {message.selection.text}
                             </pre>
+                          </div>
+                        )}
+                        {isUser && message.images && message.images.length > 0 && (
+                          <div className="explorer-ai__msg-images" aria-label="Attached images">
+                            {message.images.map((src, i) => (
+                              <a key={i} href={src} target="_blank" rel="noreferrer" title="Open the image">
+                                <img src={src} alt={`Attached image ${i + 1}`} loading="lazy" />
+                              </a>
+                            ))}
                           </div>
                         )}
                         {message.toolEvents && message.toolEvents.length > 0 && (

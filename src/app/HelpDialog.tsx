@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { AlertTriangle, BookOpen, Bot, Lightbulb, ListChecks, X } from 'lucide-react';
 import { MENU_GUIDES } from '../lib/menuGuides';
-import { workspaceNav, type WorkspaceNavId } from './navigation';
+import { extensionsNav, workspaceNav, type GuideNavId } from './navigation';
 import './HelpDialog.css';
 
 const SECTIONS = [
@@ -18,8 +18,8 @@ const SECTIONS = [
 
 const imageUrl = (file: string): string => `${import.meta.env.BASE_URL}help/${file}`;
 
-export function HelpDialog({ screen, onClose }: { screen: WorkspaceNavId; onClose: () => void }) {
-  const item = workspaceNav.find(({ id }) => id === screen);
+export function HelpDialog({ screen, onClose }: { screen: GuideNavId; onClose: () => void }) {
+  const item = screen === 'extensions' ? extensionsNav : workspaceNav.find(({ id }) => id === screen);
   const guide = MENU_GUIDES[screen];
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -59,7 +59,7 @@ export function HelpDialog({ screen, onClose }: { screen: WorkspaceNavId; onClos
 
       <div className="help-dialog__layout">
         <nav className="help-dialog__toc" aria-label="Guide sections">
-          {SECTIONS.map(([id, label]) => (
+          {SECTIONS.filter(([id]) => id !== 'agents' || guide.agents).map(([id, label]) => (
             <button key={id} type="button" className="help-dialog__toc-link" onClick={() => jump(id)}>{label}</button>
           ))}
         </nav>
@@ -120,6 +120,7 @@ export function HelpDialog({ screen, onClose }: { screen: WorkspaceNavId; onClos
             </ul>
           </section>
 
+          {guide.agents && (
           <section id="help-agents" className="help-section">
             <h3 className="help-section__title"><Bot size={15} strokeWidth={1.5} />Ask the agents</h3>
             <p>
@@ -127,6 +128,7 @@ export function HelpDialog({ screen, onClose }: { screen: WorkspaceNavId; onClos
               For a specialist opinion, mention <code>@{guide.agents.base}</code>. Agents see the same menu you do and can use its tools, so describe what you want in plain words.
             </p>
           </section>
+          )}
         </div>
       </div>
     </div>

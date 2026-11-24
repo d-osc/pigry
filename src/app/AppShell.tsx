@@ -1,6 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TitleBar } from './TitleBar';
 import { HelpDialog } from './HelpDialog';
+import { OPEN_SETTINGS_EVENT } from '../lib/builtinExtensions';
+import { requestOpenExtension } from '../lib/extensions';
+import type { SectionId } from '../screens/settings/AppSettingsScreen';
 import { NavSidebar } from './NavSidebar';
 import { StatusBar, type EditorStatusInfo } from './StatusBar';
 import { ToastContainer } from './Toast';
@@ -34,14 +37,20 @@ const BranchesScreen = lazy(() => import('../screens/branches/BranchesScreen').t
 const WorkingChangesScreen = lazy(() => import('../screens/working-changes/WorkingChangesScreen').then((module) => ({ default: module.WorkingChangesScreen })));
 const AppSettingsScreen = lazy(() => import('../screens/settings/AppSettingsScreen').then((module) => ({ default: module.AppSettingsScreen })));
 const CommitGraphScreen = lazy(() => import('../screens/commit-graph/CommitGraphScreen').then((module) => ({ default: module.CommitGraphScreen })));
-const E2eScreen = lazy(() => import('../screens/e2e/E2eScreen').then((module) => ({ default: module.E2eScreen })));
-const BoardScreen = lazy(() => import('../screens/board/BoardScreen').then((module) => ({ default: module.BoardScreen })));
-const DesignScreen = lazy(() => import('../screens/design/DesignScreen').then((module) => ({ default: module.DesignScreen })));
-const DiagramScreen = lazy(() => import('../screens/diagram/DiagramScreen').then((module) => ({ default: module.DiagramScreen })));
+const E2eScreen = lazy(() => import('../extensions/e2e/E2eScreen').then((module) => ({ default: module.E2eScreen })));
+const BoardScreen = lazy(() => import('../extensions/board/BoardScreen').then((module) => ({ default: module.BoardScreen })));
+const AudioScreen = lazy(() => import('../extensions/audioeditor/AudioScreen').then((module) => ({ default: module.AudioScreen })));
+const VideoScreen = lazy(() => import('../extensions/videoeditor/VideoScreen').then((module) => ({ default: module.VideoScreen })));
+const GameScreen = lazy(() => import('../extensions/gameengine/GameScreen').then((module) => ({ default: module.GameScreen })));
+const Model3DScreen = lazy(() => import('../extensions/model3d/Model3DScreen').then((module) => ({ default: module.Model3DScreen })));
+const DrawingScreen = lazy(() => import('../extensions/drawing/DrawingScreen').then((module) => ({ default: module.DrawingScreen })));
+const DesignScreen = lazy(() => import('../extensions/design/DesignScreen').then((module) => ({ default: module.DesignScreen })));
+const DiagramScreen = lazy(() => import('../extensions/diagram/DiagramScreen').then((module) => ({ default: module.DiagramScreen })));
 const ExplorerScreen = lazy(() => import('../screens/explorer/ExplorerScreen').then((module) => ({ default: module.ExplorerScreen })));
 const ProjectsScreen = lazy(() => import('../screens/projects/ProjectsScreen').then((module) => ({ default: module.ProjectsScreen })));
 const PullRequestsScreen = lazy(() => import('../screens/pull-requests/PullRequestsScreen').then((module) => ({ default: module.PullRequestsScreen })));
-const ReportsScreen = lazy(() => import('../screens/reports/ReportsScreen').then((module) => ({ default: module.ReportsScreen })));
+const ExtensionsScreen = lazy(() => import('../screens/extensions/ExtensionsScreen').then((module) => ({ default: module.ExtensionsScreen })));
+const ReportsScreen = lazy(() => import('../extensions/reports/ReportsScreen').then((module) => ({ default: module.ReportsScreen })));
 const AiAgentScreen = lazy(() => import('../screens/ai-agent/AiAgentScreen').then((module) => ({ default: module.AiAgentScreen })));
 const ReleasesScreen = lazy(() => import('../screens/releases/ReleasesScreen').then((module) => ({ default: module.ReleasesScreen })));
 const IssuesScreen = lazy(() => import('../screens/issues/IssuesScreen').then((module) => ({ default: module.IssuesScreen })));
@@ -61,7 +70,7 @@ const MAX_SIDEBAR_WIDTH = 420;
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS = new Set<NavId>(
-  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'board' && id !== 'e2e'),
+  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'drawing' && id !== 'model3d' && id !== 'gameengine' && id !== 'videoeditor' && id !== 'audioeditor' && id !== 'board' && id !== 'e2e'),
 );
 
 /** The Tauri webview ignores target="_blank" links — route every external
@@ -258,8 +267,20 @@ function renderScreen(
       return <E2eScreen />;
     case 'reports':
       return <ReportsScreen />;
+    case 'extensions':
+      return <ExtensionsScreen />;
     case 'design':
       return <DesignScreen />;
+    case 'drawing':
+      return <DrawingScreen />;
+    case 'model3d':
+      return <Model3DScreen />;
+    case 'gameengine':
+      return <GameScreen />;
+    case 'videoeditor':
+      return <VideoScreen />;
+    case 'audioeditor':
+      return <AudioScreen />;
     case 'diagram':
       return <DiagramScreen />;
     case 'ai-agent':
@@ -297,13 +318,13 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
-  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'board' || screen === 'e2e';
+  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'drawing' || screen === 'model3d' || screen === 'gameengine' || screen === 'videoeditor' || screen === 'audioeditor' || screen === 'board' || screen === 'e2e';
   // Adjusting state while rendering (not in an effect) keeps visited screens mounted without a cascading render.
   if (keepAgentScreen && !visitedAgentScreens.includes(screen)) setVisitedAgentScreens([...visitedAgentScreens, screen]);
   // Section the settings page should open on (null = default). Set by
   // TitleBar account actions like "Add account" so users land on the
   // Accounts section instead of the Appearance section.
-  const [settingsSection, setSettingsSection] = useState<'accounts' | null>(null);
+  const [settingsSection, setSettingsSection] = useState<SectionId | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>('commands');
@@ -317,17 +338,46 @@ function AppShellInner() {
   useEffect(() => {
     const onOpenDiagram = () => setScreen('diagram');
     const onOpenDesign = () => setScreen('design');
+    const onOpenDrawing = () => setScreen('drawing');
+    const onOpenModel3d = () => setScreen('model3d');
+    const onOpenGame = () => setScreen('gameengine');
+    const onOpenVideo = () => setScreen('videoeditor');
+    const onOpenAudio = () => setScreen('audioeditor');
     const onOpenBoard = () => setScreen('board');
     const onOpenE2e = () => setScreen('e2e');
+    const onGoScreen = (event: Event) => {
+      const target = String((event as CustomEvent<string>).detail ?? '');
+      if (target === 'extensions' || workspaceNav.some(({ id }) => id === target)) setScreen(target as NavId);
+    };
+    const onOpenSettings = (event: Event) => {
+      const detail = (event as CustomEvent<{ section?: SectionId; extensionId?: string }>).detail;
+      if (detail?.extensionId) requestOpenExtension(detail.extensionId);
+      setSettingsSection(detail?.section ?? null);
+      setScreen('app-settings');
+    };
+    window.addEventListener('pigry:go-screen', onGoScreen);
+    window.addEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     window.addEventListener('pigry:open-diagram', onOpenDiagram);
     window.addEventListener('pigry:open-design', onOpenDesign);
+    window.addEventListener('pigry:open-drawing', onOpenDrawing);
+    window.addEventListener('pigry:open-model3d', onOpenModel3d);
+    window.addEventListener('pigry:open-game', onOpenGame);
+    window.addEventListener('pigry:open-video', onOpenVideo);
+    window.addEventListener('pigry:open-audio', onOpenAudio);
     window.addEventListener('pigry:open-board', onOpenBoard);
     window.addEventListener('pigry:open-e2e', onOpenE2e);
     return () => {
       window.removeEventListener('pigry:open-diagram', onOpenDiagram);
       window.removeEventListener('pigry:open-design', onOpenDesign);
+      window.removeEventListener('pigry:open-drawing', onOpenDrawing);
+      window.removeEventListener('pigry:open-model3d', onOpenModel3d);
+      window.removeEventListener('pigry:open-game', onOpenGame);
+      window.removeEventListener('pigry:open-video', onOpenVideo);
+      window.removeEventListener('pigry:open-audio', onOpenAudio);
       window.removeEventListener('pigry:open-board', onOpenBoard);
       window.removeEventListener('pigry:open-e2e', onOpenE2e);
+      window.removeEventListener('pigry:go-screen', onGoScreen);
+      window.removeEventListener(OPEN_SETTINGS_EVENT, onOpenSettings);
     };
   }, []);
   // Chat panels without their own navigation (e.g. the Copilot page) ask the
@@ -693,6 +743,14 @@ function AppShellInner() {
                       onNavigate={setScreen}
                       onOpenSettings={() => setSettingsOpen(true)}
                       onCollapse={() => setSidebarOpen(false)}
+                      onOpenExtension={() => {
+                        setSettingsSection('extensions');
+                        setScreen('app-settings');
+                      }}
+                      onOpenGuide={(id) => {
+                        setScreen(id);
+                        setHelpOpen(true);
+                      }}
                     />
                     <ResizeHandle
                       orientation="v"

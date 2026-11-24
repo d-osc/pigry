@@ -123,7 +123,7 @@ test('Board agent tools: write in the agent folder, edit live, preview, export, 
   await expect(page.getByRole('heading', { name: 'Board editor' })).toBeVisible();
 
   const result = await page.evaluate(async () => {
-    const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
+    const { BOARD_TOOLS } = await import('/src/extensions/board/boardTools.ts');
     const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => BOARD_TOOLS.find((t) => t.name === name).run({ agent: 'sa', ...input });
     const out = {};
@@ -267,8 +267,8 @@ test('Board embeds diagrams and designs, keeps them live, and opens the source',
 
   // A diagram (by SA) and a design (by UX/UI) that the board will show
   await page.evaluate(async () => {
-    const { DIAGRAM_TOOLS } = await import('/src/lib/diagramTools.ts');
-    const { DESIGN_TOOLS } = await import('/src/lib/designTools.ts');
+    const { DIAGRAM_TOOLS } = await import('/src/extensions/diagram/diagramTools.ts');
+    const { DESIGN_TOOLS } = await import('/src/extensions/design/designTools.ts');
     await DIAGRAM_TOOLS.find((t) => t.name === 'diagram_write').run({
       agent: 'sa', name: 'login-flow', title: 'Login flow', type: 'flowchart',
       nodes: [{ id: 'start', kind: 'terminator', label: 'Start' }, { id: 'form', label: 'Show form' }, { id: 'end', kind: 'terminator', label: 'End' }],
@@ -307,14 +307,14 @@ test('Board embeds diagrams and designs, keeps them live, and opens the source',
 
   // The embed stays live: editing the diagram redraws it on the board
   await page.evaluate(async () => {
-    const { DIAGRAM_TOOLS } = await import('/src/lib/diagramTools.ts');
+    const { DIAGRAM_TOOLS } = await import('/src/extensions/diagram/diagramTools.ts');
     await DIAGRAM_TOOLS.find((t) => t.name === 'diagram_edit').run({ agent: 'sa', name: 'login-flow', operations: [{ op: 'add_node', id: 'audit', label: 'Write audit log' }, { op: 'add_edge', from: 'form', to: 'audit' }] });
   });
   await expect(embedded.locator('svg')).toContainText('Write audit log');
 
   // Agent tools can embed too: references are canonicalised, missing sources are reported, previews and exports draw them
   const result = await page.evaluate(async () => {
-    const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
+    const { BOARD_TOOLS } = await import('/src/extensions/board/boardTools.ts');
     const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => BOARD_TOOLS.find((t) => t.name === name).run({ agent: 'sa', ...input });
     const out = {};
@@ -455,7 +455,7 @@ test('Board shows code: file lines, a compare and a commit, from the picker and 
 
   // Agent tools can add code too; the saved board resolves everything and exports it
   const result = await page.evaluate(async () => {
-    const { BOARD_TOOLS } = await import('/src/lib/boardTools.ts');
+    const { BOARD_TOOLS } = await import('/src/extensions/board/boardTools.ts');
     const run = (name, input) => BOARD_TOOLS.find((t) => t.name === name).run({ agent: 'sa', ...input });
     const out = {};
     out.write = await run('board_write', { name: 'review', items: [

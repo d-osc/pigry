@@ -115,7 +115,7 @@ test('Design agent tools: write in the agent folder, edit live, review, preview,
   await expect(page.getByRole('heading', { name: 'Design editor' })).toBeVisible();
 
   const result = await page.evaluate(async () => {
-    const { DESIGN_TOOLS } = await import('/src/lib/designTools.ts');
+    const { DESIGN_TOOLS } = await import('/src/extensions/design/designTools.ts');
     const { takeImages } = await import('/src/lib/pendingImages.ts');
     const run = (name, input) => DESIGN_TOOLS.find((t) => t.name === name).run({ agent: 'uxui', ...input });
     const out = {};
@@ -198,16 +198,17 @@ test('Base agent UX/UI Designer lives in the Design menu with the design tools a
       lead: agents.find((a) => a.username === 'design'),
       everyone: agents.filter((a) => a.team === 'Design').map((a) => a.username),
       tools: AGENT_TOOLS.filter((t) => t.group === 'Design').map((t) => t.name),
-      skills: BUILTIN_SKILLS.map((s) => s.id).filter((id) => /^(design-editor|ui-design-system|ux-design-process)$/.test(id)),
+      skills: BUILTIN_SKILLS.map((s) => s.id).filter((id) => /^(design-editor|ui-design-system|ux-design-process|usability-heuristics|accessibility-wcag|ui-patterns-and-states|information-architecture-and-flows|visual-hierarchy|design-handoff-and-systems|design-critique-checklist)$/.test(id)),
     };
   });
   expect(info.uxui.team).toBe('Design');
   expect(info.uxui.tier).toBe('base');
   expect(info.uxui.name).toBe('UX/UI Designer');
   expect(info.uxui.tools).toEqual(expect.arrayContaining(['design_write', 'design_edit', 'design_preview', 'design_check', 'design_export', 'read_image']));
-  expect(info.uxui.skills).toEqual(['ux-design-process', 'ui-design-system', 'design-editor']);
+  expect(info.uxui.skills).toEqual(['ux-design-process', 'ui-design-system', 'usability-heuristics', 'accessibility-wcag', 'ui-patterns-and-states', 'information-architecture-and-flows', 'visual-hierarchy', 'design-handoff-and-systems', 'design-critique-checklist', 'design-editor']);
+  expect(info.lead.skills).toEqual(['design-editor', 'ui-design-system', 'usability-heuristics', 'accessibility-wcag']);
   expect(info.lead.tier).toBe('default');
   expect(info.everyone.sort()).toEqual(['design', 'uxui']);
   expect(info.tools).toHaveLength(8);
-  expect(info.skills.sort()).toEqual(['design-editor', 'ui-design-system', 'ux-design-process']);
+  expect(info.skills.sort()).toEqual(['accessibility-wcag', 'design-critique-checklist', 'design-editor', 'design-handoff-and-systems', 'information-architecture-and-flows', 'ui-design-system', 'ui-patterns-and-states', 'usability-heuristics', 'ux-design-process', 'visual-hierarchy']);
 });

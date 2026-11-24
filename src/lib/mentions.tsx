@@ -199,6 +199,8 @@ export interface SkillEntry {
   description: string;
   /** Base skill hard-coded in the app — not stored in .pigry/skills/. */
   builtIn?: boolean;
+  /** Skill that comes from an installed extension (read-only, like a built-in one). */
+  extension?: boolean;
 }
 
 /** An active #token being typed: where it starts + the fragment after #. */

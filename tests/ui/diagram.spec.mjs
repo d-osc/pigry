@@ -90,7 +90,7 @@ test('Diagram editor: create, edit, connect, undo and agent tools update the sam
 
   // An agent tool edits the same file: the open canvas refreshes
   await page.evaluate(async () => {
-    const { DIAGRAM_TOOLS } = await import('/src/lib/diagramTools.ts');
+    const { DIAGRAM_TOOLS } = await import('/src/extensions/diagram/diagramTools.ts');
     const tool = (name) => DIAGRAM_TOOLS.find((t) => t.name === name);
     window.__tools = (name) => ({ run: (input) => tool(name).run({ agent: 'sa', ...input }) });
     window.__editResult = await window.__tools('diagram_edit').run({
@@ -154,7 +154,8 @@ test('SA is a base agent in Explorer, Diagram and Copilot and the Diagram agents
     return {
       sa, diagramAgent,
       tools: AGENT_TOOLS.filter((t) => t.group === 'Diagram').map((t) => t.name),
-      skills: BUILTIN_SKILLS.map((s) => s.id).filter((id) => /diagram|system-analysis/.test(id)),
+      skills: BUILTIN_SKILLS.map((s) => s.id).filter((id) => /^(diagram-editor|diagram-modeling|system-analysis)$/.test(id)),
+      diagramSkills: BUILTIN_SKILLS.map((s) => s.id).filter((id) => /^(c4-architecture-diagrams|system-design-process|scalability-and-reliability-patterns|data-modeling-erd|sequence-and-state-modeling|domain-driven-modeling|architecture-decisions-and-review)$/.test(id)),
     };
   });
   expect(info.sa.map((a) => `${a.team}:${a.u}`).sort()).toEqual(['Board:board-sa', 'Copilot:copilot-sa', 'Diagram:diagram-sa', 'Explorer:sa']);
@@ -166,4 +167,8 @@ test('SA is a base agent in Explorer, Diagram and Copilot and the Diagram agents
   expect(info.diagramAgent.team).toBe('Diagram');
   expect(info.tools).toHaveLength(6);
   expect(info.skills.sort()).toEqual(['diagram-editor', 'diagram-modeling', 'system-analysis']);
+  const designSkills = ['architecture-decisions-and-review', 'c4-architecture-diagrams', 'data-modeling-erd', 'domain-driven-modeling', 'scalability-and-reliability-patterns', 'sequence-and-state-modeling', 'system-design-process'];
+  expect(info.diagramSkills.sort()).toEqual(designSkills);
+  expect(info.sa.find((a) => a.u === 'diagram-sa').skills).toEqual(expect.arrayContaining(designSkills));
+  expect(info.diagramAgent.skills).toEqual(expect.arrayContaining(['c4-architecture-diagrams', 'system-design-process']));
 });

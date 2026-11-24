@@ -1,6 +1,7 @@
 import { useRequestGate } from '../../hooks/useRequestGate';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowLeft,
   Ban,
   Check,
   ChevronDown,
@@ -8,15 +9,19 @@ import {
   Download,
   ExternalLink,
   FileCode2,
+  GitBranch,
+  Home,
   Loader2,
+  Package,
   Play,
   RefreshCw,
+  ScrollText,
   Search,
   SkipForward,
+  Workflow,
   X,
   Zap,
 } from 'lucide-react';
-import { ResizeHandle } from '../../app/ResizeHandle';
 import {
   ghOpenUrl,
   ghRunArtifacts,
@@ -161,11 +166,14 @@ function FilterDropdown({
   label,
   active,
   ariaLabel,
+  align = 'left',
   children,
 }: {
   label: string;
   active?: boolean;
   ariaLabel?: string;
+  /** Which edge of the button the menu lines up with. */
+  align?: 'left' | 'right';
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -195,7 +203,7 @@ function FilterDropdown({
         <ChevronDown size={12} strokeWidth={1.25} />
       </button>
       {open && (
-        <div className="actions-dd__menu" role="menu">
+        <div className={`actions-dd__menu${align === 'right' ? ' actions-dd__menu--right' : ''}`} role="menu" onClick={() => setOpen(false)}>
           {children}
         </div>
       )}
@@ -247,7 +255,6 @@ function SkeletonDetail() {
 export function ActionsScreen() {
   const listGate = useRequestGate();
   const { repository, notify } = useRepository();
-  const [runsWidth, setRunsWidth] = useState(300);
 
   const [workflows, setWorkflows] = useState<GhWorkflow[]>([]);
   const [runs, setRuns] = useState<GhWorkflowRun[]>([]);
@@ -264,13 +271,15 @@ export function ActionsScreen() {
   const [statusFilter, setStatusFilter] = useState<RunTone | ''>('');
   const [eventFilter, setEventFilter] = useState('');
 
+  // GitHub's two levels: the list of runs, and one run opened on its own page.
+  const [view, setView] = useState<'list' | 'run'>('list');
+  const [pane, setPane] = useState<'summary' | 'logs'>('summary');
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<GhRunDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   // Bumped after re-run / refresh so the detail effect refetches the same run.
   const [detailNonce, setDetailNonce] = useState(0);
 
-  const [tab, setTab] = useState<'logs' | 'artifacts'>('logs');
   const [logJob, setLogJob] = useState<number | null>(null);
   const [logText, setLogText] = useState('');
   const [logLoading, setLogLoading] = useState(false);
@@ -287,10 +296,14 @@ export function ActionsScreen() {
   const runMenuRef = useRef<HTMLDivElement | null>(null);
   // Mirrors logJob so the detail effect can validate it without depending on it.
   const logJobRef = useRef<number | null>(null);
+  const selectedRef = useRef<number | null>(null);
 
   useEffect(() => {
     logJobRef.current = logJob;
   }, [logJob]);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const activeWorkflows = useMemo(
     () => workflows.filter((wf) => wf.state === 'active'),
@@ -322,10 +335,6 @@ export function ActionsScreen() {
     [runs, query, workflowFilter, branchFilter, statusFilter, eventFilter],
   );
 
-  const selectedRun = useMemo(
-    () => runs.find((run) => run.id === selected) ?? null,
-    [runs, selected],
-  );
   const detailWorkflowPath = useMemo(() => {
     if (!detail) return '';
     const match = workflows.find(
@@ -347,10 +356,9 @@ export function ActionsScreen() {
       setRuns(page.runs);
       setTotal(page.total);
       setSyncedAt(Date.now());
-      setSelected((current) => {
-        if (current !== null && page.runs.some((run) => run.id === current)) return current;
-        return page.runs[0]?.id ?? null;
-      });
+      // Keep the open run when it is still there; otherwise go back to the list.
+      setSelected((current) => (current !== null && page.runs.some((run) => run.id === current) ? current : null));
+      setView((current) => (current === 'run' && selectedRef.current !== null && page.runs.some((run) => run.id === selectedRef.current) ? 'run' : 'list'));
     } catch (err) {
       if (!isCurrent()) return;
       setError(err instanceof Error ? err.message : String(err));
@@ -573,44 +581,40 @@ export function ActionsScreen() {
     setEventFilter('');
   };
 
-  const renderRunRow = (run: GhWorkflowRun) => {
-    const tone = toneOf(run.status, run.conclusion);
-    return (
-      <button
-        key={run.id}
-        type="button"
-        className={`actions-run${run.id === selected ? ' actions-run--selected' : ''}${tone === 'failed' ? ' actions-run--failed' : ''}`}
-        onClick={() => {
-          // Clear synchronously so the stale run never flashes while loading.
-          setSelected(run.id);
-          setDetail(null);
-          setLogJob(null);
-          setLogText('');
-          setLogError(null);
-        }}
-      >
-        <div className="actions-run__line">
-          <span className="actions-run__id">
-            {run.workflowName} #{run.number}
-          </span>
-          <span className={`actions-run__status actions-run__status--${tone}`}>
-            <ToneIcon tone={tone} />
-          </span>
-        </div>
-        <p className="actions-run__title">{run.title}</p>
-        <p className="actions-run__branch">
-          {run.branch} · {run.sha.slice(0, 7)}
-        </p>
-        <p className="actions-run__meta">
-          {run.event} · {relativeTime(run.createdAt)}
-          <span>
-            {run.status === 'completed'
-              ? `${durationOf(run.startedAt, run.updatedAt)} · ${formatDate(run.updatedAt)}`
-              : TONE_LABEL[tone]}
-          </span>
-        </p>
-      </button>
-    );
+  /** What started the run, in GitHub's words ("Commit abc1234", "Pull request", "Manually run"…). */
+  const triggerLabel = (event: string): string => {
+    switch (event) {
+      case 'push': return 'Commit';
+      case 'pull_request':
+      case 'pull_request_target': return 'Pull request';
+      case 'workflow_dispatch': return 'Manually run';
+      case 'schedule': return 'Scheduled';
+      case 'release': return 'Release';
+      default: return event.replace(/_/g, ' ');
+    }
+  };
+
+  const openRun = (run: GhWorkflowRun) => {
+    // Clear synchronously so the stale run never flashes while loading.
+    setSelected(run.id);
+    setView('run');
+    setPane('summary');
+    setDetail(null);
+    setLogJob(null);
+    setLogText('');
+    setLogError(null);
+  };
+
+  const backToRuns = () => {
+    setView('list');
+    setSelected(null);
+    setDetail(null);
+    setLogJob(null);
+  };
+
+  const chooseWorkflow = (name: string) => {
+    setWorkflowFilter(name);
+    if (view === 'run') backToRuns();
   };
 
   const jobTone = (job: GhRunJob) => toneOf(job.status, job.conclusion);
@@ -620,6 +624,449 @@ export function ActionsScreen() {
   const jobsFailed = detail?.jobs.filter((job) => jobTone(job) === 'failed').length ?? 0;
   const jobsSkipped = detail?.jobs.filter((job) => jobTone(job) === 'skipped').length ?? 0;
   const detailDone = detail !== null && detail.status === 'completed';
+  const selectedWorkflow = workflows.find((wf) => wf.name === workflowFilter) ?? null;
+
+  const renderRunRow = (run: GhWorkflowRun) => {
+    const runTone = toneOf(run.status, run.conclusion);
+    const duration = run.status === 'completed' ? durationOf(run.startedAt, run.updatedAt) : '';
+    return (
+      <li key={run.id}>
+        <button type="button" className="actions-row" onClick={() => openRun(run)}>
+          <span className={`actions-status actions-status--${runTone}`} title={TONE_LABEL[runTone]}>
+            <ToneIcon tone={runTone} size={13} />
+          </span>
+          <span className="actions-row__main">
+            <strong className="actions-row__title">{run.title}</strong>
+            <span className="actions-row__sub">
+              {run.workflowName} #{run.number}: {triggerLabel(run.event)} {run.sha.slice(0, 7)}
+            </span>
+          </span>
+          <span className="actions-row__branch" title={run.branch}>
+            <GitBranch size={11} strokeWidth={1.5} />
+            {run.branch}
+          </span>
+          <span className="actions-row__when">
+            <span>{relativeTime(run.createdAt)}</span>
+            <span className="actions-row__duration">
+              <Clock size={11} strokeWidth={1.5} />
+              {duration || (run.status === 'completed' ? '—' : TONE_LABEL[runTone])}
+            </span>
+          </span>
+        </button>
+      </li>
+    );
+  };
+
+  const renderConsole = () => (
+    <div className="actions-console">
+      <div className="actions-console__head">
+        <span className={`actions-console__title actions-console__title--${selectedJob ? jobTone(selectedJob) : tone}`}>
+          <ToneIcon tone={selectedJob ? jobTone(selectedJob) : tone} size={11} />
+          {selectedJob ? selectedJob.name : 'All jobs'}
+          <span>{selectedJob?.duration || (detail ? durationOf(detail.startedAt, detail.updatedAt) : '') || ''}</span>
+        </span>
+        <span className="actions-console__links">
+          {logText ? `${logText.split('\n').length} lines` : ''}
+        </span>
+      </div>
+      <div className="actions-console__sub">
+        <span>
+          {selectedJob
+            ? `gh run view ${detail?.id} --job ${selectedJob.id} --log`
+            : `gh run view ${detail?.id} --log`}
+        </span>
+        <span>{logLoading ? 'Loading…' : logError ? 'Log unavailable' : 'From GitHub'}</span>
+      </div>
+      <pre className="actions-console__log">
+        {logLoading && !logText ? (
+          <span className="actions-log-line">Loading log…</span>
+        ) : logError ? (
+          <span className="actions-log-line actions-log-line--fail">{logError}</span>
+        ) : logText ? (
+          parseLog(logText).map((line, index) => (
+            <span key={index} className={`actions-log-line actions-log-line--${lineTone(line.text)}`}>
+              {line.time && <span className="actions-log-line__time">{line.time}</span>}
+              {line.text}
+            </span>
+          ))
+        ) : (
+          <span className="actions-log-line">No logs available for this run yet.</span>
+        )}
+      </pre>
+    </div>
+  );
+
+  const renderEmpty = (title: string, text: string, action?: React.ReactNode, hint?: string) => (
+    <div className="actions-empty">
+      <Zap size={26} strokeWidth={1.25} />
+      <p>{title}</p>
+      <span>{text}</span>
+      {hint && <span className="actions-empty__hint">{hint}</span>}
+      {action}
+    </div>
+  );
+
+  const renderRunPage = () => {
+    if (detailError) {
+      return (
+        <>
+          <button type="button" className="actions-back" onClick={backToRuns}><ArrowLeft size={13} strokeWidth={1.5} /> {workflowFilter || 'All workflows'}</button>
+          {renderEmpty('Could not load this run', detailError, (
+            <button type="button" className="outline-button" onClick={() => setDetailNonce((n) => n + 1)}>
+              <RefreshCw size={12} strokeWidth={1.25} />
+              Retry
+            </button>
+          ))}
+        </>
+      );
+    }
+    if (!detail) {
+      return (
+        <>
+          <button type="button" className="actions-back" onClick={backToRuns}><ArrowLeft size={13} strokeWidth={1.5} /> {workflowFilter || 'All workflows'}</button>
+          <SkeletonDetail />
+        </>
+      );
+    }
+    return (
+      <div className="actions-runpage">
+        <button type="button" className="actions-back" onClick={backToRuns}>
+          <ArrowLeft size={13} strokeWidth={1.5} /> {workflowFilter || 'All workflows'}
+        </button>
+        <header className="actions-runpage__head">
+          <div className="actions-runpage__titles">
+            <h2>
+              {detail.title} <span className="actions-runpage__number">#{detail.number}</span>
+            </h2>
+            <p>
+              {detail.workflowName}
+              {detail.attempt > 1 ? ` · Attempt #${detail.attempt}` : ''}
+            </p>
+          </div>
+          <div className="actions-runpage__actions">
+            {!detailDone ? (
+              <button type="button" className="outline-button" onClick={() => void cancelRun()}>
+                <Ban size={11} strokeWidth={1.5} />
+                Cancel run
+              </button>
+            ) : (
+              <FilterDropdown label="Re-run jobs" ariaLabel="Re-run jobs" align="right">
+                <button type="button" role="menuitem" className="actions-dd__item" onClick={() => void rerun(false)}>
+                  <RefreshCw size={11} strokeWidth={1.5} />
+                  Re-run all jobs
+                </button>
+                {jobsFailed > 0 && (
+                  <button type="button" role="menuitem" className="actions-dd__item" onClick={() => void rerun(true)}>
+                    <RefreshCw size={11} strokeWidth={1.5} />
+                    Re-run failed jobs
+                  </button>
+                )}
+              </FilterDropdown>
+            )}
+            {detail.url && (
+              <button type="button" className="outline-button" onClick={() => void ghOpenUrl(detail.url)}>
+                <ExternalLink size={11} strokeWidth={1.25} />
+                GitHub
+              </button>
+            )}
+          </div>
+        </header>
+
+        <div className="actions-runpage__layout">
+          <nav className="actions-runnav" aria-label="Run navigation">
+            <button
+              type="button"
+              className={`actions-runnav__item${pane === 'summary' ? ' actions-runnav__item--active' : ''}`}
+              onClick={() => { setPane('summary'); setLogJob(null); }}
+            >
+              <Home size={13} strokeWidth={1.5} />
+              Summary
+            </button>
+            <p className="actions-runnav__label">Jobs</p>
+            {detail.jobs.map((job) => {
+              const jt = jobTone(job);
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  className={`actions-runnav__item${pane === 'logs' && logJob === job.id ? ' actions-runnav__item--active' : ''}`}
+                  onClick={() => { setPane('logs'); setLogJob(job.id); }}
+                >
+                  <span className={`actions-status actions-status--${jt} actions-status--small`}><ToneIcon tone={jt} size={9} /></span>
+                  <span className="actions-runnav__name">{job.name}</span>
+                </button>
+              );
+            })}
+            {detail.jobs.length === 0 && <p className="actions-runnav__none">No jobs yet</p>}
+            <p className="actions-runnav__label">Run details</p>
+            <button
+              type="button"
+              className={`actions-runnav__item${pane === 'logs' && logJob === null ? ' actions-runnav__item--active' : ''}`}
+              onClick={() => { setPane('logs'); setLogJob(null); }}
+            >
+              <ScrollText size={13} strokeWidth={1.5} />
+              All logs
+            </button>
+            {detailWorkflowPath && (
+              <button type="button" className="actions-runnav__item" onClick={() => void viewWorkflowDefinition(detailWorkflowPath)}>
+                <FileCode2 size={13} strokeWidth={1.5} />
+                Workflow file
+              </button>
+            )}
+          </nav>
+
+          <div className="actions-runbody">
+            {pane === 'summary' ? (
+              <>
+                <div className="actions-summary">
+                  <div className="actions-summary__cell">
+                    <span>Triggered via {detail.event.replace(/_/g, ' ')}</span>
+                    <strong>{relativeTime(detail.startedAt || detail.createdAt)}</strong>
+                    <small>
+                      {detail.branch} · {detail.sha.slice(0, 7)}
+                    </small>
+                  </div>
+                  <div className="actions-summary__cell">
+                    <span>Status</span>
+                    <strong className={`actions-summary__status actions-summary__status--${tone}`}>
+                      <ToneIcon tone={tone} size={13} />
+                      {TONE_LABEL[tone]}
+                    </strong>
+                    <small>
+                      Started {formatStamp(detail.startedAt || detail.createdAt)}
+                      {detailDone ? ` · finished ${formatStamp(detail.updatedAt)}` : ''}
+                    </small>
+                  </div>
+                  <div className="actions-summary__cell">
+                    <span>Total duration</span>
+                    <strong>{durationOf(detail.startedAt, detail.updatedAt) || (detailDone ? '—' : 'running…')}</strong>
+                  </div>
+                  <div className="actions-summary__cell">
+                    <span>Artifacts</span>
+                    <strong>{artifactsLoading ? '…' : artifacts.length}</strong>
+                  </div>
+                </div>
+
+                {tone !== 'success' && (
+                  <p className={`actions-detail__banner actions-detail__banner--${tone}`}>
+                    <ToneIcon tone={tone} size={12} />
+                    {tone === 'failed' ? (
+                      <>
+                        <strong>{jobsFailed} job{jobsFailed === 1 ? '' : 's'} failed</strong> · {jobsSkipped} skipped. Open a job to read its log.
+                      </>
+                    ) : tone === 'running' || tone === 'queued' ? (
+                      <>
+                        <strong>Run in progress</strong> · this view refreshes automatically.
+                      </>
+                    ) : tone === 'cancelled' ? (
+                      <>
+                        <strong>Run cancelled</strong> · re-run to retry it.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Jobs were skipped</strong> · nothing ran for this run.
+                      </>
+                    )}
+                  </p>
+                )}
+                {tone === 'success' && jobsSkipped > 0 && (
+                  <p className="actions-detail__banner actions-detail__banner--ok">
+                    <Check size={12} strokeWidth={2} />
+                    <strong>All {jobsOk} jobs succeeded</strong> · {jobsSkipped} skipped.
+                  </p>
+                )}
+
+                <section className="actions-section" aria-label="Jobs">
+                  <h3>
+                    Jobs <span className="actions-section__count">{detail.jobs.length}</span>
+                  </h3>
+                  <div className="actions-jobcards">
+                    {detail.jobs.map((job) => {
+                      const jt = jobTone(job);
+                      return (
+                        <button key={job.id} type="button" className="actions-jobcard" onClick={() => { setPane('logs'); setLogJob(job.id); }}>
+                          <span className={`actions-status actions-status--${jt}`}><ToneIcon tone={jt} size={12} /></span>
+                          <span className="actions-jobcard__name">{job.name}</span>
+                          <span className="actions-jobcard__time">{job.duration || '—'}</span>
+                        </button>
+                      );
+                    })}
+                    {detail.jobs.length === 0 && <p className="actions-artifacts__none">No jobs have started yet.</p>}
+                  </div>
+                </section>
+
+                <section className="actions-section" aria-label="Artifacts">
+                  <h3>
+                    Artifacts{' '}
+                    {!artifactsLoading && <span className="actions-section__count">{artifacts.length}</span>}
+                  </h3>
+                  {artifactsError ? (
+                    <div role="alert">
+                      {artifactsError}
+                      <button className="outline-button" onClick={() => setArtifactsRetry((n) => n + 1)}>Try again</button>
+                    </div>
+                  ) : artifactsLoading ? (
+                    <div className="pr-skeleton-list" aria-label="Loading artifacts">
+                      <div className="pr-skeleton-row">
+                        <div className="pr-skeleton pr-skeleton--title" />
+                        <div className="pr-skeleton pr-skeleton--meta pr-skeleton--short" />
+                      </div>
+                    </div>
+                  ) : artifacts.length === 0 ? (
+                    <p className="actions-artifacts__none">This run did not upload any artifacts.</p>
+                  ) : (
+                    <div className="actions-artifacts__table">
+                      {artifacts.map((artifact) => (
+                        <div key={artifact.id} className="actions-artifact">
+                          <Package size={13} strokeWidth={1.5} className="actions-artifact__icon" />
+                          <span className="actions-artifact__name">{artifact.name}</span>
+                          <span className="actions-artifact__meta">
+                            uploaded {formatDate(artifact.createdAt)}
+                            {artifact.expired ? ' · expired' : ''}
+                          </span>
+                          <span className="actions-artifact__size">{formatBytes(artifact.size)}</span>
+                          <button
+                            type="button"
+                            className="outline-button"
+                            disabled={artifact.expired || downloading !== null}
+                            onClick={() => void downloadArtifact(artifact)}
+                          >
+                            {downloading === artifact.id ? (
+                              <Loader2 size={11} strokeWidth={1.5} className="actions-spin" />
+                            ) : (
+                              <Download size={11} strokeWidth={1.5} />
+                            )}
+                            Download
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : (
+              <>
+                {selectedJob && (
+                  <section className="actions-section" aria-label="Steps">
+                    <h3>
+                      <span className={`actions-status actions-status--${jobTone(selectedJob)} actions-status--small`}><ToneIcon tone={jobTone(selectedJob)} size={9} /></span>
+                      {selectedJob.name}
+                      <span className="actions-section__count">{selectedJob.duration || '—'}</span>
+                    </h3>
+                    <div className="actions-steps">
+                      {selectedJob.steps.map((step) => {
+                        const st = toneOf(step.status, step.conclusion);
+                        return (
+                          <div key={step.number} className={`actions-step actions-step--${st}`}>
+                            <span className={`actions-step__icon actions-step__icon--${st}`}>
+                              <ToneIcon tone={st} size={9} />
+                            </span>
+                            <span className="actions-step__name">{step.name}</span>
+                            <span className="actions-step__time">{step.duration || (st === 'running' ? '…' : '—')}</span>
+                          </div>
+                        );
+                      })}
+                      {selectedJob.steps.length === 0 && <p className="actions-artifacts__none">No steps recorded for this job.</p>}
+                    </div>
+                  </section>
+                )}
+                {renderConsole()}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRunList = () => (
+    <>
+      <div className="actions-listhead">
+        <div className="actions-listhead__titles">
+          <h2>{workflowFilter || 'All workflows'}</h2>
+          <p>
+            {selectedWorkflow ? (
+              <>
+                Showing runs from <code>{selectedWorkflow.path}</code>
+              </>
+            ) : (
+              'Showing runs from all workflows'
+            )}
+          </p>
+        </div>
+        {selectedWorkflow && (
+          <button type="button" className="outline-button" onClick={() => void viewWorkflowDefinition(selectedWorkflow.path)}>
+            <FileCode2 size={12} strokeWidth={1.25} />
+            View workflow file
+          </button>
+        )}
+        <div className="screen-search actions-screen__search">
+          <Search size={14} strokeWidth={1.25} />
+          <input
+            placeholder="Filter workflow runs"
+            aria-label="Search runs"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="actions-box">
+        <div className="actions-box__head">
+          <strong>
+            {loading ? '…' : filtered.length.toLocaleString()} workflow run{filtered.length === 1 ? '' : 's'}
+          </strong>
+          <div className="actions-box__filters">
+            <FilterDropdown label={eventFilter ? `Event: ${eventFilter}` : 'Event'} active={eventFilter !== ''} ariaLabel="Filter by event" align="right">
+              {dropdownItem('All events', eventFilter === '', () => setEventFilter(''))}
+              {events.map((event) => dropdownItem(event, eventFilter === event, () => setEventFilter(event)))}
+            </FilterDropdown>
+            <FilterDropdown label={statusFilter ? `Status: ${TONE_LABEL[statusFilter]}` : 'Status'} active={statusFilter !== ''} ariaLabel="Filter by status" align="right">
+              {dropdownItem('All statuses', statusFilter === '', () => setStatusFilter(''))}
+              {(Object.keys(TONE_LABEL) as RunTone[]).map((key) => dropdownItem(TONE_LABEL[key], statusFilter === key, () => setStatusFilter(key)))}
+            </FilterDropdown>
+            <FilterDropdown label={branchFilter ? `Branch: ${branchFilter}` : 'Branch'} active={branchFilter !== ''} ariaLabel="Filter by branch" align="right">
+              {dropdownItem('All branches', branchFilter === '', () => setBranchFilter(''))}
+              {branches.map((branch) => dropdownItem(branch, branchFilter === branch, () => setBranchFilter(branch)))}
+            </FilterDropdown>
+          </div>
+        </div>
+        {loading ? (
+          <SkeletonRuns />
+        ) : error ? (
+          renderEmpty('Could not load workflow runs', error, (
+            <button type="button" className="outline-button" onClick={() => void loadAll(false, true)}>
+              <RefreshCw size={12} strokeWidth={1.25} />
+              Retry
+            </button>
+          ), 'Make sure the GitHub CLI (gh) is installed, signed in, and the repository has a GitHub remote.')
+        ) : runs.length === 0 ? (
+          renderEmpty(
+            workflows.length === 0 ? 'Get started with GitHub Actions' : 'No workflow runs',
+            workflows.length === 0
+              ? 'This repository has no GitHub Actions workflows yet — add a workflow file under .github/workflows and push it.'
+              : 'Workflows exist, but nothing has run yet. Push a commit or use "Run workflow".',
+            <button type="button" className="outline-button" onClick={() => void ghOpenUrl('https://docs.github.com/actions')}>
+              <ExternalLink size={12} strokeWidth={1.25} />
+              Learn about GitHub Actions
+            </button>,
+          )
+        ) : filtered.length === 0 ? (
+          renderEmpty('No runs match the current filters', 'Adjust the search or dropdown filters above.', (
+            <button type="button" className="outline-button" onClick={clearFilters}>
+              <X size={12} strokeWidth={1.25} />
+              Clear filters
+            </button>
+          ))
+        ) : (
+          <ul className="actions-rows">{filtered.map(renderRunRow)}</ul>
+        )}
+      </div>
+      <p className="actions-listfoot">
+        {loading ? 'Loading runs…' : `Showing ${filtered.length} of ${total.toLocaleString()} runs`}
+      </p>
+    </>
+  );
 
   return (
     <div className="screen actions-screen">
@@ -631,12 +1078,12 @@ export function ActionsScreen() {
         </span>
         <button
           type="button"
-          className="outline-button"
-          disabled={!detailWorkflowPath}
-          onClick={() => void viewWorkflowDefinition()}
+          className="actions-screen__refresh"
+          aria-label="Refresh runs"
+          title="Refresh runs"
+          onClick={() => void loadAll(true, true)}
         >
-          <FileCode2 size={12} strokeWidth={1.25} />
-          View workflow definition
+          <RefreshCw size={13} strokeWidth={1.25} className={refreshing ? 'actions-spin' : ''} />
         </button>
         <div className="actions-runwf" ref={runMenuRef}>
           <button
@@ -674,500 +1121,35 @@ export function ActionsScreen() {
         </div>
       </header>
 
-      <div className="screen-toolbar">
-        <FilterDropdown
-          label={workflowFilter || 'All workflows'}
-          active={workflowFilter !== ''}
-          ariaLabel="Filter by workflow"
-        >
-          {dropdownItem('All workflows', workflowFilter === '', () => setWorkflowFilter(''))}
-          {workflows.map((wf) =>
-            dropdownItem(wf.name, workflowFilter === wf.name, () => setWorkflowFilter(wf.name)),
-          )}
-        </FilterDropdown>
-        <div className="screen-search actions-screen__search">
-          <Search size={14} strokeWidth={1.25} />
-          <input
-            placeholder="Search runs, commits or actors…"
-            aria-label="Search runs"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <kbd>/</kbd>
-        </div>
-        <FilterDropdown label={branchFilter || 'Branch: All'} active={branchFilter !== ''} ariaLabel="Filter by branch">
-          {dropdownItem('Branch: All', branchFilter === '', () => setBranchFilter(''))}
-          {branches.map((branch) =>
-            dropdownItem(branch, branchFilter === branch, () => setBranchFilter(branch)),
-          )}
-        </FilterDropdown>
-        <FilterDropdown
-          label={statusFilter ? `Status: ${TONE_LABEL[statusFilter]}` : 'Status: All'}
-          active={statusFilter !== ''}
-          ariaLabel="Filter by status"
-        >
-          {dropdownItem('Status: All', statusFilter === '', () => setStatusFilter(''))}
-          {(Object.keys(TONE_LABEL) as RunTone[]).map((key) =>
-            dropdownItem(TONE_LABEL[key], statusFilter === key, () => setStatusFilter(key)),
-          )}
-        </FilterDropdown>
-        <FilterDropdown label={eventFilter ? `Event: ${eventFilter}` : 'Event: All'} active={eventFilter !== ''} ariaLabel="Filter by event">
-          {dropdownItem('Event: All', eventFilter === '', () => setEventFilter(''))}
-          {events.map((event) =>
-            dropdownItem(event, eventFilter === event, () => setEventFilter(event)),
-          )}
-        </FilterDropdown>
-        <button
-          type="button"
-          className="actions-screen__refresh"
-          aria-label="Refresh runs"
-          onClick={() => void loadAll(true, true)}
-        >
-          <RefreshCw size={13} strokeWidth={1.25} className={refreshing ? 'actions-spin' : ''} />
-        </button>
-      </div>
-
-      <div className="screen-body actions-screen__body">
-        <aside className="actions-runs" style={{ width: runsWidth }}>
-          <div className="actions-runs__head">
-            <span>Workflow runs</span>
-            <span className="actions-runs__total">
-              {loading ? '…' : `${total.toLocaleString()} runs`}
-            </span>
-          </div>
-          {loading ? (
-            <SkeletonRuns />
-          ) : error ? (
-            <div className="pr-empty">
-              <Zap size={22} strokeWidth={1.25} />
-              <p>Could not load workflow runs</p>
-              <span>{error}</span>
-              <span className="pr-empty__hint">
-                Make sure the GitHub CLI (gh) is installed, signed in, and the
-                repository has a GitHub remote.
-              </span>
-              <button type="button" className="outline-button" onClick={() => void loadAll(false, true)}>
-                <RefreshCw size={12} strokeWidth={1.25} />
-                Retry
-              </button>
-            </div>
-          ) : runs.length === 0 ? (
-            <div className="pr-empty">
-              <Zap size={22} strokeWidth={1.25} />
-              <p>No workflow runs</p>
-              <span>
-                {workflows.length === 0
-                  ? 'This repository has no GitHub Actions workflows yet — add a workflow file under .github/workflows and push it.'
-                  : 'Workflows exist, but nothing has run yet. Push a commit or use "Run workflow".'}
-              </span>
-              {workflows.length > 0 && activeWorkflows.length > 0 && (
-                <button
-                  type="button"
-                  className="outline-button"
-                  onClick={() => setRunMenuOpen(true)}
-                >
-                  <Play size={12} strokeWidth={1.25} />
-                  Run workflow
-                </button>
-              )}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="pr-empty">
-              <Zap size={22} strokeWidth={1.25} />
-              <p>No runs match the current filters</p>
-              <span>Adjust the search or dropdown filters above.</span>
-              <button type="button" className="outline-button" onClick={clearFilters}>
-                <X size={12} strokeWidth={1.25} />
-                Clear filters
-              </button>
-            </div>
-          ) : (
-            filtered.map(renderRunRow)
-          )}
-          <div className="actions-runs__foot">
-            <span>
-              {loading
-                ? 'Loading runs…'
-                : `Showing ${filtered.length} of ${total.toLocaleString()}`}
-            </span>
-            {selectedRun && (
-              <span className="actions-runs__foot-hint">
-                {selectedRun.workflowName} #{selectedRun.number}
-              </span>
-            )}
-          </div>
+      <div className="screen-body actions-gh">
+        <aside className="actions-rail" aria-label="Workflows">
+          <button
+            type="button"
+            className={`actions-rail__item${workflowFilter === '' ? ' actions-rail__item--active' : ''}`}
+            aria-pressed={workflowFilter === ''}
+            onClick={() => chooseWorkflow('')}
+          >
+            <Workflow size={14} strokeWidth={1.5} />
+            All workflows
+          </button>
+          {workflows.length > 0 && <p className="actions-rail__label">Workflows</p>}
+          {workflows.map((wf) => (
+            <button
+              key={wf.path}
+              type="button"
+              className={`actions-rail__item actions-rail__item--workflow${workflowFilter === wf.name ? ' actions-rail__item--active' : ''}${wf.state === 'active' ? '' : ' actions-rail__item--off'}`}
+              aria-pressed={workflowFilter === wf.name}
+              title={wf.state === 'active' ? wf.path : `${wf.path} (${wf.state})`}
+              onClick={() => chooseWorkflow(wf.name)}
+            >
+              {wf.name}
+            </button>
+          ))}
         </aside>
-        <ResizeHandle
-          orientation="v"
-          label="Resize workflow runs list"
-          onDelta={(dx) => setRunsWidth((w) => Math.min(460, Math.max(240, w + dx)))}
-        />
 
-        <section className="actions-detail">
-          {loading ? (
-            <SkeletonDetail />
-          ) : runs.length === 0 && !error ? (
-            <div className="actions-detail__empty">
-              <Zap size={26} strokeWidth={1.25} />
-              <p>
-                {workflows.length === 0
-                  ? 'GitHub Actions is not set up on this repository'
-                  : 'No runs yet'}
-              </p>
-              <span>
-                {workflows.length === 0
-                  ? 'There are no workflow files under .github/workflows on GitHub, so there is nothing to display. Add a workflow YAML, push it, and runs will show up here.'
-                  : 'Your workflows are set up but have not run yet — push a commit that triggers one, or use "Run workflow".'}
-              </span>
-              <button
-                type="button"
-                className="outline-button"
-                onClick={() => void ghOpenUrl('https://docs.github.com/actions')}
-              >
-                <ExternalLink size={12} strokeWidth={1.25} />
-                Learn about GitHub Actions
-              </button>
-            </div>
-          ) : error ? (
-            <div className="actions-detail__empty">
-              <Zap size={22} strokeWidth={1.25} />
-              <p>Workflow runs unavailable</p>
-              <span>{error}</span>
-              <span>Fix the issue above and press Retry on the left.</span>
-            </div>
-          ) : detailError ? (
-            <div className="actions-detail__empty">
-              <Zap size={22} strokeWidth={1.25} />
-              <p>Could not load this run</p>
-              <span>{detailError}</span>
-              <button
-                type="button"
-                className="outline-button"
-                onClick={() => setDetailNonce((n) => n + 1)}
-              >
-                <RefreshCw size={12} strokeWidth={1.25} />
-                Retry
-              </button>
-            </div>
-          ) : !detail ? (
-            <SkeletonDetail />
-          ) : (
-            <>
-              <div className="actions-detail__head">
-                <span className={`actions-detail__state actions-detail__state--${tone}`}>
-                  <ToneIcon tone={tone} size={13} />
-                  {TONE_LABEL[tone]}
-                </span>
-                <span className="actions-detail__id">
-                  {detail.workflowName} #{detail.number}
-                </span>
-                <span className="actions-detail__attempt">Attempt {detail.attempt}</span>
-                <div className="actions-detail__actions">
-                  {!detailDone ? (
-                    <button type="button" className="outline-button" onClick={() => void cancelRun()}>
-                      <Ban size={11} strokeWidth={1.5} />
-                      Cancel run
-                    </button>
-                  ) : (
-                    <>
-                      {jobsFailed > 0 && (
-                        <button
-                          type="button"
-                          className="outline-button"
-                          onClick={() => void rerun(true)}
-                        >
-                          <RefreshCw size={11} strokeWidth={1.5} />
-                          Re-run failed jobs
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="outline-button"
-                        onClick={() => void rerun(false)}
-                      >
-                        <RefreshCw size={11} strokeWidth={1.5} />
-                        Re-run all jobs
-                      </button>
-                    </>
-                  )}
-                  {detail.url && (
-                    <button
-                      type="button"
-                      className="outline-button"
-                      onClick={() => void ghOpenUrl(detail.url)}
-                    >
-                      <ExternalLink size={11} strokeWidth={1.25} />
-                      GitHub
-                    </button>
-                  )}
-                </div>
-              </div>
-              <h2 className="actions-detail__title">{detail.title}</h2>
-
-              <div className="actions-detail__meta">
-                <div>
-                  <span>Workflow / event</span>
-                  <strong>
-                    {detail.workflowName} · {detail.event}
-                  </strong>
-                </div>
-                <div>
-                  <span>Branch / commit</span>
-                  <strong>
-                    {detail.branch} · {detail.sha.slice(0, 7)}
-                  </strong>
-                </div>
-                <div>
-                  <span>Started</span>
-                  <strong>{formatStamp(detail.startedAt || detail.createdAt)}</strong>
-                </div>
-                <div>
-                  <span>Finished</span>
-                  <strong>{detailDone ? formatStamp(detail.updatedAt) : '—'}</strong>
-                </div>
-                <div>
-                  <span>Duration</span>
-                  <strong>
-                    {durationOf(detail.startedAt, detail.updatedAt) ||
-                      (detailDone ? '—' : 'running…')}
-                  </strong>
-                </div>
-              </div>
-
-              {tone !== 'success' && (
-                <p className={`actions-detail__banner actions-detail__banner--${tone}`}>
-                  <ToneIcon tone={tone} size={12} />
-                  {tone === 'failed' ? (
-                    <>
-                      <strong>
-                        {jobsFailed} job{jobsFailed === 1 ? '' : 's'} failed
-                      </strong>{' '}
-                      · {jobsSkipped} skipped. Logs are below.
-                    </>
-                  ) : tone === 'running' || tone === 'queued' ? (
-                    <>
-                      <strong>Run in progress</strong> · this view refreshes automatically.
-                    </>
-                  ) : tone === 'cancelled' ? (
-                    <>
-                      <strong>Run cancelled</strong> · re-run to retry it.
-                    </>
-                  ) : (
-                    <>
-                      <strong>Jobs were skipped</strong> · nothing ran for this run.
-                    </>
-                  )}
-                </p>
-              )}
-              {tone === 'success' && jobsSkipped > 0 && (
-                <p className="actions-detail__banner actions-detail__banner--ok">
-                  <Check size={12} strokeWidth={2} />
-                  <strong>All {jobsOk} jobs succeeded</strong> · {jobsSkipped} skipped.
-                </p>
-              )}
-
-              <div className="actions-detail__tabs">
-                <button
-                  type="button"
-                  className={`actions-tab${tab === 'logs' ? ' actions-tab--active' : ''}`}
-                  onClick={() => setTab('logs')}
-                >
-                  Jobs &amp; logs
-                </button>
-                <button
-                  type="button"
-                  className={`actions-tab${tab === 'artifacts' ? ' actions-tab--active' : ''}`}
-                  onClick={() => setTab('artifacts')}
-                >
-                  Artifacts{' '}
-                  {!artifactsLoading && artifacts.length > 0 && (
-                    <span className="actions-tab__count">{artifacts.length}</span>
-                  )}
-                </button>
-                {detailWorkflowPath && (
-                  <button
-                    type="button"
-                    className="actions-detail__workflow-link"
-                    onClick={() => void viewWorkflowDefinition(detailWorkflowPath)}
-                  >
-                    {detailWorkflowPath} ↗
-                  </button>
-                )}
-              </div>
-
-              {tab === 'logs' ? (
-                <div className="actions-detail__split">
-                  <div className="actions-jobs">
-                    <p className="actions-jobs__head">
-                      Jobs <span>{detail.jobs.length} jobs</span>
-                    </p>
-                    <button
-                      type="button"
-                      className={`actions-job${logJob === null ? ' actions-job--open' : ''}`}
-                      onClick={() => setLogJob(null)}
-                    >
-                      <span className="actions-job__icon actions-job__icon--all">
-                        <FileCode2 size={11} strokeWidth={1.5} />
-                      </span>
-                      <span className="actions-job__name">All jobs</span>
-                      <span className="actions-job__meta">Combined log</span>
-                      <span className="actions-job__time">
-                        {durationOf(detail.startedAt, detail.updatedAt) || '—'}
-                      </span>
-                    </button>
-                    {detail.jobs.map((job) => {
-                      const jt = jobTone(job);
-                      return (
-                        <div key={job.id}>
-                          <button
-                            type="button"
-                            className={`actions-job${logJob === job.id ? ' actions-job--open' : ''}`}
-                            onClick={() => setLogJob(job.id)}
-                          >
-                            <span className={`actions-job__icon actions-job__icon--${jt}`}>
-                              <ToneIcon tone={jt} />
-                            </span>
-                            <span className="actions-job__name">{job.name}</span>
-                            <span
-                              className={`actions-job__meta${jt === 'failed' ? ' actions-job__meta--fail' : ''}`}
-                            >
-                              {TONE_LABEL[jt]}
-                            </span>
-                            <span className="actions-job__time">{job.duration || '—'}</span>
-                          </button>
-                          {logJob === job.id &&
-                            job.steps.map((step) => {
-                              const st = toneOf(step.status, step.conclusion);
-                              return (
-                                <div
-                                  key={step.number}
-                                  className={`actions-step actions-step--${st}`}
-                                >
-                                  <span className={`actions-step__icon actions-step__icon--${st}`}>
-                                    <ToneIcon tone={st} size={9} />
-                                  </span>
-                                  <span className="actions-step__name">{step.name}</span>
-                                  <span className="actions-step__time">
-                                    {step.duration || (st === 'running' ? '…' : '—')}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="actions-console">
-                    <div className="actions-console__head">
-                      <span className={`actions-console__title actions-console__title--${tone}`}>
-                        <ToneIcon tone={tone} size={11} />
-                        {selectedJob ? selectedJob.name : 'All jobs'}
-                        <span>{selectedJob?.duration || durationOf(detail.startedAt, detail.updatedAt) || ''}</span>
-                      </span>
-                      <span className="actions-console__links">
-                        {logText ? `${logText.split('\n').length} lines` : ''}
-                      </span>
-                    </div>
-                    <div className="actions-console__sub">
-                      <span>
-                        {selectedJob
-                          ? `gh run view ${detail.id} --job ${selectedJob.id} --log`
-                        : `gh run view ${detail.id} --log`}
-                      </span>
-                      <span>
-                        {logLoading ? 'Loading…' : logError ? 'Log unavailable' : 'From GitHub'}
-                      </span>
-                    </div>
-                    <pre className="actions-console__log">
-                      {logLoading && !logText ? (
-                        <span className="actions-log-line">Loading log…</span>
-                      ) : logError ? (
-                        <span className="actions-log-line actions-log-line--fail">
-                          {logError}
-                        </span>
-                      ) : logText ? (
-                        parseLog(logText).map((line, index) => (
-                          <span
-                            key={index}
-                            className={`actions-log-line actions-log-line--${lineTone(line.text)}`}
-                          >
-                            {line.time && (
-                              <span className="actions-log-line__time">{line.time}</span>
-                            )}
-                            {line.text}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="actions-log-line">
-                          No logs available for this run yet.
-                        </span>
-                      )}
-                    </pre>
-                    <div className="actions-console__foot">
-                      <span>
-                        {jobsOk} succeeded · {jobsFailed} failed · {jobsSkipped} skipped
-                      </span>
-                      <span>
-                        {detail.event} · attempt {detail.attempt}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="actions-artifacts">
-                  <div className="actions-artifacts__head">
-                    <strong>Artifacts</strong>
-                    {!artifactsLoading && (
-                      <span className="actions-artifacts__count">{artifacts.length}</span>
-                    )}
-                    <span className="actions-artifacts__retain">
-                      Uploaded by this run · downloads land in your temp folder
-                    </span>
-                  </div>
-                  {artifactsError ? (<div role="alert">{artifactsError}<button className="outline-button" onClick={() => setArtifactsRetry((n) => n + 1)}>Try again</button></div>) : artifactsLoading ? (
-                    <div className="pr-skeleton-list" aria-label="Loading artifacts">
-                      <div className="pr-skeleton-row">
-                        <div className="pr-skeleton pr-skeleton--title" />
-                        <div className="pr-skeleton pr-skeleton--meta pr-skeleton--short" />
-                      </div>
-                    </div>
-                  ) : artifacts.length === 0 ? (
-                    <p className="actions-artifacts__none">
-                      This run did not upload any artifacts.
-                    </p>
-                  ) : (
-                    artifacts.map((artifact) => (
-                      <div key={artifact.id} className="actions-artifact">
-                        <span className="actions-artifact__name">{artifact.name}</span>
-                        <span className="actions-artifact__meta">
-                          uploaded {formatDate(artifact.createdAt)}
-                          {artifact.expired ? ' · expired' : ''}
-                        </span>
-                        <span className="actions-artifact__size">
-                          {formatBytes(artifact.size)}
-                        </span>
-                        <button
-                          type="button"
-                          className="outline-button"
-                          disabled={artifact.expired || downloading !== null}
-                          onClick={() => void downloadArtifact(artifact)}
-                        >
-                          {downloading === artifact.id ? (
-                            <Loader2 size={11} strokeWidth={1.5} className="actions-spin" />
-                          ) : (
-                            <Download size={11} strokeWidth={1.5} />
-                          )}
-                          Download
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <main className="actions-main">
+          {view === 'run' && selected !== null ? renderRunPage() : renderRunList()}
+        </main>
       </div>
 
       {wfDialog && (

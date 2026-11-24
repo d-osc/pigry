@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterReports, groupReports, reportsFromTree } from '../src/lib/reports.ts';
+import { filterReports, groupReports, reportsFromTree } from '../src/extensions/reports/reports.ts';
 
 const BS = String.fromCharCode(92);
 

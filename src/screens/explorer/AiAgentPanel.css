@@ -1854,3 +1854,7 @@
 /* Design-editor layers attached to a message */
 .ai-composer__sel-chip--layer { border-color: var(--accent-tint-3); }
 .explorer-ai__msg-layers { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+.explorer-ai__msg-images { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.explorer-ai__msg-images a { display: block; line-height: 0; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.explorer-ai__msg-images img { max-width: 100%; max-height: 220px; object-fit: contain; display: block; }

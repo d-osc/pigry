@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyOperations, autoLayout, borderPoint, normalizeDiagram,
   renderDiagramSvg, summarizeDiagram, templateDiagram, toMermaid, validateDiagram,
-} from '../src/lib/diagram.ts';
+} from '../src/extensions/diagram/diagram.ts';
 
 const sample = () => normalizeDiagram({
   title: 'Login flow', type: 'flowchart',

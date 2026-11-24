@@ -59,7 +59,7 @@ pub struct WikiCommit {
 }
 
 fn run_git(dir: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(dir)
         .arg("-c")

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   absolutePosition, applyDesignOps, checkDesign, contrastRatio, findNode, measureText, normalizeDesign,
   parseColor, renderDesignHtml, renderDesignSvg, summarizeDesign, templateDesign,
-} from '../src/lib/design.ts';
+} from '../src/extensions/design/design.ts';
 import { nameSlug, parseRefName, pathOf, refFromPath, resolveRef } from '../src/lib/ownedFiles.ts';
 
 const card = () => normalizeDesign({
@@ -205,7 +205,7 @@ test('owner folders: paths, names and resolution', () => {
   assert.deepEqual(resolveRef(refs, 'user/home'), { ref: { owner: 'user', slug: 'home' } });
 });
 
-import { computeResize, deepestFrameAt, nodesInRect, reorderIndex, snapMove, stepZOrder, topLevelSelection } from '../src/lib/designEdit.ts';
+import { computeResize, deepestFrameAt, nodesInRect, reorderIndex, snapMove, stepZOrder, topLevelSelection } from '../src/extensions/design/designEdit.ts';
 
 const canvas = () => normalizeDesign({ nodes: [
   { type: 'frame', id: 'f1', x: 0, y: 0, w: 400, h: 400, children: [

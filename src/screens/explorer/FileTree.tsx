@@ -114,6 +114,7 @@ function TreeRow({
   onSelect,
   onContextMenu,
   renaming,
+  renamingPath,
   onRenameSubmit,
   onRenameCancel,
   onMove,
@@ -133,6 +134,8 @@ function TreeRow({
     event: React.MouseEvent,
   ) => void;
   renaming?: boolean;
+  /** The path being renamed anywhere in the tree: each nested row compares itself to it. */
+  renamingPath?: string | null;
   onRenameSubmit?: (path: string, newName: string) => void;
   onRenameCancel?: () => void;
   onMove?: (sourcePath: string, targetFolder: string) => void;
@@ -221,7 +224,8 @@ function TreeRow({
                 onToggle={onToggle}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
-                renaming={false}
+                renaming={child.path === renamingPath}
+                renamingPath={renamingPath}
                 onRenameSubmit={onRenameSubmit}
                 onRenameCancel={onRenameCancel}
               />
@@ -295,7 +299,8 @@ function TreeRow({
               onToggle={onToggle}
               onSelect={onSelect}
               onContextMenu={onContextMenu}
-              renaming={renaming}
+              renaming={child.path === renamingPath}
+              renamingPath={renamingPath}
               onRenameSubmit={onRenameSubmit}
               onMove={onMove}
               revealPath={revealPath}
@@ -383,6 +388,8 @@ export function FileTree({
       className="file-tree"
       ref={treeRef}
       onScroll={event => setScrollTop(event.currentTarget.scrollTop)}
+      // Rows handle their own right-click; what reaches here is the repository row or empty space.
+      onContextMenu={(event) => onItemContextMenu?.({ kind: 'folder', path: '' }, event)}
       onDragOver={(event) => {
         // Root drop target: dropping on empty area moves to the repo root.
         if (!onMove) return;
@@ -442,6 +449,7 @@ export function FileTree({
             onSelect={onSelect}
             onContextMenu={onItemContextMenu}
             renaming={node.path === renamingPath}
+            renamingPath={renamingPath}
             onRenameSubmit={onRenameSubmit}
             onRenameCancel={onRenameCancel}
             onMove={onMove}

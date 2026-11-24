@@ -20,7 +20,8 @@ import {
 import { invoke } from '@tauri-apps/api/core';
 import { isMac } from '../lib/platform';
 import type { NavId } from './navigation';
-import { workspaceNav } from './navigation';
+import { extensionsNav, workspaceNav } from './navigation';
+import { readDisabledMenus } from '../lib/builtinExtensions';
 import type { RepositoryContextValue } from '../hooks/useRepository';
 
 export interface Command {
@@ -50,7 +51,8 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
   const { repository: repo, refresh, stage, unstage, stash, fetchRemote, pullRemote, pushRemote, pickRepository } =
     repository;
 
-  const navigation: Command[] = workspaceNav.map(({ id, label, icon }) => ({
+  const disabledMenus = readDisabledMenus();
+  const navigation: Command[] = workspaceNav.filter(({ id }) => !disabledMenus.has(id)).map(({ id, label, icon }) => ({
     id: `nav:${id}`,
     title: `Go to ${label}`,
     section: 'Navigate',
@@ -59,6 +61,16 @@ export function buildCommands({ navigate, activeScreen, repository, openSettings
     enabled: true,
     run: () => navigate(id),
   }));
+
+  navigation.push({
+    id: `nav:${extensionsNav.id}`,
+    title: `Go to ${extensionsNav.label}`,
+    section: 'Navigate',
+    icon: extensionsNav.icon,
+    nav: extensionsNav.id,
+    enabled: true,
+    run: () => navigate(extensionsNav.id),
+  });
 
   const repoCommands: Command[] = [
     ...(isMac && repository.mode === 'tauri' ? [{

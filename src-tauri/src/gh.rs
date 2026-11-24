@@ -1187,6 +1187,50 @@ pub fn pr_checkout(repo_path: &Path, number: u64) -> Result<String, String> {
     Ok(head.shorthand().unwrap_or("HEAD").to_string())
 }
 
+/// What a new pull request carries besides its title, body and branches.
+#[derive(Default, Clone)]
+pub struct PrCreateOptions {
+    pub draft: bool,
+    pub reviewers: Vec<String>,
+    pub assignees: Vec<String>,
+    pub labels: Vec<String>,
+}
+
+/// Values for --reviewer / --assignee / --label: trimmed, de-duplicated, and never something git/gh could read as a flag.
+fn clean_list(values: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in values {
+        let value = value.trim();
+        if value.is_empty() || value.starts_with('-') || out.iter().any(|seen| seen == value) {
+            continue;
+        }
+        out.push(value.to_string());
+    }
+    out
+}
+
+/// The `gh pr create` argument list (the body is sent on stdin).
+fn pr_create_args(title: &str, head: &str, base: &str, options: &PrCreateOptions) -> Vec<String> {
+    let mut args: Vec<String> = ["pr", "create", "--title", title, "--body-file", "-", "--head", head, "--base", base]
+        .iter()
+        .map(|arg| arg.to_string())
+        .collect();
+    if options.draft {
+        args.push("--draft".to_string());
+    }
+    for (flag, values) in [
+        ("--reviewer", &options.reviewers),
+        ("--assignee", &options.assignees),
+        ("--label", &options.labels),
+    ] {
+        for value in clean_list(values) {
+            args.push(flag.to_string());
+            args.push(value);
+        }
+    }
+    args
+}
+
 /// Creates a pull request; returns the new PR URL.
 pub fn pr_create(
     repo_path: &Path,
@@ -1194,23 +1238,13 @@ pub fn pr_create(
     body: &str,
     head: &str,
     base: &str,
+    options: &PrCreateOptions,
 ) -> Result<String, String> {
     use std::io::Write;
     use std::process::Stdio;
 
     let mut child = gh_command()
-        .args([
-            "pr",
-            "create",
-            "--title",
-            title,
-            "--body-file",
-            "-",
-            "--head",
-            head,
-            "--base",
-            base,
-        ])
+        .args(pr_create_args(title, head, base, options))
         .current_dir(repo_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -2507,3 +2541,45 @@ pub fn branch_check_runs(repo_path: &Path, branch: &str) -> Result<Vec<GhCheckRu
         })
         .collect())
 }
+
+#[cfg(test)]
+mod pr_create_tests {
+    use super::*;
+
+    fn strings(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| value.to_string()).collect()
+    }
+
+    #[test]
+    fn a_plain_pull_request_has_only_the_required_arguments() {
+        let args = pr_create_args("Fix it", "feat/x", "main", &PrCreateOptions::default());
+        assert_eq!(args, strings(&["pr", "create", "--title", "Fix it", "--body-file", "-", "--head", "feat/x", "--base", "main"]));
+    }
+
+    #[test]
+    fn draft_reviewers_assignees_and_labels_become_flags() {
+        let options = PrCreateOptions {
+            draft: true,
+            reviewers: strings(&["alex", "acme/core"]),
+            assignees: strings(&["@me"]),
+            labels: strings(&["bug", "ui"]),
+        };
+        let args = pr_create_args("T", "h", "b", &options);
+        let tail = &args[10..];
+        assert_eq!(
+            tail,
+            strings(&["--draft", "--reviewer", "alex", "--reviewer", "acme/core", "--assignee", "@me", "--label", "bug", "--label", "ui"]).as_slice()
+        );
+    }
+
+    #[test]
+    fn empty_duplicate_and_flag_like_values_are_dropped() {
+        let options = PrCreateOptions {
+            reviewers: strings(&["  alex ", "", "alex", "--web", "-x", "maya"]),
+            ..PrCreateOptions::default()
+        };
+        let args = pr_create_args("T", "h", "b", &options);
+        assert_eq!(&args[10..], strings(&["--reviewer", "alex", "--reviewer", "maya"]).as_slice());
+    }
+}
+

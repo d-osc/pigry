@@ -24,7 +24,7 @@ export interface MenuGuide {
   tips: string[];
   /** Things that can go wrong or lose work. */
   cautions: string[];
-  /** The agents that answer in this menu: the default one and the specialist to @mention. */
-  agents: { default: string; base: string };
+  /** The agents that answer in this menu: the default one and the specialist to @mention (none where the menu has no agent panel). */
+  agents?: { default: string; base: string };
   shots: GuideShot[];
 }

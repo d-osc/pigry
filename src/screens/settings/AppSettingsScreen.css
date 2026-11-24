@@ -178,6 +178,13 @@
 }
 
 /* Setting rows — stacked title / description / control like VS Code */
+.app-settings__lead {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
 .app-settings__row {
   display: flex;
   flex-direction: column;

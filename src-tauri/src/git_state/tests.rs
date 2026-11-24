@@ -1472,3 +1472,27 @@ fn rejected_commit_hook_preserves_head_and_staging() {
     fs::remove_file(hook).unwrap(); commit(&dir, "retry succeeds", "keep draft", false).unwrap();
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn copy_worktree_path_copies_files_and_folders_without_overwriting() {
+    let dir = scratch_repo("copy-path");
+    write(&dir, "src/a.txt", "alpha");
+    write(&dir, "src/inner/b.txt", "beta");
+
+    // a file, into a folder that does not exist yet
+    copy_worktree_path(&dir, "src/a.txt", "backup/a copy.txt").unwrap();
+    assert_eq!(fs::read_to_string(dir.join("backup/a copy.txt")).unwrap(), "alpha");
+
+    // a folder, recursively
+    copy_worktree_path(&dir, "src", "src-copy").unwrap();
+    assert_eq!(fs::read_to_string(dir.join("src-copy/inner/b.txt")).unwrap(), "beta");
+    assert!(dir.join("src/a.txt").exists(), "the original stays");
+
+    // nothing is overwritten, and a folder cannot go into itself
+    assert!(copy_worktree_path(&dir, "src/a.txt", "backup/a copy.txt").unwrap_err().contains("already exists"));
+    assert!(copy_worktree_path(&dir, "src", "src/inner/src").unwrap_err().contains("into itself"));
+    assert!(copy_worktree_path(&dir, "missing.txt", "x.txt").is_err());
+    assert!(copy_worktree_path(&dir, "src/a.txt", "../escape.txt").is_err());
+    fs::remove_dir_all(&dir).unwrap();
+}
+

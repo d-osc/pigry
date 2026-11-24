@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { changesSnapshot, codeKey, describeCode, diffSnapshot, fileSnapshot, fitCodeSize, normalizeCodeRef } from '../src/lib/codeSnap.ts';
-import { normalizeBoard, renderBoardSvg, summarizeBoard, boardToMarkdown, applyBoardOps } from '../src/lib/board.ts';
+import { normalizeBoard, renderBoardSvg, summarizeBoard, boardToMarkdown, applyBoardOps } from '../src/extensions/board/board.ts';
 
 test('code references are read from loose input', () => {
   assert.deepEqual(normalizeCodeRef({ path: 'src' + String.fromCharCode(92) + 'App.tsx', start: 1, end: 10 }), { kind: 'file', path: 'src/App.tsx', start: 1, end: 10 });

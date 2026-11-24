@@ -11,13 +11,17 @@ import {
   Tag as TagIcon,
   Archive,
   Plus,
+  Puzzle,
   CircleCheck,
   ChevronsLeft,
   Search,
   X,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
-import { workspaceNav, type NavId } from './navigation';
+import { EXTENSIONS_GROUP_LABEL, extensionsNav, workspaceNav, type NavId, type NavItem } from './navigation';
+import { useDisabledMenus, useExtensions } from '../hooks/useExtensions';
+import { requestOpenExtension, setExtensionEnabled } from '../lib/extensions';
+import { CanvasContextMenu, type CanvasMenuEntry } from './CanvasContextMenu';
 import './NavSidebar.css';
 
 /** Branch lane colors, cycled in list order (matches the commit graph lanes). */
@@ -32,6 +36,10 @@ interface NavSidebarProps {
   onOpenSettings: () => void;
   /** Folds the whole side bar away (AppShell keeps the state). */
   onCollapse?: () => void;
+  /** Opens the guide of a menu (right-click › Open guide). */
+  onOpenGuide?: (screen: NavId) => void;
+  /** Opens Settings › Extensions on an installed extension (clicking it in the Extensions group). */
+  onOpenExtension?: (id: string) => void;
 }
 
 function Section({
@@ -67,7 +75,7 @@ function Section({
   );
 }
 
-export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSettings, onCollapse }: NavSidebarProps) {
+export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSettings, onCollapse, onOpenGuide, onOpenExtension }: NavSidebarProps) {
   const {
     repository,
     checkoutBranch,
@@ -80,13 +88,18 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
     stashDrop,
     stash,
     openRepository,
+    notify,
     busy,
   } = useRepository();
+  const [menu, setMenu] = useState<{ x: number; y: number; label: string; entries: CanvasMenuEntry[] } | null>(null);
   const [creating, setCreating] = useState(false);
   const [tagCreating, setTagCreating] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newName, setNewName] = useState('');
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
+  const [extensionsOpen, setExtensionsOpen] = useState(true);
+  const extensions = useExtensions();
+  const disabledMenus = useDisabledMenus();
   const [query, setQuery] = useState('');
   if (!repository) return null;
 
@@ -95,7 +108,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
   const searching = q.length > 0;
   const matches = (...texts: Array<string | undefined>) =>
     !searching || texts.some((text) => text?.toLowerCase().includes(q));
-  const navItems = workspaceNav.filter(({ label }) => matches(label));
+  // Diagram, Design, Board, E2E Testing and Reports are built-in extensions: they sit in the Extensions group
+  // (unless switched off) instead of the Workspace group.
+  const workspaceItems = workspaceNav.filter(({ label, group }) => group !== 'extension' && matches(label));
+  const menuExtensions = workspaceNav.filter(({ id, label, group }) => group === 'extension' && !disabledMenus.has(id) && matches(label));
+  const navItems = [...workspaceItems, ...menuExtensions];
   const branchRows = repository.branches
     .map((branch, index) => ({ branch, index }))
     .filter(({ branch }) => matches(branch.name));
@@ -105,11 +122,13 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
       branches: matches(remote) ? branches : branches.filter((branch) => matches(`${remote}/${branch}`)),
     }))
     .filter(({ branches }) => branches.length > 0 || !searching);
+  const extensionRows = extensions.filter((extension) => matches(extension.name, extension.id));
+  const showExtensionsGroup = !searching || extensionRows.length > 0 || menuExtensions.length > 0 || matches(extensionsNav.label) || matches(EXTENSIONS_GROUP_LABEL);
   const tagRows = repository.tags.filter((tag) => matches(tag.name));
   const stashRows = repository.stashes.filter((entry) => matches(entry.message));
   const worktreeRows = repository.worktrees.filter((tree) => matches(tree.name, tree.branch, tree.path));
   const submoduleRows = repository.submodules.filter((sub) => matches(sub.name, sub.path));
-  const nothingFound = searching && navItems.length + branchRows.length + remoteRows.length
+  const nothingFound = searching && navItems.length + extensionRows.length + (showExtensionsGroup ? 1 : 0) + branchRows.length + remoteRows.length
     + tagRows.length + stashRows.length + worktreeRows.length + submoduleRows.length === 0;
 
   const submitNewBranch = () => {
@@ -126,6 +145,23 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
     if (name) void createTag(name);
   };
 
+  /** Right-click menu for whatever was clicked; the browser's own menu never shows inside the side bar. */
+  const openMenu = (event: React.MouseEvent, label: string, entries: CanvasMenuEntry[]) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenu({ x: event.clientX, y: event.clientY, label, entries });
+  };
+  const copy = (text: string, what: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => notify(`Copied ${what}`, 'success'),
+      () => notify(`Could not copy ${what}`, 'error'),
+    );
+  };
+  const sidebarEntries = (): CanvasMenuEntry[] => [
+    ...(onCollapse ? [{ label: 'Collapse side bar', shortcut: 'Ctrl+B', onSelect: onCollapse }] : []),
+    { label: 'Preferences', shortcut: '⌘,', onSelect: onOpenSettings },
+  ];
+
   const handleBranchClick = (event: React.MouseEvent, branch: string) => {
     if (branch === repository.currentBranch || busy) return;
     if (event.shiftKey) {
@@ -136,12 +172,44 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
     }
   };
 
+  const renderNavItem = ({ id, label, icon: Icon, badge }: NavItem) => (
+    <button
+      key={id}
+      type="button"
+      className={`nav-item${activeScreen === id ? ' nav-item--active' : ''}`}
+      onClick={() => onNavigate(id)}
+      onContextMenu={(event) => openMenu(event, `${label} menu`, [
+        { label: 'Open', onSelect: () => onNavigate(id), disabled: activeScreen === id },
+        ...(onOpenGuide ? [{ label: 'Open guide', onSelect: () => onOpenGuide(id) }] : []),
+        { separator: true as const },
+        ...sidebarEntries(),
+      ])}
+    >
+      <Icon size={13} className="nav-item__icon" strokeWidth={1.25} />
+      <span className="nav-item__label">{label}</span>
+      {id === 'working-changes' && !clean && (
+        <span className="nav-item__badge">{repository.files.length}</span>
+      )}
+      {id === 'pull-commits' && repository.upstream && repository.upstream.behind > 0 && (
+        <span className="nav-item__badge">{repository.upstream.behind}</span>
+      )}
+      {id !== 'working-changes' && badge !== undefined && (
+        <span className="nav-item__badge">{badge}</span>
+      )}
+    </button>
+  );
+
   const staged = repository.files.filter((f) => f.staged).length;
   const unstaged = repository.files.length - staged;
   const clean = repository.files.length === 0;
 
   return (
-    <aside ref={ref} className="nav-sidebar" style={{ width }}>
+    <aside ref={ref} className="nav-sidebar" style={{ width }}
+      onContextMenu={(event) => {
+        // Keep the native cut/copy/paste menu in the search box.
+        if ((event.target as HTMLElement).closest('input, textarea')) return;
+        openMenu(event, 'Side bar menu', sidebarEntries());
+      }}>
       <div className="nav-sidebar__topbar">
         {onCollapse && (
           <button
@@ -184,11 +252,12 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
         )}
       </div>
       {nothingFound && <p className="nav-search__empty">No match for “{query.trim()}”</p>}
-      {(!searching || navItems.length > 0) && (
+      {(!searching || workspaceItems.length > 0) && (
       <div className="nav-sidebar__workspace">
         <button
           className="nav-sidebar__heading"
           type="button"
+          aria-expanded={workspaceOpen || searching}
           onClick={() => setWorkspaceOpen(!workspaceOpen)}
         >
           <span>Workspace</span>
@@ -196,24 +265,58 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
         </button>
         {(workspaceOpen || searching) && (
           <nav>
-            {navItems.map(({ id, label, icon: Icon, badge }) => (
+            {workspaceItems.map(renderNavItem)}
+          </nav>
+        )}
+      </div>
+      )}
+
+      {showExtensionsGroup && (
+      <div className="nav-sidebar__workspace nav-sidebar__extensions">
+        <button
+          className="nav-sidebar__heading"
+          type="button"
+          aria-expanded={extensionsOpen || searching}
+          onClick={() => setExtensionsOpen(!extensionsOpen)}
+        >
+          <span>{EXTENSIONS_GROUP_LABEL}</span>
+          <ChevronUp size={10} />
+        </button>
+        {(extensionsOpen || searching) && (
+          <nav aria-label="Extensions">
+            <button
+              type="button"
+              className={`nav-item${activeScreen === 'extensions' ? ' nav-item--active' : ''}`}
+              onClick={() => onNavigate('extensions')}
+              onContextMenu={(event) => openMenu(event, 'Extensions menu', [
+                { label: 'Open', onSelect: () => onNavigate('extensions'), disabled: activeScreen === 'extensions' },
+                ...(onOpenGuide ? [{ label: 'Open guide', onSelect: () => onOpenGuide('extensions') }] : []),
+                { separator: true as const },
+                ...sidebarEntries(),
+              ])}
+            >
+              <extensionsNav.icon size={13} className="nav-item__icon" strokeWidth={1.25} />
+              <span className="nav-item__label">{extensionsNav.label}</span>
+            </button>
+            {menuExtensions.map(renderNavItem)}
+            {extensionRows.map((extension) => (
               <button
-                key={id}
+                key={extension.id}
                 type="button"
-                className={`nav-item${activeScreen === id ? ' nav-item--active' : ''}`}
-                onClick={() => onNavigate(id)}
+                className={`nav-item nav-item--extension${extension.enabled ? '' : ' nav-item--off'}`}
+                title={`${extension.name} v${extension.version}${extension.enabled ? '' : ' (off)'}`}
+                onClick={() => {
+                  requestOpenExtension(extension.id);
+                  onOpenExtension?.(extension.id);
+                }}
+                onContextMenu={(event) => openMenu(event, `${extension.name} menu`, [
+                  { label: 'Manage in Settings', onSelect: () => { requestOpenExtension(extension.id); onOpenExtension?.(extension.id); } },
+                  { label: extension.enabled ? 'Turn off' : 'Turn on', onSelect: () => setExtensionEnabled(extension.id, !extension.enabled) },
+                ])}
               >
-                <Icon size={13} className="nav-item__icon" strokeWidth={1.25} />
-                <span className="nav-item__label">{label}</span>
-                {id === 'working-changes' && !clean && (
-                  <span className="nav-item__badge">{repository.files.length}</span>
-                )}
-                {id === 'pull-commits' && repository.upstream && repository.upstream.behind > 0 && (
-                  <span className="nav-item__badge">{repository.upstream.behind}</span>
-                )}
-                {id !== 'working-changes' && badge !== undefined && (
-                  <span className="nav-item__badge">{badge}</span>
-                )}
+                <Puzzle size={13} className="nav-item__icon" strokeWidth={1.25} />
+                <span className="nav-item__label">{extension.name}</span>
+                {!extension.enabled && <span className="nav-item__badge">off</span>}
               </button>
             ))}
           </nav>
@@ -265,6 +368,12 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
               type="button"
               className={`nav-branch${branch.isHead ? ' nav-branch--active' : ''}`}
               onClick={(event) => handleBranchClick(event, branch.name)}
+              onContextMenu={(event) => openMenu(event, `Branch ${branch.name} menu`, [
+                { label: 'Checkout', onSelect: () => void checkoutBranch(branch.name), disabled: branch.isHead || busy },
+                { label: 'Copy branch name', onSelect: () => copy(branch.name, 'the branch name') },
+                { separator: true },
+                { label: 'Delete branch', danger: true, onSelect: () => void deleteBranch(branch.name), disabled: branch.isHead || busy },
+              ])}
               title={
                 branch.isHead
                   ? branch.name
@@ -297,6 +406,9 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
                     key={`${remote}/${branch}`}
                     type="button"
                     className="nav-branch nav-branch--remote"
+                    onContextMenu={(event) => openMenu(event, `Remote branch ${remote}/${branch} menu`, [
+                      { label: 'Copy branch name', onSelect: () => copy(`${remote}/${branch}`, 'the branch name') },
+                    ])}
                   >
                     <GitBranch
                       size={10.5}
@@ -356,6 +468,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
                 key={tag.name}
                 type="button"
                 className="nav-branch nav-branch--tag"
+                onContextMenu={(event) => openMenu(event, `Tag ${tag.name} menu`, [
+                  { label: 'Copy tag name', onSelect: () => copy(tag.name, 'the tag name') },
+                  { separator: true },
+                  { label: 'Delete tag', danger: true, onSelect: () => void deleteTag(tag.name), disabled: busy },
+                ])}
                 onClick={() => {
                   if (!busy) void deleteTag(tag.name);
                 }}
@@ -388,7 +505,18 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           }
         >
             {stashRows.map((stash) => (
-              <div key={stash.index} className="nav-stash">
+              <div
+                key={stash.index}
+                className="nav-stash"
+                onContextMenu={(event) => openMenu(event, `Stash ${stash.index} menu`, [
+                  { label: 'Apply (keep the stash)', onSelect: () => void stashApply(stash.index), disabled: busy },
+                  { label: 'Pop (apply and remove)', onSelect: () => void stashPop(stash.index), disabled: busy },
+                  { label: 'Open in Stashes Code', onSelect: () => onNavigate('stashes') },
+                  { label: 'Copy message', onSelect: () => copy(stash.message, 'the stash message') },
+                  { separator: true },
+                  { label: 'Drop stash', danger: true, onSelect: () => void stashDrop(stash.index), disabled: busy },
+                ])}
+              >
                 <span className="nav-stash__icon">
                   <Archive size={12} strokeWidth={1.25} />
                 </span>
@@ -436,6 +564,10 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
                 key={tree.name}
                 type="button"
                 className={`nav-branch${tree.isCurrent ? ' nav-branch--current' : ''}`}
+                onContextMenu={(event) => openMenu(event, `Worktree ${tree.name} menu`, [
+                  { label: 'Open as workspace', onSelect: () => void openRepository(tree.path), disabled: tree.isCurrent || busy },
+                  { label: 'Copy path', onSelect: () => copy(tree.path, 'the path') },
+                ])}
                 onClick={() => {
                   if (!tree.isCurrent && !busy) void openRepository(tree.path);
                 }}
@@ -456,6 +588,11 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
                 key={sub.name}
                 type="button"
                 className="nav-branch"
+                onContextMenu={(event) => openMenu(event, `Submodule ${sub.name} menu`, [
+                  { label: 'Open as workspace', onSelect: () => void openRepository(sub.absPath), disabled: busy },
+                  { label: 'Copy path', onSelect: () => copy(sub.path, 'the path') },
+                  { label: 'Copy URL', onSelect: () => copy(sub.url, 'the URL') },
+                ])}
                 onClick={() => {
                   if (!busy) void openRepository(sub.absPath);
                 }}
@@ -505,6 +642,7 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
           <kbd>⌘,</kbd>
         </button>
       </div>
+      {menu && <CanvasContextMenu x={menu.x} y={menu.y} entries={menu.entries} label={menu.label} onClose={() => setMenu(null)} />}
     </aside>
   );
 }

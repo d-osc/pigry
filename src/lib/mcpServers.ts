@@ -21,6 +21,8 @@ export interface McpServer {
   /** One VAR=value per line. */
   env: string;
   enabled: boolean;
+  /** Id of the installed extension that added this server. */
+  extensionId?: string;
 }
 
 const LIST_KEY = 'pigry:mcp-servers';
@@ -56,7 +58,8 @@ export async function hydrateMcpServers(): Promise<McpServer[] | null> {
 /** Mirrors the store into the repo so MCP servers are versionable. */
 export async function mirrorMcpServers(list: McpServer[]): Promise<void> {
   try {
-    await writeWorktreeFile(MCP_FILE, JSON.stringify(list, null, 2));
+    // MCP servers start programs: the ones an extension installed stay on this computer, never in the repository.
+    await writeWorktreeFile(MCP_FILE, JSON.stringify(list.filter((server) => !server.extensionId), null, 2));
   } catch {
     // read-only repo — localStorage remains the source of truth
   }
@@ -74,6 +77,7 @@ function migrateServer(raw: Partial<McpServer>): McpServer | null {
     url: String(raw?.url ?? ''),
     env: String(raw?.env ?? ''),
     enabled: raw?.enabled !== false,
+    extensionId: typeof raw?.extensionId === 'string' && raw.extensionId ? raw.extensionId : undefined,
   };
 }
 

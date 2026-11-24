@@ -414,14 +414,31 @@ export async function ghPrCheckout(number: number): Promise<string> {
   return invoke<string>('gh_pr_checkout', { number });
 }
 
+export interface PrCreateOptions {
+  /** Open it as a draft: it cannot be merged until it is marked ready for review. */
+  draft?: boolean;
+  /** GitHub usernames or org/team slugs. */
+  reviewers?: string[];
+  /** GitHub usernames, or @me. */
+  assignees?: string[];
+  labels?: string[];
+}
+
 export async function ghPrCreate(
   title: string,
   body: string,
   head: string,
   base: string,
+  options: PrCreateOptions = {},
 ): Promise<string> {
   if (!isTauri()) throw new Error('Browser preview cannot create PRs — run the desktop app');
-  return invoke<string>('gh_pr_create', { title, body, head, base });
+  return invoke<string>('gh_pr_create', {
+    title, body, head, base,
+    draft: options.draft ?? false,
+    reviewers: options.reviewers ?? [],
+    assignees: options.assignees ?? [],
+    labels: options.labels ?? [],
+  });
 }
 
 export async function ghPrClose(number: number): Promise<void> {
@@ -810,6 +827,46 @@ export async function writeWorktreeBinary(path: string, dataBase64: string): Pro
   return invoke('write_worktree_binary', { path, data: dataBase64 });
 }
 
+/** Largest file the chunked audio reader and writer accept (matches the backend limit). */
+export const MAX_AUDIO_FILE_BYTES = 500_000_000;
+const CHUNK_RAW = 6 * 1024 * 1024;
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(out);
+}
+
+/** Writes a large binary (up to 500 MB for audio under .pigry/audio/) in 6 MB pieces so no single call carries the whole file. */
+export async function writeWorktreeBinaryChunked(path: string, bytes: Uint8Array, onProgress?: (fraction: number) => void): Promise<void> {
+  if (!isTauri()) return;
+  if (bytes.length > MAX_AUDIO_FILE_BYTES) throw new Error(`file too large (over ${MAX_AUDIO_FILE_BYTES / 1_000_000} MB)`);
+  let offset = 0;
+  do {
+    const end = Math.min(bytes.length, offset + CHUNK_RAW);
+    await invoke('write_worktree_binary_chunk', { path, data: bytesToBase64(bytes.subarray(offset, end)), append: offset > 0 });
+    offset = end;
+    onProgress?.(bytes.length ? offset / bytes.length : 1);
+  } while (offset < bytes.length);
+}
+
+/** Reads a large binary file (up to 500 MB) in 6 MB pieces into one Uint8Array. */
+export async function readBinaryChunked(path: string, onProgress?: (fraction: number) => void): Promise<Uint8Array> {
+  const first = await invoke<{ data: string; size: number }>('read_binary_chunk', { path, offset: 0, length: CHUNK_RAW });
+  const out = new Uint8Array(first.size);
+  let offset = 0;
+  let piece = first;
+  for (;;) {
+    const bin = atob(piece.data);
+    for (let i = 0; i < bin.length; i++) out[offset + i] = bin.charCodeAt(i);
+    offset += bin.length;
+    onProgress?.(out.length ? offset / out.length : 1);
+    if (offset >= out.length || bin.length === 0) break;
+    piece = await invoke<{ data: string; size: number }>('read_binary_chunk', { path, offset, length: CHUNK_RAW });
+  }
+  return out;
+}
+
 export async function deleteWorktreeFile(path: string): Promise<void> {  if (!isTauri()) return;
   return invoke('delete_worktree_file', { path });
 }
@@ -822,6 +879,18 @@ export async function renameWorktreeFile(oldPath: string, newPath: string): Prom
 export async function deleteWorktreeFolder(path: string): Promise<void> {
   if (!isTauri()) return;
   return invoke('delete_worktree_folder', { path });
+}
+
+/** Copies a file or folder inside the repository (never overwrites). */
+export async function copyWorktreePath(oldPath: string, newPath: string): Promise<void> {
+  if (!isTauri()) return;
+  return invoke('copy_worktree_path', { oldPath, newPath });
+}
+
+/** Shows a file or folder in the operating system's file manager; '' is the repository folder. */
+export async function revealWorktreePath(path: string): Promise<void> {
+  if (!isTauri()) throw new Error('Showing a file in the file manager needs the desktop app.');
+  return invoke('reveal_worktree_path', { path });
 }
 
 export async function renameWorktreeFolder(oldPath: string, newPath: string): Promise<void> {

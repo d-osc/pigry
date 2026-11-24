@@ -7,18 +7,20 @@ import { check as checkUpdater } from '@tauri-apps/plugin-updater';
 import { relaunch as relaunchApp } from '@tauri-apps/plugin-process';
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../lib/theme';
 import { ProviderManager } from './ProviderManager';
+import { InstalledExtensionsPanel } from '../extensions/InstalledExtensionsPanel';
 import appPackage from '../../../package.json';
 import type { GhAccount } from '../../types/repository';
 import './AppSettingsScreen.css';
 
 type DefaultScreen = 'explorer' | 'commit-graph' | 'working-changes';
-export type SectionId = 'appearance' | 'text-editor' | 'ai-provider' | 'token' | 'accounts' | 'update' | 'about';
+export type SectionId = 'appearance' | 'text-editor' | 'ai-provider' | 'extensions' | 'token' | 'accounts' | 'update' | 'about';
 type GhStatus = 'unknown' | 'checking' | 'in' | 'out' | 'missing';
 
 const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'text-editor', label: 'Text Editor' },
   { id: 'ai-provider', label: 'AI Provider' },
+  { id: 'extensions', label: 'Extensions' },
   { id: 'token', label: 'Personal access token' },
   { id: 'accounts', label: 'Accounts' },
   { id: 'update', label: 'Update' },
@@ -539,6 +541,7 @@ export function AppSettingsScreen({
     rowMatch('minimap', 'overview code map') ||
     rowMatch('line numbers', 'gutter');
   const aiMatch = rowMatch('ai provider', 'model base url api key openai anthropic ollama custom');
+  const extensionsMatch = rowMatch('extensions', 'extension pack install plugin agents skills hooks mcp servers marketplace');
   const tokenMatch = rowMatch('personal access token', 'github token pat');
   const accountsMatch = rowMatch(
     'accounts',
@@ -552,6 +555,7 @@ export function AppSettingsScreen({
       ? (id === 'appearance' && appearanceMatch) ||
         (id === 'text-editor' && textEditorMatch) ||
         (id === 'ai-provider' && aiMatch) ||
+        (id === 'extensions' && extensionsMatch) ||
         (id === 'token' && tokenMatch) ||
         (id === 'accounts' && accountsMatch) ||
         (id === 'update' && updateMatch) ||
@@ -803,6 +807,17 @@ export function AppSettingsScreen({
             <section className="app-settings__section">
               <h2>AI Provider</h2>
               <ProviderManager />
+            </section>
+          )}
+
+          {showSection('extensions', extensionsMatch) && (
+            <section className="app-settings__section">
+              <h2>Extensions</h2>
+              <p className="app-settings__lead">
+                Manage the extensions you have: switch one off without losing it, remove it with everything it added, or
+                upload an extension from a file. To find new ones, open the Extension Store.
+              </p>
+              <InstalledExtensionsPanel />
             </section>
           )}
 

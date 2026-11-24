@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Board' | 'E2E' | 'Agents';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Board' | 'E2E' | 'Agents';
   description: string;
 }
 
@@ -82,6 +82,48 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'design_preview', name: 'design_preview', group: 'Design', description: 'Render a frame to an image you can see on the next turn' },
   { id: 'design_export', name: 'design_export', group: 'Design', description: 'Export a design as SVG, PNG or static HTML + CSS' },
   { id: 'design_open', name: 'design_open', group: 'Design', description: 'Open a design in the Design editor' },
+  // Drawing (the Drawing editor — raster paintings under .pigry/drawings/<agent>/)
+  { id: 'drawing_list', name: 'drawing_list', group: 'Drawing', description: 'List the drawings saved in the workspace' },
+  { id: 'drawing_read', name: 'drawing_read', group: 'Drawing', description: 'Read a drawing: size, background and every layer' },
+  { id: 'drawing_write', name: 'drawing_write', group: 'Drawing', description: 'Create a drawing of a given size and paint on it with brush strokes, shapes, text, fills and filters' },
+  { id: 'drawing_edit', name: 'drawing_edit', group: 'Drawing', description: 'Paint on a drawing: layers, brush strokes, shapes, text, gradients, fills, selections and filters' },
+  { id: 'drawing_preview', name: 'drawing_preview', group: 'Drawing', description: 'Render a drawing to an image you can see on the next turn' },
+  { id: 'drawing_export', name: 'drawing_export', group: 'Drawing', description: 'Export a drawing as PNG, JPEG or WebP' },
+  { id: 'drawing_open', name: 'drawing_open', group: 'Drawing', description: 'Open a drawing in the Drawing editor' },
+  // 3D Model (the 3D Model editor — three.js scenes under .pigry/models/<agent>/)
+  { id: 'model_list', name: 'model_list', group: '3D Model', description: 'List the 3D models saved in the workspace' },
+  { id: 'model_read', name: 'model_read', group: '3D Model', description: 'Read a 3D model: every object with its transform, size and material' },
+  { id: 'model_write', name: 'model_write', group: '3D Model', description: 'Create a 3D scene of primitives, lights and cameras and build it with operations' },
+  { id: 'model_edit', name: 'model_edit', group: '3D Model', description: 'Add, move, rotate, scale, colour, parent, duplicate or remove objects in a 3D scene' },
+  { id: 'model_preview', name: 'model_preview', group: '3D Model', description: 'Render a 3D scene to an image you can see on the next turn' },
+  { id: 'model_export', name: 'model_export', group: '3D Model', description: 'Export a 3D scene as GLB, OBJ or STL' },
+  { id: 'model_open', name: 'model_open', group: '3D Model', description: 'Open a 3D scene in the 3D Model editor' },
+  // Game Engine (the Game Engine editor — Godot-style games under .pigry/games/<agent>/)
+  { id: 'game_list', name: 'game_list', group: 'Game Engine', description: 'List the games saved in the workspace' },
+  { id: 'game_read', name: 'game_read', group: 'Game Engine', description: 'Read a game: settings, scenes as outlines, scripts and their source' },
+  { id: 'game_write', name: 'game_write', group: 'Game Engine', description: 'Create a game (3D, 2D or empty template) and build it with operations' },
+  { id: 'game_edit', name: 'game_edit', group: 'Game Engine', description: 'Add nodes, scenes, scripts, signals, input actions and settings to a game' },
+  { id: 'game_run', name: 'game_run', group: 'Game Engine', description: 'Run the game headlessly in a sandbox with scripted input and report output, errors and node state' },
+  { id: 'game_preview', name: 'game_preview', group: 'Game Engine', description: 'Run the game and take a screenshot you can see on the next turn' },
+  { id: 'game_export', name: 'game_export', group: 'Game Engine', description: 'Export the game as one standalone HTML file' },
+  { id: 'game_open', name: 'game_open', group: 'Game Engine', description: 'Open a game in the Game Engine editor' },
+  // Audio Editor (the Audio Editor — Audacity-style projects under .pigry/audio/<agent>/)
+  { id: 'audio_list', name: 'audio_list', group: 'Audio Editor', description: 'List the audio projects saved in the workspace' },
+  { id: 'audio_read', name: 'audio_read', group: 'Audio Editor', description: 'Read an audio project: tracks, clips, effect chains, labels, master chain and review warnings' },
+  { id: 'audio_write', name: 'audio_write', group: 'Audio Editor', description: 'Create an audio project (blank, podcast or music template) and build it with operations' },
+  { id: 'audio_edit', name: 'audio_edit', group: 'Audio Editor', description: 'Cut, fade, apply effects (EQ, compressor, noise reduction, reverb…), generate sound, label and set the master chain' },
+  { id: 'audio_preview', name: 'audio_preview', group: 'Audio Editor', description: 'Render waveform and spectrogram pictures you can see on the next turn' },
+  { id: 'audio_analyze', name: 'audio_analyze', group: 'Audio Editor', description: 'Measure peak, true peak, loudness (LUFS), noise floor, clipping, silence and hum' },
+  { id: 'audio_export', name: 'audio_export', group: 'Audio Editor', description: 'Export the mix as WAV (16/24/32-bit) or WebM/Opus' },
+  { id: 'audio_open', name: 'audio_open', group: 'Audio Editor', description: 'Open an audio project in the Audio Editor' },
+  // Video Editor (the Video Editor — CapCut-style projects under .pigry/videos/<agent>/)
+  { id: 'video_list', name: 'video_list', group: 'Video Editor', description: 'List the video projects saved in the workspace' },
+  { id: 'video_read', name: 'video_read', group: 'Video Editor', description: 'Read a video project: format, media, tracks, clips and review warnings' },
+  { id: 'video_write', name: 'video_write', group: 'Video Editor', description: 'Create a video project (blank, promo or title template) and build it with operations' },
+  { id: 'video_edit', name: 'video_edit', group: 'Video Editor', description: 'Add clips, text, shapes, stickers, synthesised sound, transitions, animation, keyframes, captions and ducking to a video' },
+  { id: 'video_preview', name: 'video_preview', group: 'Video Editor', description: 'Render a contact sheet of frames you can see on the next turn' },
+  { id: 'video_export', name: 'video_export', group: 'Video Editor', description: 'Export the video as WebM (real time) or one frame as PNG' },
+  { id: 'video_open', name: 'video_open', group: 'Video Editor', description: 'Open a video in the Video Editor' },
   // Board (the Board editor — files under .pigry/boards/<agent>/)
   { id: 'board_list', name: 'board_list', group: 'Board', description: 'List the boards saved in the workspace' },
   { id: 'board_read', name: 'board_read', group: 'Board', description: 'Read a board as an outline, Markdown or JSON' },
@@ -159,7 +201,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Board', 'E2E', 'Agents'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Board', 'E2E', 'Agents'];
 
 export function selectAgentTools(
   tools: ToolSpec[],

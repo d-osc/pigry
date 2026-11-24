@@ -84,7 +84,7 @@ export const GITHUB_GUIDES: Record<GithubGuideId, MenuGuide> = {
       { title: "Files changed", text: "Read per-file diffs in Split or Unified view. History shows the PR's commits one by one, Compare compares against a chosen commit and Blame annotates lines." },
       { title: "Review", text: "Review changes lets you Approve, Request changes or Comment and Submit review." },
       { title: "Check out branch", text: "Fetches the PR branch and switches to it so you can run the code." },
-      { title: "New pull request", text: "Create one from your branch: title, base branch and description." },
+      { title: "Open a pull request", text: "New pull request opens GitHub's compare page: choose the base and compare branches, see how many commits and files differ, then write the title (filled in from the branch or the single commit) and the description with Write and Preview. Create pull request has a menu to open it as a draft, and the side panel adds reviewers, assignees (or yourself) and labels." },
       { title: "Copy link / Open on GitHub", text: "Share the PR or continue on github.com." },
     ],
     tutorial: [
@@ -93,6 +93,7 @@ export const GITHUB_GUIDES: Record<GithubGuideId, MenuGuide> = {
       { title: "Read it", text: "Start with Overview, then Files changed. Ask '@pr-reviewer review this pull request'." },
       { title: "Run it", text: "Press Check out branch and run the tests in the terminal." },
       { title: "Review", text: "Choose Review changes › Approve or Request changes, add your comments and Submit review." },
+      { title: "Open your own", text: "Push your branch, press New pull request, pick the compare branch, check the Commits and Files changed tabs below the form, write the description and press Create pull request." },
     ],
     tips: [
       "Read the commits one by one with History when the combined diff is too big.",
@@ -106,7 +107,10 @@ export const GITHUB_GUIDES: Record<GithubGuideId, MenuGuide> = {
       "The list can be out of date; press Refresh before acting.",
     ],
     agents: { default: "pull-requests", base: "pr-reviewer" },
-    shots: [{ file: "pull-requests.jpg", caption: "Left: the pull request list with search and filters. Right: the selected pull request with Overview, Files changed, Commits and Checks tabs." }],
+    shots: [
+      { file: "pull-requests.jpg", caption: "Left: the pull request list with search and filters. Right: the selected pull request with Overview, Files changed, Commits and Checks tabs." },
+      { file: "new-pull-request.jpg", caption: "Open a pull request: base and compare branches with a summary of what differs, the title and the Write / Preview description editor, the Create pull request button with its draft menu, the Reviewers, Assignees and Labels panel, and the Commits and Files changed tabs." },
+    ],
   },
 
   releases: {
@@ -143,36 +147,44 @@ export const GITHUB_GUIDES: Record<GithubGuideId, MenuGuide> = {
   },
 
   actions: {
-    summary: "Watch GitHub Actions runs, read their logs, and re-run or cancel them.",
+    summary: "Watch GitHub Actions the way github.com shows it: a list of workflow runs, and each run on its own page with its jobs, logs and artifacts.",
     overview: [
-      "Actions lists the workflow runs of the repository with status, branch, commit, who started them and how long they took. Open a run to see its jobs, the combined log and any artifacts.",
-      "When a run fails, the log is the fastest way to see why. Ask the CI log reviewer to read it and explain the failure.",
+      "Actions uses the same layout as the Actions tab on GitHub. On the left is the list of workflows (All workflows, then each workflow file); on the right are the runs, newest first, each with a status icon, the commit message, the workflow and run number, the branch and how long it took. Click a run to open it.",
+      "A run opens on its own page: a Summary (what triggered it, its status, total duration and artifacts), the jobs it ran, and for every job its steps and log. When a run fails, the log is the fastest way to see why, and the CI log reviewer agent can read it for you. This menu needs the GitHub CLI (gh) signed in to your account.",
     ],
     features: [
-      { title: "Run list and filters", text: "Search runs, commits or actors and filter by workflow, branch and status." },
-      { title: "Run details", text: "See each job and the combined log of the run." },
-      { title: "Cancel / Re-run", text: "Cancel a run, Re-run failed jobs or Re-run all jobs." },
-      { title: "Run workflow", text: "Start a workflow manually when it supports manual dispatch." },
-      { title: "Artifacts and workflow file", text: "List the artifacts a run uploaded and view the workflow definition." },
+      { title: "Workflow list", text: "All workflows shows every run; pick one workflow in the list to see only its runs and to open its workflow file. A workflow that is disabled is shown dimmed." },
+      { title: "Run list", text: "Each row has a status icon (passed, failed, running, cancelled), the commit message, 'CI #7: Commit abc1234', the branch and the time. The count of runs is at the top of the list." },
+      { title: "Filter workflow runs", text: "Search by commit message, run number, SHA or branch, and use the Event, Status and Branch filters on the list." },
+      { title: "Run page", text: "Summary shows what triggered the run, its status, total duration and the number of artifacts, then the jobs as cards and the artifacts you can download." },
+      { title: "Jobs, steps and logs", text: "Click a job to see its steps and its log. All logs shows the combined log of the whole run." },
+      { title: "Re-run and cancel", text: "Re-run jobs offers Re-run all jobs and, when something failed, Re-run failed jobs. A run that is still going shows Cancel run instead." },
+      { title: "Run workflow", text: "Starts a workflow by hand on the branch you have checked out, when the workflow allows manual runs." },
+      { title: "Workflow file", text: "Open the YAML of a workflow from the workflow list or from a run, to see exactly what it does." },
     ],
     tutorial: [
-      { title: "Open Actions", text: "The newest runs are at the top." },
-      { title: "Pick a failed run", text: "Filter by branch or search the commit message." },
-      { title: "Read the log", text: "Open the failed job. Ask '@ci-log-reviewer why did this fail?'." },
-      { title: "Fix and push", text: "Fix the cause in your code and push; a new run starts." },
-      { title: "Re-run", text: "For a flaky failure use Re-run failed jobs." },
+      { title: "Open Actions", text: "The newest runs are at the top. Pick a workflow in the list on the left to narrow it down." },
+      { title: "Find the run", text: "Use the Status filter to show only failed runs, or type the commit message in Filter workflow runs." },
+      { title: "Open it", text: "Click the run. The Summary tells you at a glance which job failed." },
+      { title: "Read the log", text: "Click the failed job in the list on the left of the run page, read its steps, and ask '@ci-log-reviewer why did this fail?'." },
+      { title: "Fix and push", text: "Fix the cause in your code and push; a new run starts and appears at the top of the list." },
+      { title: "Re-run if it was flaky", text: "For a failure that has nothing to do with your change, use Re-run jobs › Re-run failed jobs." },
     ],
     tips: [
       "Look at the first error in the log, not the last; later lines are usually consequences.",
-      "Compare a failing run with the last green one to see what changed.",
+      "Compare a failing run with the last green run of the same workflow to see what changed.",
+      "Pick a single workflow in the list on the left when 'All workflows' is too noisy.",
     ],
     cautions: [
-      "Re-running and manual workflows can deploy or send things for real; check what the workflow does.",
+      "Re-running and manual workflows can deploy or send things for real; check what the workflow does first.",
       "Logs can contain secrets that were printed by mistake; do not paste logs into public places.",
       "Cancelling a deployment job midway can leave it in a half-finished state.",
     ],
     agents: { default: "actions", base: "ci-log-reviewer" },
-    shots: [{ file: "actions.jpg", caption: "Left: workflow runs with search and filters. Right: the jobs, log and artifacts of the selected run." }],
+    shots: [
+      { file: "actions.jpg", caption: "Left: All workflows and each workflow file. Right: the workflow runs with status icons, commit messages, branches and times, and the Event, Status and Branch filters." },
+      { file: "actions-run.jpg", caption: "One run on its own page: Summary (trigger, status, duration, artifacts), the jobs list on the left, the job cards and the artifacts you can download, and the Re-run jobs menu." },
+    ],
   },
 
   security: {

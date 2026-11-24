@@ -4,7 +4,7 @@
  *   node scripts/e2e-cli.mjs --base-url http://localhost:5173
  *   node scripts/e2e-cli.mjs --spec login --browser firefox --parallel 4 --reporter junit --retries 1
  *
- * It bundles the same runner the app uses (src/lib/e2e) and drives Playwright browsers (chromium, firefox,
+ * It bundles the same runner the app uses (src/extensions/e2e/engine) and drives Playwright browsers (chromium, firefox,
  * webkit) instead of the app's DevTools test window. Exit code: 0 all passed, 1 test failures, 2 setup errors. */
 import { exec as execCb } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -136,13 +136,13 @@ async function startComponentServer(framework) {
 async function loadRunner() {
   const outDir = path.join(repo, 'node_modules', '.cache', 'pigry-e2e');
   const outFile = path.join(outDir, 'e2e-runner.mjs');
-  const sources = fs.readdirSync(path.join(repo, 'src/lib/e2e')).map((f) => path.join(repo, 'src/lib/e2e', f));
+  const sources = fs.readdirSync(path.join(repo, 'src/extensions/e2e/engine')).map((f) => path.join(repo, 'src/extensions/e2e/engine', f));
   const newest = Math.max(...sources.map((f) => fs.statSync(f).mtimeMs));
   if (!fs.existsSync(outFile) || fs.statSync(outFile).mtimeMs < newest) {
     const { build } = await import(pathToFileURL(path.join(repo, 'node_modules/vite/dist/node/index.js')).href);
     await build({
       configFile: false, root: repo, logLevel: 'error',
-      build: { ssr: true, outDir, emptyOutDir: false, minify: false, rollupOptions: { input: path.join(repo, 'src/lib/e2e/cli-entry.ts'), output: { format: 'es', entryFileNames: 'e2e-runner.mjs' } } },
+      build: { ssr: true, outDir, emptyOutDir: false, minify: false, rollupOptions: { input: path.join(repo, 'src/extensions/e2e/engine/cli-entry.ts'), output: { format: 'es', entryFileNames: 'e2e-runner.mjs' } } },
       ssr: { noExternal: true },
     });
   }

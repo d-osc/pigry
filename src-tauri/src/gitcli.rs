@@ -5,13 +5,14 @@
 
 use std::path::Path;
 use std::process::{Command, Stdio};
+use crate::CommandNoWindow;
 
 type Result<T> = std::result::Result<T, String>;
 
 /// The git CLI's own version line — Err when git isn't installed or not on
 /// PATH. The frontend surfaces this as an install notice.
 pub fn git_version() -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("--version")
         .stdin(Stdio::null())
         .output()
@@ -24,7 +25,7 @@ pub fn git_version() -> Result<String> {
 
 /// Current branch shorthand ("main", "" on an unborn branch).
 pub fn current_branch(repo_path: &Path) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(repo_path)
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -40,7 +41,7 @@ pub fn current_branch(repo_path: &Path) -> Result<String> {
 /// Runs one git command in the repository and returns its output (stdout, or
 /// stderr when stdout is empty — git writes progress there).
 pub fn run_git(repo_path: &Path, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
+    let output = Command::new("git").no_window()
         .arg("-C")
         .arg(repo_path)
         .args(args)

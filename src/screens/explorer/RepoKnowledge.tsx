@@ -482,7 +482,7 @@ export function MemoryDialog({
                 <div key={skill.id} className="know-row">
                   {skill.builtIn ? (
                     <>
-                      <span className="know-row__builtin">built-in</span>
+                      <span className="know-row__builtin">{skill.extension ? 'extension' : 'built-in'}</span>
                       <span className="know-row__text">{skill.name}</span>
                       {skill.description && (
                         <span className="know-row__desc">{skill.description}</span>

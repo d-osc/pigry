@@ -290,7 +290,7 @@ test('TypeScript specs, JUnit XML, flaky detection and analytics', async ({ page
   await setup(page);
   // the first import of Monaco can make the dev server re-optimise and reload the page — warm it up
   for (let i = 0; i < 3; i += 1) {
-    const ok = await page.evaluate(() => import('/src/lib/e2e/transpile.ts').then((m) => m.transpileTs('const a: number = 1;')).then(() => true, () => false)).catch(() => false);
+    const ok = await page.evaluate(() => import('/src/extensions/e2e/engine/transpile.ts').then((m) => m.transpileTs('const a: number = 1;')).then(() => true, () => false)).catch(() => false);
     if (ok) break;
     await page.waitForLoadState('load');
     await page.waitForTimeout(1500);
@@ -324,7 +324,7 @@ describe('typed', () => {
   expect(r.result.tests[1].attempts).toBe(2);
 
   const out = await page.evaluate(async (result) => {
-    const { resultToJUnit, analyticsOf } = await import('/src/lib/e2e/spec.ts');
+    const { resultToJUnit, analyticsOf } = await import('/src/extensions/e2e/engine/spec.ts');
     const xml = resultToJUnit(result);
     const stats = { 'user/t': { 'a › slow': { runs: 4, passes: 4, fails: 0, flaky: 0, totalMs: 8000, lastMs: 2000, lastStatus: 'passed', lastAt: 1 }, 'a › flaky': { runs: 5, passes: 4, fails: 1, flaky: 2, totalMs: 500, lastMs: 100, lastStatus: 'passed', lastAt: 2 }, 'a › broken': { runs: 3, passes: 0, fails: 3, flaky: 0, totalMs: 300, lastMs: 100, lastStatus: 'failed', lastAt: 3 } } };
     return { xml, analytics: analyticsOf(stats) };
@@ -356,7 +356,7 @@ describe('events', () => {
 test('spec modules: relative require/import, JSON, TypeScript helpers and the plugins file', async ({ page }) => {
   await setup(page);
   for (let i = 0; i < 3; i += 1) {
-    const ok = await page.evaluate(() => import('/src/lib/e2e/transpile.ts').then((m) => m.transpileTs('export const a: number = 1;')).then(() => true, () => false)).catch(() => false);
+    const ok = await page.evaluate(() => import('/src/extensions/e2e/engine/transpile.ts').then((m) => m.transpileTs('export const a: number = 1;')).then(() => true, () => false)).catch(() => false);
     if (ok) break;
     await page.waitForLoadState('load'); await page.waitForTimeout(1500);
     await openFixture(page); await defineBridge(page);

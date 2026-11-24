@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { JQ, VIEWPORT_PRESETS, assertDom, assertValue, deepEqual, expectFn, fmt, makeStub, normCss, parseChainer, runAssertion } from '../src/lib/e2e/assert.ts';
+import { JQ, VIEWPORT_PRESETS, assertDom, assertValue, deepEqual, expectFn, fmt, makeStub, normCss, parseChainer, runAssertion } from '../src/extensions/e2e/engine/assert.ts';
 
 const el = (over = {}) => ({ tag: 'button', id: 'go', cls: ['btn', 'primary'], text: 'Save', html: 'Save', value: '', vis: true, dis: false, chk: false, sel: false, foc: false, attrs: { type: 'submit', href: '/x' }, css: { 'background-color': 'rgb(37, 99, 235)', 'font-size': '16px' }, empty: false, rect: { x: 0, y: 0, w: 80, h: 30 }, desc: '<button#go.btn.primary>', readOnly: false, required: false, type: 'submit', name: '', ...over });
 const dom = (...els) => ({ count: els.length, els });

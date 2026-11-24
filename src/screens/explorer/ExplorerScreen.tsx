@@ -22,8 +22,13 @@ import {
   renameWorktreeFile,
   deleteWorktreeFolder,
   renameWorktreeFolder,
+  copyWorktreePath,
+  revealWorktreePath,
   searchCode,
 } from '../../lib/tauriClient';
+import { absolutePath, allPaths, baseName, isFolderPath, joinPath, parentDir, uniquePastePath } from '../../lib/fileClipboard';
+import { isMac } from '../../lib/platform';
+import { CanvasContextMenu, type CanvasMenuEntry } from '../../app/CanvasContextMenu';
 import type { CodeSearchHit, FileTree as FileTreeData } from '../../types/repository';
 import {
   buildSearchRegex,
@@ -50,6 +55,8 @@ interface EditorGroup {
 }
 
 const MAX_GROUPS = 3;
+/** The modifier key as it is written on this platform's shortcuts. */
+const MOD = isMac ? '⌘' : 'Ctrl';
 
 interface ExplorerScreenProps {
   /** Path requested by the palette (⌘P) — opens it when it changes. */
@@ -123,8 +130,14 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     x: number;
     y: number;
     target: { kind: 'file' | 'folder'; path: string };
+    /** Built when the menu opens, so it reflects the clipboard and the file's state at that moment. */
+    entries: CanvasMenuEntry[];
   } | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  /** A file just created from the menu: it opens in the editor once its name is settled. */
+  const openAfterRename = useRef<string | null>(null);
+  // Cut / copy in the file tree, waiting for a paste.
+  const [clipboard, setClipboard] = useState<{ mode: 'cut' | 'copy'; path: string } | null>(null);
   // Draggable column widths (px).
   const [treeWidth, setTreeWidth] = useState(288);
   // FILES panel folds away — default open, remembered across restarts.
@@ -218,6 +231,25 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     }
     setTreeOverrides({ added: new Set(), removed });
   }, [tree]);
+
+  /** Opens every folder above `path` so the row is visible. */
+  const revealInTree = useCallback((path: string) => {
+    const folders: string[] = [];
+    let prefix = '';
+    for (const part of path.split('/').slice(0, -1)) {
+      prefix = prefix ? `${prefix}/${part}` : part;
+      folders.push(prefix);
+    }
+    setTreeOverrides((previous) => {
+      const added = new Set(previous?.added ?? []);
+      const removed = new Set(previous?.removed ?? []);
+      for (const folder of folders) {
+        added.add(folder);
+        removed.delete(folder);
+      }
+      return { added, removed };
+    });
+  }, []);
 
   // Load the tree; reload when the working-copy summary changes so status
   // dots stay fresh after commits, saves and staging.
@@ -660,43 +692,21 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
         await writeWorktreeFile(candidate, '');
         const next = await getFileTree();
         setTree(next);
-        handleSelectFile(candidate);
+        revealInTree(candidate);
+        if (asFolder) {
+          // The folder row is what gets named; .gitkeep only makes it exist.
+          setRenamingPath(candidate.slice(0, candidate.lastIndexOf('/')));
+        } else {
+          // Name it first (opening the editor would take the focus away from the name box), then open it.
+          openAfterRename.current = candidate;
+          setRenamingPath(candidate);
+        }
       } catch {
         // The write failed (read-only demo, locked file) — nothing to open.
       }
     },
-    [activePath, tree, handleSelectFile],
+    [activePath, tree, revealInTree],
   );
-
-  // Context-menu state — closes on Escape / outside click.
-  useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setContextMenu(null);
-    };
-    window.addEventListener('click', close);
-    window.addEventListener('contextmenu', close);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('contextmenu', close);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [contextMenu]);
-
-  const openContextMenu = useCallback(
-    (target: { kind: 'file' | 'folder'; path: string }, event: React.MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setContextMenu({ x: event.clientX, y: event.clientY, target });
-    },
-    [],
-  );
-
-  const fileEntry = contextMenu?.target.kind === 'file'
-    ? repository?.files.find((file) => file.path === contextMenu.target.path)
-    : undefined;
 
   const handleMove = useCallback(
     async (sourcePath: string, targetFolder: string) => {
@@ -706,9 +716,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
       const base = sourcePath.split('/').pop() ?? sourcePath;
       const newPath = targetFolder ? `${targetFolder}/${base}` : base;
       if (newPath === sourcePath) return;
-      const isFolder = (tree?.entries ?? []).some(
-        (entry) => entry === sourcePath || entry.startsWith(`${sourcePath}/`),
-      );
+      // A file is listed under its own name, so only entries below the path make it a folder.
+      const isFolder = isFolderPath(tree?.entries ?? [], sourcePath);
       try {
         if (isFolder) {
           await renameWorktreeFolder(sourcePath, newPath);
@@ -838,6 +847,193 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     [],
   );
 
+  // ---- VS Code-style file operations: open to the side, cut / copy / paste, reveal, terminal, find in folder ----
+  const treeEntries = useMemo(() => tree?.entries ?? [], [tree]);
+  const knownPaths = useMemo(() => allPaths(treeEntries), [treeEntries]);
+
+  const copyText = useCallback(
+    (text: string, what: string) => {
+      navigator.clipboard.writeText(text).then(
+        () => notify(`Copied ${what}`, 'success'),
+        () => notify(`Could not copy ${what}`, 'error'),
+      );
+    },
+    [notify],
+  );
+
+  const handleOpenToSide = useCallback(
+    (path: string) => {
+      setClosedAll(false);
+      setGroups((gs) => {
+        const index = Math.min(activeGroup, gs.length - 1);
+        if (gs.length >= MAX_GROUPS) {
+          // No room for another group: use the one beside the focused group.
+          const target = Math.min(index + 1, gs.length - 1);
+          return gs.map((group, i) => (i !== target ? group : group.tabs.includes(path) ? { ...group, active: path } : { tabs: [...group.tabs, path], active: path }));
+        }
+        const next = [...gs];
+        next.splice(index + 1, 0, { tabs: [path], active: path });
+        return next;
+      });
+      setActiveGroup((current) => Math.min(current + 1, MAX_GROUPS - 1));
+      setGroupWidths((ws) => {
+        const next = [...ws];
+        while (next.length < groups.length + 1) next.push(1);
+        return next;
+      });
+    },
+    [activeGroup, groups.length],
+  );
+
+  const handlePaste = useCallback(
+    async (folder: string) => {
+      if (!clipboard) return;
+      const source = clipboard.path;
+      if (!knownPaths.has(source)) {
+        notify(`${baseName(source)} no longer exists`, 'error');
+        setClipboard(null);
+        return;
+      }
+      if (folder === source || folder.startsWith(`${source}/`)) {
+        notify('A folder cannot be pasted into itself', 'error');
+        return;
+      }
+      const sourceIsFolder = isFolderPath(treeEntries, source);
+      try {
+        if (clipboard.mode === 'cut') {
+          const target = joinPath(folder, baseName(source));
+          if (target === source) {
+            setClipboard(null);
+            return;
+          }
+          if (knownPaths.has(target)) {
+            notify(`${baseName(source)} already exists in ${folder || 'the repository root'}`, 'error');
+            return;
+          }
+          await handleMove(source, folder);
+          setClipboard(null);
+          revealInTree(target);
+        } else {
+          const target = uniquePastePath(source, folder, (path) => knownPaths.has(path));
+          await copyWorktreePath(source, target);
+          setTree(await getFileTree());
+          revealInTree(target);
+          if (!sourceIsFolder) handleSelectFile(target);
+        }
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      }
+    },
+    [clipboard, knownPaths, treeEntries, notify, handleMove, handleSelectFile, revealInTree],
+  );
+
+  const revealInFileManager = useCallback(
+    (path: string) => {
+      revealWorktreePath(path).catch((error) => notify(error instanceof Error ? error.message : String(error), 'error'));
+    },
+    [notify],
+  );
+
+  const openTerminalAt = useCallback(
+    async (folder: string) => {
+      window.dispatchEvent(new Event('pigry:show-terminal'));
+      try {
+        await terminalRef.current?.openAt(folder);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error), 'error');
+      }
+    },
+    [notify],
+  );
+
+  // Search view with "files to include" set to the folder, like VS Code's Find in Folder.
+  const findInFolder = useCallback((folder: string) => {
+    setSearchExpanded(true);
+    setSearchInclude(folder ? `${folder}/**` : '');
+    filterInputRef.current?.focus();
+  }, []);
+
+  /** The entries of the right-click menu, in VS Code's order and with its shortcuts. */
+  const menuEntries = (target: { kind: 'file' | 'folder'; path: string }): CanvasMenuEntry[] => {
+    const { kind, path } = target;
+    const isRoot = kind === 'folder' && path === '';
+    const folder = kind === 'folder' ? path : parentDir(path);
+    const root = repository?.localPath ?? '';
+    const entry = kind === 'file' ? repository?.files.find((file) => file.path === path) : undefined;
+    const separator: CanvasMenuEntry = { separator: true };
+    const list: CanvasMenuEntry[] = [];
+
+    if (kind === 'file') {
+      list.push(
+        { label: 'Open', shortcut: 'Enter', onSelect: () => handleSelectFile(path) },
+        { label: 'Open to the Side', shortcut: `${MOD}+Enter`, onSelect: () => handleOpenToSide(path) },
+      );
+    } else {
+      list.push(
+        { label: 'New File', onSelect: () => void handleCreateFile(false, path) },
+        { label: 'New Folder', onSelect: () => void handleCreateFile(true, path) },
+      );
+    }
+    list.push(separator, { label: isMac ? 'Reveal in Finder' : 'Reveal in File Explorer', shortcut: isMac ? '⌥⌘R' : 'Shift+Alt+R', onSelect: () => revealInFileManager(path) });
+    if (kind === 'folder') {
+      list.push(
+        { label: 'Open in Integrated Terminal', onSelect: () => void openTerminalAt(path) },
+        { label: 'Find in Folder…', shortcut: 'Shift+Alt+F', onSelect: () => findInFolder(path) },
+      );
+    }
+    list.push(separator);
+    if (!isRoot) {
+      list.push(
+        { label: 'Cut', shortcut: `${MOD}+X`, onSelect: () => setClipboard({ mode: 'cut', path }) },
+        { label: 'Copy', shortcut: `${MOD}+C`, onSelect: () => setClipboard({ mode: 'copy', path }) },
+      );
+    }
+    list.push({ label: 'Paste', shortcut: `${MOD}+V`, disabled: !clipboard, onSelect: () => void handlePaste(folder) }, separator);
+    list.push({ label: 'Copy Path', shortcut: 'Shift+Alt+C', onSelect: () => copyText(absolutePath(root, path), 'the path') });
+    if (!isRoot) list.push({ label: 'Copy Relative Path', onSelect: () => copyText(path, 'the relative path') });
+    if (entry) {
+      list.push(separator, { label: entry.staged ? 'Unstage Changes' : 'Stage Changes', onSelect: () => void (entry.staged ? unstage([path]) : stage([path])) });
+      if (!entry.untracked) list.push({ label: 'Discard Changes', danger: true, onSelect: () => void discard(path) });
+    }
+    if (isRoot) {
+      list.push(separator, { label: 'Collapse All', onSelect: handleCollapseAll });
+    } else {
+      list.push(
+        separator,
+        { label: 'Rename…', shortcut: 'F2', onSelect: () => setRenamingPath(path) },
+        { label: 'Delete', shortcut: 'Delete', danger: true, onSelect: () => void handleDelete(path, kind) },
+      );
+    }
+    return list;
+  };
+
+  const openContextMenu = (target: { kind: 'file' | 'folder'; path: string }, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ x: event.clientX, y: event.clientY, target, entries: menuEntries(target) });
+  };
+
+  // Keyboard shortcuts while a row of the tree has focus (not while typing in the rename or search boxes).
+  const handleTreeKeyDown = (event: React.KeyboardEvent) => {
+    const element = event.target as HTMLElement;
+    if (element.closest('input, textarea')) return;
+    const path = element.closest('[data-path]')?.getAttribute('data-path');
+    if (!path) return;
+    const kind = isFolderPath(treeEntries, path) ? 'folder' : 'file';
+    const mod = event.ctrlKey || event.metaKey;
+    const key = event.key.toLowerCase();
+    const handled = () => { event.preventDefault(); event.stopPropagation(); };
+    if (event.key === 'F2') { handled(); setRenamingPath(path); }
+    else if (event.key === 'Delete') { handled(); void handleDelete(path, kind); }
+    else if (mod && !event.shiftKey && !event.altKey && key === 'c') { handled(); setClipboard({ mode: 'copy', path }); }
+    else if (mod && !event.shiftKey && !event.altKey && key === 'x') { handled(); setClipboard({ mode: 'cut', path }); }
+    else if (mod && !event.shiftKey && !event.altKey && key === 'v') { handled(); void handlePaste(kind === 'folder' ? path : parentDir(path)); }
+    else if (mod && event.key === 'Enter' && kind === 'file') { handled(); handleOpenToSide(path); }
+    else if (event.shiftKey && event.altKey && key === 'r') { handled(); revealInFileManager(path); }
+    else if (event.shiftKey && event.altKey && key === 'c') { handled(); copyText(absolutePath(repository?.localPath ?? '', path), 'the path'); }
+    else if (event.shiftKey && event.altKey && key === 'f' && kind === 'folder') { handled(); findInFolder(path); }
+  };
+
   const folderCount = useMemo(() => {
     const dirs = new Set<string>();
     for (const entry of tree?.entries ?? []) {
@@ -883,7 +1079,7 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
       </header>
       <div className="explorer-screen__body">
         {filesOpen ? (
-        <aside className="explorer-screen__tree" style={{ width: treeWidth }}>
+        <aside className="explorer-screen__tree" style={{ width: treeWidth }} onKeyDown={handleTreeKeyDown}>
           <div className="explorer-tree-head">
             <span>Files</span>
             <div className="explorer-tree-head__actions">
@@ -1125,12 +1321,20 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
             onItemContextMenu={openContextMenu}
             renamingPath={renamingPath}
             onRenameSubmit={(path, name) => {
-              const isFolder = (tree?.entries ?? []).some(
-                (entry) => entry === path || entry.startsWith(`${path}/`),
-              );
-              void handleRename(path, name, isFolder ? 'folder' : 'file');
+              const isFolder = isFolderPath(tree?.entries ?? [], path);
+              const renamedTo = name && name !== baseName(path) ? joinPath(parentDir(path), name) : path;
+              void handleRename(path, name, isFolder ? 'folder' : 'file').then(() => {
+                if (openAfterRename.current === path) {
+                  openAfterRename.current = null;
+                  handleSelectFile(renamedTo);
+                }
+              });
             }}
-            onRenameCancel={() => setRenamingPath(null)}
+            onRenameCancel={() => {
+              if (openAfterRename.current) handleSelectFile(openAfterRename.current);
+              openAfterRename.current = null;
+              setRenamingPath(null);
+            }}
             onMove={(sourcePath, targetFolder) => void handleMove(sourcePath, targetFolder)}
             revealPath={activePath}
           />
@@ -1382,148 +1586,13 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
       </div>
 
       {contextMenu && (
-        <div
-          className="context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          role="menu"
-          onClick={(event) => event.stopPropagation()}
-          ref={(el) => {
-            // Keep the menu inside the window when opened near an edge.
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const maxX = window.innerWidth - rect.width - 8;
-            const maxY = window.innerHeight - rect.height - 8;
-            el.style.left = `${Math.max(8, Math.min(contextMenu.x, maxX))}px`;
-            el.style.top = `${Math.max(8, Math.min(contextMenu.y, maxY))}px`;
-          }}
-        >
-          {contextMenu.target.kind === 'file' ? (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  handleSelectFile(contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                Copy path
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setRenamingPath(contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                Rename…
-              </button>
-              {fileEntry && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    void (fileEntry.staged
-                      ? unstage([contextMenu.target.path])
-                      : stage([contextMenu.target.path]));
-                    setContextMenu(null);
-                  }}
-                >
-                  {fileEntry.staged ? 'Unstage file' : 'Stage file'}
-                </button>
-              )}
-              {fileEntry && !fileEntry.untracked && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="context-menu__item--danger"
-                  onClick={() => {
-                    void discard(contextMenu.target.path);
-                    setContextMenu(null);
-                  }}
-                >
-                  Discard changes
-                </button>
-              )}
-              <button
-                type="button"
-                role="menuitem"
-                className="context-menu__item--danger"
-                onClick={() => {
-                  void handleDelete(contextMenu.target.path, 'file');
-                  setContextMenu(null);
-                }}
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void handleCreateFile(false, contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                New file here
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  void handleCreateFile(true, contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                New folder here
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  handleCollapseAll();
-                  setContextMenu(null);
-                }}
-              >
-                Collapse all
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setRenamingPath(contextMenu.target.path);
-                  setContextMenu(null);
-                }}
-              >
-                Rename…
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="context-menu__item--danger"
-                onClick={() => {
-                  void handleDelete(contextMenu.target.path, 'folder');
-                  setContextMenu(null);
-                }}
-              >
-                Delete folder
-              </button>
-            </>
-          )}
-        </div>
+        <CanvasContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          entries={contextMenu.entries}
+          label={contextMenu.target.path ? `${baseName(contextMenu.target.path)} menu` : 'Explorer menu'}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

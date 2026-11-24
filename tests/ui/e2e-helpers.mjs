@@ -137,8 +137,8 @@ export async function defineBridge(appPage) {
 /** Runs a spec source in the Pigry app page against the fake test browser. */
 export function runSpecIn(appPage, source, overrides = {}, extra = {}) {
   return appPage.evaluate(async ({ source, overrides, extra }) => {
-    const { runSpec, DEFAULT_CONFIG } = await import('/src/lib/e2e/runner.ts');
-    const { transpileTs } = (extra.ts || extra.esm) ? await import('/src/lib/e2e/transpile.ts') : { transpileTs: undefined };
+    const { runSpec, DEFAULT_CONFIG } = await import('/src/extensions/e2e/engine/runner.ts');
+    const { transpileTs } = (extra.ts || extra.esm) ? await import('/src/extensions/e2e/engine/transpile.ts') : { transpileTs: undefined };
     const files = window.__worktree ?? new Map();
     const b = window.__b;
     const driver = {

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::io::Read;
 use std::time::{Duration, Instant};
+use crate::CommandNoWindow;
 
 /// Generous wall-clock limit: pushing a large pack (hundreds of commits with
 /// binaries) on a slow upload legitimately takes minutes.
@@ -23,7 +24,7 @@ pub struct NetResult {
 type Result<T> = std::result::Result<T, String>;
 
 fn run_git_with_timeout(repo_path: &PathBuf, args: &[&str], timeout: Duration) -> Result<String> {
-    let mut child = Command::new("git").arg("-C").arg(repo_path).args(args)
+    let mut child = Command::new("git").no_window().arg("-C").arg(repo_path).args(args)
         .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
         .spawn().map_err(|e| format!("failed to start git: {e}. Is git installed and on PATH?"))?;
     // Drain both pipes concurrently: a large push must not block on a full pipe.
@@ -39,7 +40,7 @@ fn run_git_with_timeout(repo_path: &PathBuf, args: &[&str], timeout: Duration) -
             Ok(None) => {
                 // Do not leave a timed-out Git process running after telling the UI it failed.
                 #[cfg(windows)]
-                { let _ = Command::new("taskkill").args(["/PID", &child.id().to_string(), "/T", "/F"]).output(); }
+                { let _ = Command::new("taskkill").no_window().args(["/PID", &child.id().to_string(), "/T", "/F"]).output(); }
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(format!("git {} timed out after {} seconds; check the remote and authentication before retrying", args.join(" "), timeout.as_secs()));

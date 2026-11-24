@@ -14,7 +14,7 @@ async function setup(page) {
 }
 
 const tool = (page, name, input) => page.evaluate(async ({ name, input }) => {
-  const { E2E_TOOLS } = await import('/src/lib/e2e/e2eTools.ts');
+  const { E2E_TOOLS } = await import('/src/extensions/e2e/engine/e2eTools.ts');
   return E2E_TOOLS.find((t) => t.name === name).run(input);
 }, { name, input });
 
@@ -22,7 +22,7 @@ test('e2e tools: write, lint, run, read results, edit, config, fixtures and repo
   await setup(page);
   // the first import of Monaco can make the dev server re-optimise and reload the page — warm it up before the real work
   for (let i = 0; i < 3; i += 1) {
-    const ok = await page.evaluate(() => import('/src/lib/e2e/transpile.ts').then((m) => m.transpileTs('const a: number = 1;')).then(() => true, () => false)).catch(() => false);
+    const ok = await page.evaluate(() => import('/src/extensions/e2e/engine/transpile.ts').then((m) => m.transpileTs('const a: number = 1;')).then(() => true, () => false)).catch(() => false);
     if (ok) break;
     await page.waitForLoadState('load'); await page.waitForTimeout(1500);
     await openFixture(page); await defineBridge(page); await installE2eEnvironment(page, {

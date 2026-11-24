@@ -65,6 +65,8 @@ export interface AgentEntry {
    * turns), 'base' = pigry-provided specialist (@tag to use). Extension
    * (user-created/imported) agents have no tier. */
   tier?: 'default' | 'base';
+  /** Id of the installed extension that added this agent (removed with it, switched off with it). */
+  extensionId?: string;
 }
 
 const AGENTS_KEY = 'pigry:agents';
@@ -96,6 +98,7 @@ export function normalizeAgents(list: unknown[]): AgentEntry[] {
       mcpServers: Array.isArray(entry.mcpServers) ? entry.mcpServers.map(String) : [],
       builtIn: entry.builtIn === true,
       tier: entry.tier === 'default' || entry.tier === 'base' ? entry.tier : undefined,
+      extensionId: typeof entry.extensionId === 'string' && entry.extensionId ? entry.extensionId : undefined,
     }));
 }
 
@@ -181,7 +184,9 @@ export async function hydrateTeamAgents(team: string): Promise<AgentEntry[] | nu
 /** Consolidated repo mirror: every agent (all teams) with its AGENT.md
  * definition embedded as a `definition` field — one file, nothing scattered.
  * Agents from other teams already in the file stay untouched. */
-export async function mirrorAgentsToRepo(agents: AgentEntry[]): Promise<void> {
+export async function mirrorAgentsToRepo(allAgents: AgentEntry[]): Promise<void> {
+  // Agents that came with an extension belong to this computer's installation, not to the repository.
+  const agents = allAgents.filter((agent) => !agent.extensionId);
   try {
     const existing = await readAllStoredAgents();
     const updatedIds = new Set(agents.map((agent) => String(agent.id)));
@@ -209,8 +214,9 @@ export async function hydrateAgentsFromRepo(): Promise<AgentEntry[]> {
 /** Seeds localStorage from the consolidated repo file when empty (migrates
  * the legacy per-team layout too), then returns the active list. */
 export async function hydrateAgentsIfEmpty(): Promise<AgentEntry[]> {
-  const local = loadAgents();
-  if (local.length > 0) return local;
+  const everything = loadAgents();
+  const local = everything.filter((agent) => !agent.extensionId);
+  if (local.length > 0) return everything;
   let fromRepo = await hydrateAgentsFromRepo();
   if (fromRepo.length === 0) {
     const legacy = await readAllStoredAgents();
@@ -218,8 +224,9 @@ export async function hydrateAgentsIfEmpty(): Promise<AgentEntry[]> {
     fromRepo = normalizeAgents(legacy);
     await mirrorAgentsToRepo(fromRepo);
   }
-  saveAgents(fromRepo);
-  return fromRepo;
+  const fromExtensions = everything.filter((agent) => agent.extensionId);
+  saveAgents([...fromRepo, ...fromExtensions]);
+  return [...fromRepo, ...fromExtensions];
 }
 
 /** Consolidates the team's agents into .pigry/agents.json — registry and
@@ -293,13 +300,24 @@ const GIT_REVIEW_TOOLS = [
   'git_status', 'read_history', 'read_commit', 'read_diff', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts',
 ];
 
-/** The Diagram editor tools (src/lib/diagramTools.ts). */
+/** The Diagram editor tools (src/extensions/diagram/diagramTools.ts). */
 const DIAGRAM_TOOL_NAMES = ['diagram_list', 'diagram_read', 'diagram_write', 'diagram_edit', 'diagram_export', 'diagram_open'];
-/** The Design editor tools (src/lib/designTools.ts). */
-/** The Board editor tools (src/lib/boardTools.ts). */
+/** The Design editor tools (src/extensions/design/designTools.ts). */
+/** The Board editor tools (src/extensions/board/boardTools.ts). */
 const BOARD_TOOL_NAMES = ['board_list', 'board_read', 'board_write', 'board_edit', 'board_preview', 'board_export', 'board_open'];
-/** The E2E Testing tools (src/lib/e2e/e2eTools.ts). */
+/** The E2E Testing tools (src/extensions/e2e/engine/e2eTools.ts). */
 const E2E_TOOL_NAMES = ['e2e_list', 'e2e_read', 'e2e_write', 'e2e_edit', 'e2e_run', 'e2e_results', 'e2e_stats', 'e2e_selector', 'e2e_fixture', 'e2e_config', 'e2e_open'];
+/** The Game Engine tools (src/extensions/gameengine/gameTools.ts). */
+/** The Audio Editor tools (src/extensions/audioeditor/audioTools.ts). */
+const AUDIO_TOOL_NAMES = ['audio_list', 'audio_read', 'audio_write', 'audio_edit', 'audio_preview', 'audio_analyze', 'audio_export', 'audio_open'];
+
+/** The Video Editor tools (src/extensions/videoeditor/videoTools.ts). */
+const VIDEO_TOOL_NAMES = ['video_list', 'video_read', 'video_write', 'video_edit', 'video_preview', 'video_export', 'video_open'];
+const GAME_TOOL_NAMES = ['game_list', 'game_read', 'game_write', 'game_edit', 'game_run', 'game_preview', 'game_export', 'game_open'];
+/** The 3D Model editor tools (src/extensions/model3d/model3dTools.ts). */
+const MODEL_TOOL_NAMES = ['model_list', 'model_read', 'model_write', 'model_edit', 'model_preview', 'model_export', 'model_open'];
+/** The Drawing editor tools (src/extensions/drawing/drawingTools.ts). */
+const DRAWING_TOOL_NAMES = ['drawing_list', 'drawing_read', 'drawing_write', 'drawing_edit', 'drawing_preview', 'drawing_export', 'drawing_open'];
 const DESIGN_TOOL_NAMES = ['design_list', 'design_read', 'design_write', 'design_edit', 'design_check', 'design_preview', 'design_export', 'design_open'];
 
 /** Tier 1 defaults for untagged turns in every workspace menu. */
@@ -310,7 +328,7 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     description: 'Helps browse files, edit code and understand the workspace.',
     emoji: '🔍',
     tools: ['read_file', 'write_file', 'delete_file', 'rename_file', 'list_files', 'git_status', 'read_diff', 'read_image', 'read_pdf', 'read_word', 'read_excel', 'search_code', 'run_command', 'web_search', 'playwright', 'agent_lookup', 'agent_contacts'],
-    skills: ['file-navigation'],
+    skills: ['file-navigation', 'reading-unfamiliar-code', 'clean-code-principles'],
   },
   e2e: {
     username: 'e2e',
@@ -318,7 +336,7 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     description: 'Writes, runs and debugs Cypress-style end-to-end specs in the E2E Testing menu — selectors, network stubs, assertions — and explains failures from the command log, code frame and screenshots.',
     emoji: '🧪',
     tools: [...E2E_TOOL_NAMES, 'browser_e2e', 'browser_screenshot', 'read_file', 'list_files', 'search_code', 'write_file', 'agent_lookup', 'agent_contacts'],
-    skills: ['cypress-e2e-testing'],
+    skills: ['cypress-e2e-testing', 'flaky-test-prevention', 'test-design-techniques'],
   },
   reports: {
     username: 'reports',
@@ -342,7 +360,47 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     description: 'Designs screens and components in the Design editor — frames, auto layout, colour tokens — and previews, reviews and exports them.',
     emoji: '🎨',
     tools: [...DESIGN_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
-    skills: ['design-editor', 'ui-design-system'],
+    skills: ['design-editor', 'ui-design-system', 'usability-heuristics', 'accessibility-wcag'],
+  },
+  gameengine: {
+    username: 'gameengine',
+    role: 'Game engine assistant',
+    description: 'Builds and edits games in the Game Engine — scenes of nodes, scripts, physics, input and UI — runs them in a sandbox to test them, and looks at screenshots of the result.',
+    emoji: '🎮',
+    tools: [...GAME_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['game-engine-editor', 'game-scripting-api', 'godot-scene-composition'],
+  },
+  audioeditor: {
+    username: 'audioeditor',
+    role: 'Audio editing assistant',
+    description: 'Edits and produces audio in the Audio Editor — multi-track clips, cut and fade, EQ, compression, noise and hum reduction, reverb, loudness normalising — measures the result in LUFS and peaks, looks at waveform and spectrogram pictures and exports WAV.',
+    emoji: '🎧',
+    tools: [...AUDIO_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['audio-editor', 'audio-restoration-and-noise-reduction', 'audio-dynamics-and-loudness'],
+  },
+  videoeditor: {
+    username: 'videoeditor',
+    role: 'Video editing assistant',
+    description: 'Builds and edits videos in the Video Editor — multi-track timelines with clips, text and captions, stickers, filters, transitions, keyframe animation and music — looks at contact sheets of the result and exports it.',
+    emoji: '🎬',
+    tools: [...VIDEO_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['video-editor', 'video-editor-recipes', 'video-captions-and-text'],
+  },
+  model3d: {
+    username: 'model3d',
+    role: '3D modelling assistant',
+    description: 'Builds and edits 3D scenes in the 3D Model editor — primitives, modifiers, materials, lights and cameras — previews its own work from several angles and exports GLB, OBJ or STL.',
+    emoji: '🧊',
+    tools: [...MODEL_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['model3d-editor', 'blender-style-modeling', 'model3d-from-reference', 'pbr-materials-and-lighting'],
+  },
+  drawing: {
+    username: 'drawing',
+    role: 'Drawing assistant',
+    description: 'Paints and edits pictures in the Drawing editor — layers, brushes, shapes, gradients, text, selections and filters — and looks at its own work before reporting it done.',
+    emoji: '🖌️',
+    tools: [...DRAWING_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['drawing-editor', 'digital-painting', 'value-and-light', 'color-theory-painting'],
   },
   diagram: {
     username: 'diagram',
@@ -350,7 +408,7 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     description: 'Draws and edits diagrams in the Diagram editor — flowcharts, ER diagrams, use cases and architecture — from a description or from the code in the repository.',
     emoji: '🗺️',
     tools: [...DIAGRAM_TOOL_NAMES, 'read_file', 'list_files', 'search_code', 'agent_lookup', 'agent_contacts'],
-    skills: ['diagram-editor', 'diagram-modeling'],
+    skills: ['diagram-editor', 'diagram-modeling', 'c4-architecture-diagrams', 'system-design-process'],
   },
   'commit-graph': {
     username: 'commit-graph',
@@ -573,7 +631,7 @@ const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
     description: 'Implements features and fixes in repository code, verifies the changes, and reports what was edited.',
     emoji: '💻',
     tools: [...DEVELOPMENT_FILES, 'run_command'],
-    skills: ['code-implementation'],
+    skills: ['code-implementation', 'reading-unfamiliar-code', 'clean-code-principles', 'error-handling-and-api-design', 'testing-strategy-and-tdd', 'performance-and-complexity', 'secure-coding-practices'],
   },
   {
     username: 'debugger',
@@ -582,7 +640,7 @@ const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
     description: 'Writes and runs unit tests, traces bugs to their source, and saves a detailed Markdown bug report.',
     emoji: '🔍',
     tools: [...DEVELOPMENT_FILES, 'run_command'],
-    skills: ['unit-testing-and-bug-reporting', 'run-tests'],
+    skills: ['unit-testing-and-bug-reporting', 'run-tests', 'systematic-debugging', 'testing-strategy-and-tdd', 'reading-unfamiliar-code'],
   },
   QA_BASE_AGENT,
   {
@@ -592,7 +650,7 @@ const DEVELOPMENT_BASE_AGENTS: WorkspaceBaseAgentSpec[] = [
     description: 'Reviews the current repository for vulnerabilities and saves a Markdown report with evidence and remediation.',
     emoji: '🛡️',
     tools: [...DEVELOPMENT_FILES, 'github_security'],
-    skills: ['defensive-security-report'],
+    skills: ['defensive-security-report', 'secure-coding-practices'],
   },
 ];
 
@@ -605,11 +663,19 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     description: 'Suggests and applies safe, behaviour-preserving refactors in the file you are editing.',
     emoji: '🛠️',
     tools: ['read_file', 'write_file', 'search_code', 'list_files', 'agent_lookup', 'agent_contacts'],
-    skills: ['refactor-safety'],
+    skills: ['refactor-safety', 'refactoring-code-smells', 'clean-code-principles', 'reading-unfamiliar-code'],
   }, ...DEVELOPMENT_BASE_AGENTS],
-  diagram: [{ ...SA_BASE_AGENT, username: 'diagram-sa' }],
+  diagram: [{
+    ...SA_BASE_AGENT,
+    username: 'diagram-sa',
+    skills: [...(SA_BASE_AGENT.skills ?? []), 'c4-architecture-diagrams', 'system-design-process', 'scalability-and-reliability-patterns', 'data-modeling-erd', 'sequence-and-state-modeling', 'domain-driven-modeling', 'architecture-decisions-and-review'],
+  }],
   board: [{ ...SA_BASE_AGENT, username: 'board-sa', skills: ['discovery-mapping', 'workshop-facilitation', 'board-editor', 'system-analysis', 'diagram-modeling', 'diagram-editor'] }],
-  e2e: [{ ...QA_BASE_AGENT, username: 'e2e-qa' }],
+  e2e: [{
+    ...QA_BASE_AGENT,
+    username: 'e2e-qa',
+    skills: [...(QA_BASE_AGENT.skills ?? []), 'test-design-techniques', 'flaky-test-prevention', 'e2e-test-architecture', 'api-and-network-testing', 'accessibility-and-visual-testing', 'exploratory-testing-and-bug-reports', 'test-planning-and-risk'],
+  }],
   reports: [{
     username: 'report-reviewer',
     name: 'Report Reviewer',
@@ -619,6 +685,51 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     tools: ['read_file', 'list_files', 'search_code', 'read_diff', 'read_history', 'git_status', 'agent_lookup', 'agent_contacts'],
     skills: ['docs-writing', 'code-review', 'history-analysis'],
   }],
+  gameengine: [{
+    username: 'gamedev',
+    name: 'Game Developer',
+    role: 'Game designer and programmer',
+    description: 'Designs and builds playable games the Godot way: a core loop first, small reusable scenes, scripts in TypeScript, physics, input and HUD, then tunes the game feel, tests it by running it headlessly with scripted input, looks at screenshots, and exports a standalone HTML game.',
+    emoji: '🎮',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...GAME_TOOL_NAMES],
+    skills: ['game-engine-editor', 'game-scripting-api', 'godot-scene-composition', 'game-physics-and-collision', 'character-controllers', 'game-programming-patterns', 'game-design-process', 'game-feel-and-juice', 'game-ui-and-hud', 'game-debugging-and-optimization', 'game-genre-recipes'],
+  }],
+  audioeditor: [{
+    username: 'sound-engineer',
+    name: 'Sound Engineer',
+    role: 'Audio editor, mixing and mastering engineer',
+    description: 'Cleans and masters audio the way an Audacity power user does: fixes the recording first (hum, noise, clicks, clipping), edits, EQs and compresses with restraint, mixes voice over music, sets loudness for the destination (−16 LUFS podcasts, −14 LUFS streaming music) with a −1 dBTP ceiling, then checks numbers and spectrograms before exporting.',
+    emoji: '🎧',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...AUDIO_TOOL_NAMES],
+    skills: ['audio-editor', 'audio-restoration-and-noise-reduction', 'audio-eq-and-mixing', 'audio-dynamics-and-loudness', 'podcast-and-voiceover-production', 'music-editing-and-mastering', 'sound-design-and-effects', 'audio-formats-and-export', 'audio-review-checklist'],
+  }],
+  videoeditor: [{
+    username: 'filmmaker',
+    name: 'Video Producer',
+    role: 'Video editor and motion designer',
+    description: 'Cuts videos the way a CapCut editor does: a hook in the first seconds, tight pacing, captions that fit the platform, clean audio with the music ducked under speech, restrained transitions and motion, then checks contact sheets of the result and exports it.',
+    emoji: '🎬',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...VIDEO_TOOL_NAMES],
+    skills: ['video-editor', 'video-editor-recipes', 'video-editing-pacing-and-cuts', 'short-form-video-structure', 'video-color-correction-and-grading', 'video-audio-mixing', 'video-captions-and-text', 'motion-and-keyframe-animation', 'video-formats-and-export', 'video-review-checklist'],
+  }],
+  model3d: [{
+    username: 'modeler',
+    name: '3D Artist',
+    role: '3D modeler and scene artist',
+    description: 'Models props, buildings, vehicles, characters and scenes from primitives the way a Blender artist blocks out a model: real-world proportions first, mirror and array modifiers, clean hierarchy and naming, PBR materials, three-point lighting and a camera, then checks the result from several angles and exports GLB or STL.',
+    emoji: '🧊',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...MODEL_TOOL_NAMES],
+    skills: ['blender-style-modeling', 'model3d-from-reference', 'model3d-recipes', 'pbr-materials-and-lighting', 'scene-composition-and-camera', 'low-poly-and-game-assets', 'threejs-best-practices', '3d-printing-preparation', 'model3d-critique', 'model3d-editor'],
+  }],
+  drawing: [{
+    username: 'illustrator',
+    name: 'Illustrator',
+    role: 'Digital painter and illustrator',
+    description: 'Paints illustrations, concept sketches, icons and textures in the Drawing editor the way a Krita artist works: thumbnail and composition first, flat colours on separate layers, then light and shadow with blend modes, texture and finishing filters. Checks every step with a preview.',
+    emoji: '🎨',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...DRAWING_TOOL_NAMES],
+    skills: ['digital-painting', 'illustration-fundamentals', 'value-and-light', 'color-theory-painting', 'krita-layer-workflow', 'figure-and-perspective', 'composition-and-thumbnails', 'drawing-critique', 'drawing-editor'],
+  }],
   design: [{
     username: 'uxui',
     name: 'UX/UI Designer',
@@ -626,7 +737,7 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     description: 'Designs user flows, wireframes and polished UI in the Design editor: auto-layout screens, a consistent design system with colour tokens, accessibility and usability review, previews its own work and hands off HTML/CSS and specs.',
     emoji: '🖌️',
     tools: ['list_files', 'search_code', 'read_file', 'write_file', 'read_image', 'web_search', ...DESIGN_TOOL_NAMES, ...DIAGRAM_TOOL_NAMES],
-    skills: ['ux-design-process', 'ui-design-system', 'design-editor'],
+    skills: ['ux-design-process', 'ui-design-system', 'usability-heuristics', 'accessibility-wcag', 'ui-patterns-and-states', 'information-architecture-and-flows', 'visual-hierarchy', 'design-handoff-and-systems', 'design-critique-checklist', 'design-editor'],
   }],
   'ai-agent': [{
     username: 'workspace-guide',
@@ -880,7 +991,7 @@ const AVATAR_GRADIENTS: Array<[string, string]> = [
   ['#b59aff', '#8f6fe0'],
 ];
 
-function builtinAvatar(username: string, emoji: string): string {
+export function builtinAvatar(username: string, emoji: string): string {
   const hash = [...username].reduce((acc, ch) => (acc * 31 + ch.charCodeAt(0)) >>> 0, 7);
   const [from, to] = AVATAR_GRADIENTS[hash % AVATAR_GRADIENTS.length];
   const svg =
@@ -1037,6 +1148,8 @@ export interface HookEntry {
   /** Shell command run in the repository root when the event fires. */
   command: string;
   enabled: boolean;
+  /** Id of the installed extension that added this hook. */
+  extensionId?: string;
 }
 
 const HOOKS_KEY = 'pigry:hooks';
@@ -1049,6 +1162,7 @@ export function normalizeHooks(list: unknown[]): HookEntry[] {
       event: entry.event === 'after-reply' ? 'after-reply' : 'before-send',
       command: String(entry.command),
       enabled: entry.enabled !== false,
+      extensionId: typeof entry.extensionId === 'string' && entry.extensionId ? entry.extensionId : undefined,
     }));
 }
 
@@ -1075,7 +1189,8 @@ export async function hydrateHooks(): Promise<HookEntry[] | null> {
 
 export async function mirrorHooks(list: HookEntry[]): Promise<void> {
   try {
-    await writeWorktreeFile(HOOKS_FILE, JSON.stringify(list, null, 2));
+    // Hooks run commands: the ones an extension installed stay on this computer, never in the repository.
+    await writeWorktreeFile(HOOKS_FILE, JSON.stringify(list.filter((hook) => !hook.extensionId), null, 2));
   } catch {
     // read-only repo — localStorage remains the source of truth
   }

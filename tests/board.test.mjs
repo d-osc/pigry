@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   applyBoardOps, boardToMarkdown, checkBoard, connectorGeometry, embedKey, findItem, itemsInRect, measureText, normalizeBoard,
   prepareEmbedSvg, renderBoardSvg, snapBox, summarizeBoard, templateBoard, topLevelIds, withChildren,
-} from '../src/lib/board.ts';
+} from '../src/extensions/board/board.ts';
 
 const retro = () => normalizeBoard({
   title: 'Sprint retro',

@@ -19,6 +19,7 @@ use crate::gh_insights;
 use crate::insights;
 use crate::wiki;
 use crate::ssh_workspace::SshWorkspace;
+use crate::CommandNoWindow;
 
 /// Shared app state guarded by a mutex. Git operations are fast (local
 /// repositories) so we keep them synchronous inside async commands.
@@ -175,12 +176,14 @@ pub async fn terminal_run(
     let mut cmd = {
         let mut c = std::process::Command::new("cmd");
         c.args(["/C", trimmed]);
+        c.no_window();
         c
     };
     #[cfg(not(target_os = "windows"))]
     let mut cmd = {
         let mut c = std::process::Command::new("sh");
         c.args(["-c", trimmed]);
+        c.no_window();
         c
     };
     cmd.current_dir(&current);
@@ -265,8 +268,14 @@ fn open_repo_sync(
     state: &Mutex<AppState>,
     path: &str,
 ) -> Result<AppStatePayload, String> {
-    let repo = git2::Repository::discover(path)
-        .map_err(|e| format!("not a git repository: {}", e.message()))?;
+    let repo = match git2::Repository::discover(path) {
+        Ok(repo) => repo,
+        // A real folder without .git: the user picked it on purpose, so start a repository there.
+        Err(e) if e.code() == git2::ErrorCode::NotFound && std::path::Path::new(path).is_dir() => {
+            git2::Repository::init(path).map_err(|err| format!("could not run git init in {path}: {}", err.message()))?
+        }
+        Err(e) => return Err(format!("not a git repository: {}", e.message())),
+    };
     let root = repo.workdir().ok_or("Open a working repository, not a bare remote")?.to_path_buf();
     let mut state = state.lock().map_err(|e| e.to_string())?;
     let previous_workspace = state.ssh_workspace.take();
@@ -1161,12 +1170,22 @@ pub async fn gh_pr_create(
     body: String,
     head: String,
     base: String,
+    draft: Option<bool>,
+    reviewers: Option<Vec<String>>,
+    assignees: Option<Vec<String>>,
+    labels: Option<Vec<String>>,
 ) -> Result<String, String> {
     let repo_path = {
         let state = state.lock().map_err(|e| e.to_string())?;
         repo_path_str(&state)?.to_path_buf()
     };
-    gh::pr_create(&repo_path, &title, &body, &head, &base).inspect(|_| crate::gh_cache::invalidate())
+    let options = gh::PrCreateOptions {
+        draft: draft.unwrap_or(false),
+        reviewers: reviewers.unwrap_or_default(),
+        assignees: assignees.unwrap_or_default(),
+        labels: labels.unwrap_or_default(),
+    };
+    gh::pr_create(&repo_path, &title, &body, &head, &base, &options).inspect(|_| crate::gh_cache::invalidate())
 }
 
 #[tauri::command]
@@ -1403,6 +1422,34 @@ pub async fn write_worktree_binary(
 }
 
 #[tauri::command]
+pub async fn write_worktree_binary_chunk(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    data: String,
+    append: bool,
+) -> Result<u64, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::write_worktree_binary_chunk(&repo_path, &path, &data, append)
+}
+
+#[tauri::command]
+pub async fn read_binary_chunk(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    offset: u64,
+    length: usize,
+) -> Result<git_state::BinaryChunk, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::read_binary_chunk(&repo_path, &path, offset, length)
+}
+
+#[tauri::command]
 pub async fn delete_worktree_file(
     state: State<'_, Mutex<AppState>>,
     path: String,
@@ -1450,6 +1497,31 @@ pub async fn rename_worktree_file(
         repo_path_str(&state)?.to_path_buf()
     };
     git_state::rename_worktree_file(&repo_path, &oldPath, &newPath)
+}
+
+#[tauri::command]
+pub async fn copy_worktree_path(
+    state: State<'_, Mutex<AppState>>,
+    oldPath: String,
+    newPath: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::copy_worktree_path(&repo_path, &oldPath, &newPath)
+}
+
+#[tauri::command]
+pub async fn reveal_worktree_path(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    git_state::reveal_worktree_path(&repo_path, &path)
 }
 
 #[tauri::command]
@@ -2205,6 +2277,7 @@ pub async fn browser(
         // Fallback: let the Windows shell hand the URL to the default
         // browser (rundll32 keeps `&` in query strings intact, unlike cmd start).
         let status = std::process::Command::new("rundll32")
+            .no_window()
             .args(["url.dll,FileProtocolHandler", &url])
             .status()
             .map_err(|e| format!("failed to open browser: {primary}; fallback: {e}"))?;
