@@ -276,6 +276,12 @@ export function TitleBar({ onOpenPalette, onGoHome, onOpenSettings, onOpenHelp }
         if (event.button !== 0) return;
         const target = event.target as HTMLElement;
         if (target.closest('button, input, a, [data-no-drag]')) return;
+        // Double-click on the bar maximizes / restores the window (like a native title bar). Handled on the second press so
+        // that starting a drag does not swallow the click.
+        if (event.detail === 2) {
+          void withWindow((win) => win.toggleMaximize());
+          return;
+        }
         withWindow((win) => win.startDragging());
       }}
     >
