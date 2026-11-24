@@ -1,3 +1,42 @@
+// Shared with the desktop app (src-tauri/src/lib.rs): the modules included below spawn processes through this trait.
+
+/// `CREATE_NO_WINDOW` for spawned processes on Windows — a no-op on other
+/// operating systems, where the flag is not needed.
+#[cfg(windows)]
+mod command_no_window {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    pub trait CommandNoWindow {
+        fn no_window(&mut self) -> &mut Self;
+    }
+    impl CommandNoWindow for Command {
+        fn no_window(&mut self) -> &mut Self {
+            self.creation_flags(0x0800_0000);
+            self
+        }
+    }
+    impl CommandNoWindow for &mut Command {
+        fn no_window(&mut self) -> &mut Self {
+            self.creation_flags(0x0800_0000);
+            self
+        }
+    }
+}
+#[cfg(not(windows))]
+mod command_no_window {
+    use std::process::Command;
+    pub trait CommandNoWindow {
+        fn no_window(&mut self) -> &mut Self;
+    }
+    impl CommandNoWindow for Command {
+        fn no_window(&mut self) -> &mut Self { self }
+    }
+    impl CommandNoWindow for &mut Command {
+        fn no_window(&mut self) -> &mut Self { self }
+    }
+}
+pub use command_no_window::CommandNoWindow;
+
 #[allow(dead_code)]
 #[path = "../../src-tauri/src/git_state.rs"]
 mod git_state;
