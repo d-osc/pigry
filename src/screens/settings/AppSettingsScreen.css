@@ -808,3 +808,21 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ---- Settings: import from other agents ---- */
+.imp { display: flex; flex-direction: column; gap: 10px; }
+.imp__bar { display: flex; align-items: center; gap: 10px; }
+.imp__grow { flex: 1; }
+.imp__check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-secondary); }
+.imp__card { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.imp__head { display: flex; align-items: center; gap: 10px; }
+.imp__muted { font-size: var(--fs-2xs); color: var(--text-muted); }
+.imp__items { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.imp__items li { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); }
+.imp__kind { width: 90px; flex-shrink: 0; color: var(--text-muted); font-size: var(--fs-2xs); }
+.imp__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.imp__status { padding: 1px 8px; border-radius: var(--radius-pill); font-size: 10px; border: 1px solid var(--border); color: var(--text-muted); }
+.imp__status--new, .imp__status--update { color: var(--accent); border-color: var(--accent-tint-3); }
+.imp__status--conflict { color: var(--warning, #d9974e); }
+.imp__notes, .imp__report { margin: 8px 0 0; padding-left: 18px; font-size: var(--fs-2xs); color: var(--text-muted); line-height: 1.5; }
+.imp__report { color: var(--text-secondary); }

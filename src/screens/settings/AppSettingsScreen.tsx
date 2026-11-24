@@ -7,19 +7,21 @@ import { check as checkUpdater } from '@tauri-apps/plugin-updater';
 import { relaunch as relaunchApp } from '@tauri-apps/plugin-process';
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../lib/theme';
 import { ProviderManager } from './ProviderManager';
+import { ImportAgentsPanel } from './ImportAgentsPanel';
 import { InstalledExtensionsPanel } from '../extensions/InstalledExtensionsPanel';
 import appPackage from '../../../package.json';
 import type { GhAccount } from '../../types/repository';
 import './AppSettingsScreen.css';
 
 type DefaultScreen = 'explorer' | 'commit-graph' | 'working-changes';
-export type SectionId = 'appearance' | 'text-editor' | 'ai-provider' | 'extensions' | 'token' | 'accounts' | 'update' | 'about';
+export type SectionId = 'appearance' | 'text-editor' | 'ai-provider' | 'import' | 'extensions' | 'token' | 'accounts' | 'update' | 'about';
 type GhStatus = 'unknown' | 'checking' | 'in' | 'out' | 'missing';
 
 const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'text-editor', label: 'Text Editor' },
   { id: 'ai-provider', label: 'AI Provider' },
+  { id: 'import', label: 'Import agents' },
   { id: 'extensions', label: 'Extensions' },
   { id: 'token', label: 'Personal access token' },
   { id: 'accounts', label: 'Accounts' },
@@ -541,6 +543,7 @@ export function AppSettingsScreen({
     rowMatch('minimap', 'overview code map') ||
     rowMatch('line numbers', 'gutter');
   const aiMatch = rowMatch('ai provider', 'model base url api key openai anthropic ollama custom');
+  const importMatch = rowMatch('import from other agents', 'claude code codex antigravity gemini agy skills instructions mcp servers claude.md agents.md migrate');
   const extensionsMatch = rowMatch('extensions', 'extension pack install plugin agents skills hooks mcp servers marketplace');
   const tokenMatch = rowMatch('personal access token', 'github token pat');
   const accountsMatch = rowMatch(
@@ -555,6 +558,7 @@ export function AppSettingsScreen({
       ? (id === 'appearance' && appearanceMatch) ||
         (id === 'text-editor' && textEditorMatch) ||
         (id === 'ai-provider' && aiMatch) ||
+        (id === 'import' && importMatch) ||
         (id === 'extensions' && extensionsMatch) ||
         (id === 'token' && tokenMatch) ||
         (id === 'accounts' && accountsMatch) ||
@@ -807,6 +811,13 @@ export function AppSettingsScreen({
             <section className="app-settings__section">
               <h2>AI Provider</h2>
               <ProviderManager />
+            </section>
+          )}
+
+          {showSection('import', importMatch) && (
+            <section className="app-settings__section">
+              <h2>Import from other agents</h2>
+              <ImportAgentsPanel />
             </section>
           )}
 

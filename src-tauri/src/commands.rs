@@ -1548,6 +1548,12 @@ pub async fn cli_chat(cli: String, model: Option<String>, effort: Option<String>
     ai::cli_chat(&cli, model.as_deref(), effort.as_deref(), &message)
 }
 
+/// Reads another coding agent's instructions, skills, MCP servers and settings from the home folder (never credentials).
+#[tauri::command]
+pub async fn agent_import_read(agent: String) -> Result<crate::agent_import::ImportRead, String> {
+    crate::agent_import::read_agent_files(&agent)
+}
+
 #[tauri::command]
 pub async fn launch_app(
     kind: String,

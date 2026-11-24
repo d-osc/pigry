@@ -444,7 +444,7 @@ export function ProviderManager() {
                 </ul>
               )}
               <p className="prov-mgr__cli-note">
-                Chats work like with an API provider: history, attached files, images, Pigry's tools, parallel agents and effort all go through this CLI as the model (its own built-in tools are switched off, so Pigry's guards apply). Each turn starts a CLI process, so replies take a few seconds longer.
+                Chats work like with an API provider: history, attached files, images, Pigry's tools, parallel agents and effort all go through this CLI as the model (its own built-in tools are switched off, so Pigry's guards apply). Each turn starts a CLI process, so replies take a few seconds longer. Every turn counts against your subscription's usage limits like running the CLI yourself, and extra usage may be billed if it is switched on in your account. At most 4 CLI processes run at once.
               </p>
             </div>
           </section>

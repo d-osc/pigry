@@ -653,6 +653,14 @@ export async function cliChatRun(cli: string, message: string, model?: string, e
   return invoke<string>('cli_chat', { cli, message, model: model ?? null, effort: effort ?? null });
 }
 
+export interface ImportFile { path: string; text: string }
+export interface ImportRead { agent: string; root: string; found: boolean; files: ImportFile[]; skipped: string[] }
+/** What another coding agent (claude-code, codex, antigravity) keeps in the home folder — an allowlist of files, never credentials. */
+export async function agentImportRead(agent: string): Promise<ImportRead> {
+  if (!isTauri()) throw new Error('Importing from other agents needs the desktop app');
+  return invoke<ImportRead>('agent_import_read', { agent });
+}
+
 export interface ZcodeEntry {
   key: string;
   iv: string;

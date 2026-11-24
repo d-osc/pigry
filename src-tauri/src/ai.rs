@@ -1175,7 +1175,52 @@ pub fn cli_detect() -> CliDetectResult {
 /// One chat turn through the Claude Code CLI used as a plain model: every built-in tool is switched off (Pigry runs its own tools and
 /// guards), nothing is saved as a session, and the user message arrives as a stream-json line on STDIN so it can carry images.
 /// Returns {"text", "isError", "inputTokens", "outputTokens"} as JSON. Runs in the temp folder so no project CLAUDE.md leaks in.
+/// At most this many CLI chat processes run at once (each one is a whole Node/Rust process, roughly 250 MB; several agents can ask at the same time).
+const MAX_CLI_PROCESSES: usize = 4;
+static CLI_SLOTS: (std::sync::Mutex<usize>, std::sync::Condvar) = (std::sync::Mutex::new(0), std::sync::Condvar::new());
+
+/// A place in the queue of running CLI processes; released on drop.
+struct CliSlot;
+impl CliSlot {
+    fn acquire() -> CliSlot {
+        let (lock, cv) = &CLI_SLOTS;
+        let mut running = lock.lock().unwrap_or_else(|e| e.into_inner());
+        while *running >= MAX_CLI_PROCESSES {
+            running = cv.wait(running).unwrap_or_else(|e| e.into_inner());
+        }
+        *running += 1;
+        CliSlot
+    }
+}
+impl Drop for CliSlot {
+    fn drop(&mut self) {
+        let (lock, cv) = &CLI_SLOTS;
+        *lock.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        cv.notify_one();
+    }
+}
+
+/// Environment for the Claude Code child, as Hermes Agent's subscription provider does it: the user's subscription login is the only
+/// credential (API-key variables are removed so a key in the environment cannot silently switch billing), and everything that would
+/// make a model call do more than answer is off — telemetry, auto-update, memory and CLAUDE.md files.
+fn harden_claude_env(cmd: &mut Command) {
+    for var in ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_FOUNDRY_API_KEY"] {
+        cmd.env_remove(var);
+    }
+    for (k, v) in [
+        ("CLAUDE_CODE_DISABLE_AUTO_MEMORY", "1"),
+        ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "1"),
+        ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
+        ("DISABLE_TELEMETRY", "1"),
+        ("DISABLE_ERROR_REPORTING", "1"),
+        ("DISABLE_AUTOUPDATER", "1"),
+    ] {
+        cmd.env(k, v);
+    }
+}
+
 pub fn cli_chat(cli: &str, model: Option<&str>, effort: Option<&str>, message_json: &str) -> Result<String, String> {
+    let _slot = CliSlot::acquire();
     if cli == "codex" {
         return codex_chat(model, effort, message_json);
     }
@@ -1183,7 +1228,9 @@ pub fn cli_chat(cli: &str, model: Option<&str>, effort: Option<&str>, message_js
     cmd.arg("/C").arg(cli);
     match cli {
         "claude" => {
-            cmd.args(["-p", "--tools", "", "--no-session-persistence", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
+            // --setting-sources "" ignores the user's settings, hooks and plugins; --max-turns 1 because every tool is switched off.
+            cmd.args(["-p", "--tools", "", "--no-session-persistence", "--setting-sources", "", "--max-turns", "1", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
+            harden_claude_env(&mut cmd);
         }
         // Antigravity: stream-json in and out; "-p=" (empty) selects print mode while the prompt comes from STDIN. Headless runs
         // soft-deny every tool action that needs approval, so the agent cannot change files on its own.
@@ -1554,5 +1601,22 @@ mod codex_chat_tests {
         let stdout = "{\"type\":\"turn.failed\",\"error\":{\"message\":\"boom\"}}\n";
         assert_eq!(codex_error_line("", stdout).as_deref(), Some("boom"));
         assert_eq!(codex_error_line("just logs\n", ""), None);
+    }
+}
+
+#[cfg(test)]
+mod cli_slot_tests {
+    use super::{CliSlot, CLI_SLOTS, MAX_CLI_PROCESSES};
+
+    #[test]
+    fn slots_are_limited_and_released_on_drop() {
+        let held: Vec<CliSlot> = (0..MAX_CLI_PROCESSES).map(|_| CliSlot::acquire()).collect();
+        assert_eq!(*CLI_SLOTS.0.lock().unwrap(), MAX_CLI_PROCESSES);
+        let waiter = std::thread::spawn(|| { let _s = CliSlot::acquire(); });
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert!(!waiter.is_finished(), "a fifth process waits for a free slot");
+        drop(held);
+        waiter.join().unwrap();
+        assert_eq!(*CLI_SLOTS.0.lock().unwrap(), 0);
     }
 }

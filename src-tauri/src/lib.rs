@@ -36,6 +36,7 @@ mod command_no_window {
 }
 pub use command_no_window::CommandNoWindow;
 
+mod agent_import;
 mod ai;
 mod browser;
 mod busybox;
@@ -251,6 +252,7 @@ pub fn run() {
             commands::commit_avatars,
             commands::cli_agent_run,
             commands::cli_chat,
+            commands::agent_import_read,
             commands::cli_detect,
             commands::launch_app,
             commands::claude_usage,
