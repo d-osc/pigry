@@ -250,6 +250,7 @@ pub fn run() {
             commands::zcode_credentials,
             commands::commit_avatars,
             commands::cli_agent_run,
+            commands::cli_chat,
             commands::cli_detect,
             commands::launch_app,
             commands::claude_usage,

@@ -847,6 +847,7 @@ const DETECTABLE_APPS: &[(&str, &str)] = &[
     ("claude", "Claude Code"),
     ("codex", "Codex"),
     ("copilot", "GitHub Copilot"),
+    ("agy", "Antigravity"),
     ("gemini", "Gemini"),
     ("zcode", "ZCode"),
     ("autoclaw", "AutoClaw"),
@@ -896,18 +897,33 @@ fn read_app_effort(binary: &str) -> String {
     String::new()
 }
 
+/// True when a login-status command printed `needle` on either stdout or stderr (CLIs differ in which one they use).
+pub fn login_state_says(stdout: &[u8], stderr: &[u8], needle: &str) -> bool {
+    String::from_utf8_lossy(stdout).contains(needle) || String::from_utf8_lossy(stderr).contains(needle)
+}
+
 /// Cheap usability probe per CLI — chat turns must actually be able to run.
 /// claude gates on login; zcode is TUI-only (no non-interactive prompt mode);
 /// codex exposes a login status check; unknown CLIs are assumed usable.
 fn cli_usable(binary: &str) -> bool {
     match binary {
         "claude" => {
+            // `claude auth status` answers in well under a second (`config get model` took ~7 s) and prints JSON with "loggedIn".
+            if let Ok(o) = Command::new("cmd").args(["/C", "claude", "auth", "status"]).no_window().output() {
+                let text = String::from_utf8_lossy(&o.stdout).to_string();
+                if text.contains("\"loggedIn\": true") || text.contains("\"loggedIn\":true") {
+                    return true;
+                }
+                if text.contains("\"loggedIn\": false") || text.contains("\"loggedIn\":false") {
+                    return false;
+                }
+            }
             let out = Command::new("cmd")
                 .args(["/C", "claude", "config", "get", "model"])
                 .no_window()
                 .output();
             match out {
-                Ok(o) => !String::from_utf8_lossy(&o.stdout).contains("Not logged in"),
+                Ok(o) => !login_state_says(&o.stdout, &o.stderr, "Not logged in"),
                 Err(_) => false,
             }
         }
@@ -916,8 +932,9 @@ fn cli_usable(binary: &str) -> bool {
                 .args(["/C", "codex", "login", "status"])
                 .no_window()
                 .output();
+            // codex prints "Logged in using ChatGPT" on STDERR, so both streams are read.
             match out {
-                Ok(o) => String::from_utf8_lossy(&o.stdout).contains("Logged in"),
+                Ok(o) => login_state_says(&o.stdout, &o.stderr, "Logged in"),
                 Err(_) => false,
             }
         }
@@ -1089,56 +1106,55 @@ mod cli_tests {
     }
 }
 
-pub fn cli_detect() -> CliDetectResult {
-    let claude_version = cli_version("claude");
-    let codex_version = cli_version("codex");
-    let copilot_version = cli_version("copilot");
-    let claude_model = if claude_version.is_empty() {
-        String::new()
-    } else {
-        read_claude_model()
-    };
-    let codex_model = if codex_version.is_empty() {
-        String::new()
-    } else {
-        read_codex_model()
-    };
-    // Generic scan — every detectable binary the machine has.
-    let mut apps: Vec<CliAppInfo> = Vec::new();
-    let mut seen: Vec<String> = Vec::new();
-    for (binary, name) in DETECTABLE_APPS {
-        let version = cli_version(binary);
-        if version.is_empty() {
-            continue;
-        }
-        // `cursor-agent` wins over `cursor` when both exist.
-        if seen.iter().any(|b| b == *binary || (*binary == "cursor" && b == "cursor-agent")) {
-            continue;
-        }
-        seen.push(binary.to_string());
-        // zcode's models come from ZCode desktop's own provider config.
-        let models = if *binary == "zcode" {
-            read_zcode_models()
-        } else {
-            let default = read_app_model(binary);
-            if default.is_empty() {
-                Vec::new()
-            } else {
-                vec![default]
-            }
-        };
-        apps.push(CliAppInfo {
-            binary: binary.to_string(),
-            name: name.to_string(),
-            version,
-            model: read_app_model(binary),
-            effort: read_app_effort(binary),
-            usable: cli_usable(binary),
-            models,
-            launch_kind: "cli".to_string(),
-            launch_target: binary.to_string(),
-        });
+/// Everything the scan needs to know about one binary (None when it is not installed). Runs on its own thread: several of the
+/// probes (version, login status, model list) take seconds, and a sequential scan of fourteen binaries took over 15 s.
+fn app_info(binary: &str, name: &str) -> Option<CliAppInfo> {
+    let version = cli_version(binary);
+    if version.is_empty() {
+        return None;
     }
+    // zcode's models come from ZCode desktop's own provider config.
+    let models = if binary == "zcode" {
+        read_zcode_models()
+    } else if binary == "agy" {
+        read_agy_models()
+    } else {
+        let default = read_app_model(binary);
+        if default.is_empty() { Vec::new() } else { vec![default] }
+    };
+    Some(CliAppInfo {
+        binary: binary.to_string(),
+        name: name.to_string(),
+        version,
+        model: read_app_model(binary),
+        effort: read_app_effort(binary),
+        usable: cli_usable(binary),
+        models,
+        launch_kind: "cli".to_string(),
+        launch_target: binary.to_string(),
+    })
+}
+
+pub fn cli_detect() -> CliDetectResult {
+    // Probe every detectable binary at the same time.
+    let found: Vec<Option<CliAppInfo>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = DETECTABLE_APPS.iter().map(|(binary, name)| scope.spawn(move || app_info(binary, name))).collect();
+        handles.into_iter().map(|h| h.join().ok().flatten()).collect()
+    });
+    let mut apps: Vec<CliAppInfo> = Vec::new();
+    for app in found.into_iter().flatten() {
+        // `cursor-agent` wins over `cursor` when both exist.
+        if apps.iter().any(|a| a.binary == app.binary || (app.binary == "cursor" && a.binary == "cursor-agent")) {
+            continue;
+        }
+        apps.push(app);
+    }
+    let version_of = |binary: &str| apps.iter().find(|a| a.binary == binary).map(|a| a.version.clone()).unwrap_or_default();
+    let claude_version = version_of("claude");
+    let codex_version = version_of("codex");
+    let copilot_version = version_of("copilot");
+    let claude_model = if claude_version.is_empty() { String::new() } else { read_claude_model() };
+    let codex_model = if codex_version.is_empty() { String::new() } else { read_codex_model() };
     CliDetectResult {
         claude: !claude_version.is_empty(),
         codex: !codex_version.is_empty(),
@@ -1154,6 +1170,206 @@ pub fn cli_detect() -> CliDetectResult {
         claude_providers: detect_claude_providers(),
         chatgpt_providers: detect_chatgpt_providers(),
     }
+}
+
+/// One chat turn through the Claude Code CLI used as a plain model: every built-in tool is switched off (Pigry runs its own tools and
+/// guards), nothing is saved as a session, and the user message arrives as a stream-json line on STDIN so it can carry images.
+/// Returns {"text", "isError", "inputTokens", "outputTokens"} as JSON. Runs in the temp folder so no project CLAUDE.md leaks in.
+pub fn cli_chat(cli: &str, model: Option<&str>, effort: Option<&str>, message_json: &str) -> Result<String, String> {
+    if cli == "codex" {
+        return codex_chat(model, effort, message_json);
+    }
+    let mut cmd = Command::new("cmd");
+    cmd.arg("/C").arg(cli);
+    match cli {
+        "claude" => {
+            cmd.args(["-p", "--tools", "", "--no-session-persistence", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]);
+        }
+        // Antigravity: stream-json in and out; "-p=" (empty) selects print mode while the prompt comes from STDIN. Headless runs
+        // soft-deny every tool action that needs approval, so the agent cannot change files on its own.
+        "agy" => {
+            cmd.args(["--input-format", "stream-json", "--output-format", "stream-json", "-p="]);
+        }
+        other => return Err(format!("{other} has no chat mode")),
+    }
+    if let Some(m) = model.filter(|m| !m.is_empty()) {
+        cmd.args(["--model", m]);
+    }
+    if let Some(e) = effort.filter(|e| ["low", "medium", "high", "xhigh", "max"].contains(e)) {
+        cmd.args(["--effort", e]);
+    }
+    cmd.no_window();
+    cmd.current_dir(std::env::temp_dir());
+    cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| format!("{cli} not available: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(message_json.trim().as_bytes())
+            .and_then(|_| stdin.write_all(b"\n"))
+            .map_err(|e| format!("{cli}: failed to write the message: {e}"))?;
+    }
+    let output = child.wait_with_output().map_err(|e| format!("{cli} failed while running: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let parsed = if cli == "agy" { parse_agy_chat_output(&stdout) } else { parse_cli_chat_output(&stdout) };
+    parsed.ok_or_else(|| {
+        let detail = if stderr.trim().is_empty() { stdout.chars().take(400).collect::<String>() } else { stderr.trim().to_string() };
+        format!("{cli} returned no answer: {detail}")
+    })
+}
+
+/// One chat turn through Codex used as a plain model: read-only sandbox, nothing saved as a session, run in the temp folder (so it
+/// cannot see or change the repository — Pigry's own tools do that, under Pigry's guards). `message_json` is
+/// {"prompt": "...", "images": [{"mediaType": "image/png", "data": "<base64>"}]}; images are handed over with `-i`.
+/// The final answer is read from a `-o` file (the JSONL events on stdout are only used for token counts).
+pub fn codex_chat(model: Option<&str>, effort: Option<&str>, message_json: &str) -> Result<String, String> {
+    use base64::Engine as _;
+    let v: serde_json::Value = serde_json::from_str(message_json).map_err(|e| format!("codex: bad request: {e}"))?;
+    let prompt = v.get("prompt").and_then(|p| p.as_str()).unwrap_or("").to_string();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("pigry-codex-{}-{stamp}", std::process::id()));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("codex: cannot create a temp folder: {e}"))?;
+    let out_file = dir.join("answer.txt");
+    let mut image_files: Vec<PathBuf> = Vec::new();
+    for (i, img) in v.get("images").and_then(|x| x.as_array()).into_iter().flatten().enumerate() {
+        let data = img.get("data").and_then(|d| d.as_str()).unwrap_or("");
+        let ext = match img.get("mediaType").and_then(|m| m.as_str()).unwrap_or("image/png") {
+            "image/jpeg" | "image/jpg" => "jpg",
+            "image/webp" => "webp",
+            "image/gif" => "gif",
+            _ => "png",
+        };
+        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data) {
+            let path = dir.join(format!("image{i}.{ext}"));
+            if std::fs::write(&path, bytes).is_ok() {
+                image_files.push(path);
+            }
+        }
+    }
+    let result = (|| {
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/C").arg("codex").args(["exec", "-s", "read-only", "--ephemeral", "--skip-git-repo-check", "--json", "-o"]).arg(&out_file);
+        if let Some(m) = model.filter(|m| !m.is_empty()) {
+            cmd.args(["-m", m]);
+        }
+        if let Some(e) = effort.filter(|e| ["minimal", "low", "medium", "high", "xhigh"].contains(e)) {
+            cmd.arg("-c").arg(format!("model_reasoning_effort={e}"));
+        }
+        for img in &image_files {
+            cmd.arg("-i").arg(img);
+        }
+        cmd.arg("-");
+        cmd.no_window();
+        cmd.current_dir(&dir);
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = cmd.spawn().map_err(|e| format!("codex not available: {e}"))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(prompt.as_bytes()).map_err(|e| format!("codex: failed to write the prompt: {e}"))?;
+        }
+        let output = child.wait_with_output().map_err(|e| format!("codex failed while running: {e}"))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let text = std::fs::read_to_string(&out_file).unwrap_or_default();
+        let (input_tokens, output_tokens) = codex_usage(&stdout);
+        if text.trim().is_empty() {
+            let reason = codex_error_line(&stderr, &stdout).unwrap_or_else(|| format!("codex returned no answer (exit {})", output.status.code().unwrap_or(-1)));
+            return Ok(serde_json::json!({ "text": reason, "isError": true, "inputTokens": 0, "outputTokens": 0 }).to_string());
+        }
+        Ok(serde_json::json!({ "text": text.trim(), "isError": false, "inputTokens": input_tokens, "outputTokens": output_tokens }).to_string())
+    })();
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// Token counts from Codex's JSONL events (`turn.completed` carries a `usage` object); (0, 0) when absent.
+pub fn codex_usage(stdout: &str) -> (u64, u64) {
+    for line in stdout.lines().rev() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
+        let usage = v.get("usage").or_else(|| v.get("msg").and_then(|m| m.get("usage")));
+        if let Some(u) = usage {
+            let n = |k: &str| u.get(k).and_then(|x| x.as_u64()).unwrap_or(0);
+            return (n("input_tokens"), n("output_tokens"));
+        }
+    }
+    (0, 0)
+}
+
+/// The first useful error line (`ERROR: …`) from Codex's noisy output — for example the usage-limit message.
+pub fn codex_error_line(stderr: &str, stdout: &str) -> Option<String> {
+    let from_json = stdout.lines().filter_map(|l| serde_json::from_str::<serde_json::Value>(l.trim()).ok()).find_map(|v| {
+        let t = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if t.contains("error") || t == "turn.failed" {
+            v.get("message").or_else(|| v.get("error").and_then(|e| e.get("message"))).and_then(|m| m.as_str()).map(str::to_string)
+        } else {
+            None
+        }
+    });
+    from_json.or_else(|| stderr.lines().find_map(|l| l.trim().strip_prefix("ERROR:").map(|r| r.trim().to_string())).filter(|m| !m.is_empty()))
+}
+
+/// Antigravity's final {"event":"result","result":{status,response,error,usage}} line, reduced like the Claude one.
+pub fn parse_agy_chat_output(stdout: &str) -> Option<String> {
+    for line in stdout.lines().rev() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
+        if v.get("event").and_then(|t| t.as_str()) != Some("result") {
+            continue;
+        }
+        let r = v.get("result")?;
+        let ok = r.get("status").and_then(|s| s.as_str()) == Some("SUCCESS");
+        let usage = r.get("usage");
+        let num = |k: &str| usage.and_then(|u| u.get(k)).and_then(|n| n.as_u64()).unwrap_or(0);
+        let text = if ok {
+            r.get("response").and_then(|t| t.as_str()).unwrap_or("").to_string()
+        } else {
+            r.get("error").and_then(|t| t.as_str()).unwrap_or("Antigravity reported an error (log in once by running \"agy\" in a terminal)").to_string()
+        };
+        return Some(
+            serde_json::json!({
+                "text": text,
+                "isError": !ok,
+                "inputTokens": num("input_tokens") + num("cache_read_tokens"),
+                "outputTokens": num("output_tokens"),
+            })
+            .to_string(),
+        );
+    }
+    None
+}
+
+/// Model ids of Antigravity (`agy models`: one "<id>\t<label>" per line after a "Fetching…" line).
+fn read_agy_models() -> Vec<String> {
+    let Ok(out) = Command::new("cmd").args(["/C", "agy", "models"]).no_window().output() else { return Vec::new() };
+    parse_agy_models(&String::from_utf8_lossy(&out.stdout))
+}
+
+pub fn parse_agy_models(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|l| l.split('\t').next().map(|id| id.trim().to_string()))
+        .filter(|id| !id.is_empty() && !id.contains(' ') && !id.ends_with("..."))
+        .collect()
+}
+
+/// Finds the final {"type":"result"} line of a stream-json run and reduces it to what the chat needs.
+pub fn parse_cli_chat_output(stdout: &str) -> Option<String> {
+    for line in stdout.lines().rev() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line.trim()) else { continue };
+        if v.get("type").and_then(|t| t.as_str()) != Some("result") {
+            continue;
+        }
+        let usage = v.get("usage");
+        let num = |k: &str| usage.and_then(|u| u.get(k)).and_then(|n| n.as_u64()).unwrap_or(0);
+        let input = num("input_tokens") + num("cache_creation_input_tokens") + num("cache_read_input_tokens");
+        return Some(
+            serde_json::json!({
+                "text": v.get("result").and_then(|r| r.as_str()).unwrap_or(""),
+                "isError": v.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false),
+                "inputTokens": input,
+                "outputTokens": num("output_tokens"),
+            })
+            .to_string(),
+        );
+    }
+    None
 }
 
 /// Runs a prompt through an installed CLI coding agent (blocking; these take
@@ -1262,5 +1478,81 @@ mod cli_detect_full_tests {
             "claude providers missing from cli_detect"
         );
         assert_eq!(det.claude_providers[0].id, "claude-anthropic-api");
+    }
+}
+
+#[cfg(test)]
+mod cli_chat_tests {
+    use super::parse_cli_chat_output;
+
+    #[test]
+    fn the_result_line_of_a_stream_json_run_becomes_text_and_token_counts() {
+        let out = "{\"type\":\"system\",\"subtype\":\"init\"}\n{\"type\":\"assistant\",\"message\":{}}\n{\"type\":\"result\",\"is_error\":false,\"result\":\"hello\",\"usage\":{\"input_tokens\":2,\"cache_read_input_tokens\":10,\"cache_creation_input_tokens\":3,\"output_tokens\":7}}\n";
+        let v: serde_json::Value = serde_json::from_str(&parse_cli_chat_output(out).unwrap()).unwrap();
+        assert_eq!(v["text"], "hello");
+        assert_eq!(v["inputTokens"], 15);
+        assert_eq!(v["outputTokens"], 7);
+        assert_eq!(v["isError"], false);
+        assert!(parse_cli_chat_output("not json\n{\"type\":\"assistant\"}").is_none());
+    }
+}
+
+#[cfg(test)]
+mod agy_tests {
+    use super::{parse_agy_chat_output, parse_agy_models};
+
+    #[test]
+    fn agy_result_event_becomes_text_and_tokens() {
+        let ok = "{\"event\":\"init\",\"init\":{}}\n{\"event\":\"result\",\"result\":{\"status\":\"SUCCESS\",\"response\":\"pong\\n\",\"usage\":{\"input_tokens\":10,\"cache_read_tokens\":5,\"output_tokens\":3}}}\n";
+        let v: serde_json::Value = serde_json::from_str(&parse_agy_chat_output(ok).unwrap()).unwrap();
+        assert_eq!(v["text"], "pong\n");
+        assert_eq!(v["isError"], false);
+        assert_eq!(v["inputTokens"], 15);
+        let bad = "{\"event\":\"result\",\"result\":{\"status\":\"ERROR\",\"error\":\"authentication required\"}}";
+        let v: serde_json::Value = serde_json::from_str(&parse_agy_chat_output(bad).unwrap()).unwrap();
+        assert_eq!(v["isError"], true);
+        assert_eq!(v["text"], "authentication required");
+        assert!(parse_agy_chat_output("no events here").is_none());
+    }
+
+    #[test]
+    fn agy_models_listing_is_parsed() {
+        let ids = parse_agy_models("Fetching available models...\ngemini-3.8-flash-high\tGemini 3.8 Flash (High)\nclaude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\n");
+        assert_eq!(ids, vec!["gemini-3.8-flash-high", "claude-sonnet-4-6"]);
+    }
+}
+
+#[cfg(test)]
+mod login_state_tests {
+    use super::login_state_says;
+
+    #[test]
+    fn login_text_is_found_on_stdout_or_stderr() {
+        assert!(login_state_says(b"", b"Logged in using ChatGPT
+", "Logged in"), "codex writes to stderr");
+        assert!(login_state_says(b"Logged in as x", b"", "Logged in"));
+        assert!(!login_state_says(b"", b"Not signed in", "Logged in"));
+        assert!(login_state_says(b"", b"Not logged in", "Not logged in"));
+    }
+}
+
+#[cfg(test)]
+mod codex_chat_tests {
+    use super::{codex_error_line, codex_usage};
+
+    #[test]
+    fn usage_is_read_from_the_jsonl_events() {
+        let out = "{\"type\":\"thread.started\"}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":120,\"cached_input_tokens\":50,\"output_tokens\":9}}\n";
+        assert_eq!(codex_usage(out), (120, 9));
+        assert_eq!(codex_usage("not json"), (0, 0));
+    }
+
+    #[test]
+    fn the_useful_error_line_is_picked_out_of_the_noise() {
+        let stderr = "OpenAI Codex v0.163.0\n--------\n2026 ERROR rmcp::transport::worker: worker quit\nERROR: You've hit your usage limit. Try again later.\nERROR: You've hit your usage limit. Try again later.\n";
+        assert_eq!(codex_error_line(stderr, "").as_deref(), Some("You've hit your usage limit. Try again later."));
+        let stdout = "{\"type\":\"turn.failed\",\"error\":{\"message\":\"boom\"}}\n";
+        assert_eq!(codex_error_line("", stdout).as_deref(), Some("boom"));
+        assert_eq!(codex_error_line("just logs\n", ""), None);
     }
 }

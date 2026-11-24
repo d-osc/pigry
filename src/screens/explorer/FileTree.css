@@ -178,3 +178,7 @@
 .explorer-tree-foot--unpushed {
   color: var(--accent);
 }
+
+/* Git-ignored files and folders are faded, like VS Code. */
+.tree-row--ignored { opacity: 0.5; }
+.tree-row--ignored:hover, .tree-row--ignored.tree-row--selected { opacity: 0.8; }

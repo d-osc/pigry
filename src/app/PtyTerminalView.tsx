@@ -175,6 +175,16 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
       if (!exitedRef.current) void ptyWrite(id, data);
     });
     term.onTitleChange((title) => onTitle(id, title));
+    // Text highlighted in the terminal goes to the AI chat like highlighted code does (xterm keeps its own selection, so the
+    // DOM selection capture of the chat panel cannot see it). Debounced: it fires on every mouse move while dragging.
+    let shareTimer = 0;
+    term.onSelectionChange(() => {
+      window.clearTimeout(shareTimer);
+      shareTimer = window.setTimeout(() => {
+        const text = term.hasSelection() ? term.getSelection() : '';
+        if (text.trim()) window.dispatchEvent(new CustomEvent('pigry:chat-selection', { detail: { text, source: 'Terminal', path: 'Terminal output' } }));
+      }, 300);
+    });
     term.onResize(({ cols, rows }) => {
       if (!exitedRef.current) void ptyResize(id, cols, rows);
     });
@@ -205,6 +215,7 @@ export function PtyTerminalView({ id, focused, theme, onFocused, onTitle, onExit
       chunkWriters.set(id, null);
       exitHandlers.set(id, null);
       osc?.dispose();
+      window.clearTimeout(shareTimer);
       term.dispose();
       termRef.current = null;
     };

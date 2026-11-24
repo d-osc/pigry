@@ -88,7 +88,7 @@ for (const providerType of ['custom', 'codex']) {
       bridge.invoke = async (cmd, args) => {
         const result = await invoke(cmd, args);
         if (cmd === 'cli_detect' && providerType === 'codex') return { ...result, codex: true };
-        if (cmd === 'cli_agent_run') return 'Test skill reply';
+        if (cmd === 'cli_chat') return JSON.stringify({ text: 'Test skill reply', isError: false, inputTokens: 10, outputTokens: 3 });
         if (cmd === 'read_worktree_file' && args.path === skillPath) {
           return { ...result, content: `# Team commit editing\n\nProject override version ${window.testBackend.skillVersion}` };
         }
@@ -116,8 +116,8 @@ for (const providerType of ['custom', 'codex']) {
     await expect(response).toHaveCount(2);
 
     const prompts = await page.evaluate(() => window.testBackend.calls
-      .filter(({ cmd }) => cmd === 'cli_agent_run' || cmd === 'ai_chat')
-      .map(({ cmd, args }) => cmd === 'cli_agent_run' ? args.prompt : JSON.parse(args.body).messages.at(-1).content));
+      .filter(({ cmd }) => cmd === 'cli_chat' || cmd === 'ai_chat')
+      .map(({ cmd, args }) => cmd === 'cli_chat' ? JSON.parse(args.message).prompt : JSON.parse(args.body).messages.at(-1).content));
     expect(prompts).toHaveLength(2);
     for (const [prompt, version] of [[prompts[0], 'first'], [prompts[1], 'updated']]) {
       expect(prompt.match(/\[Skill: edit-commit\]/g)).toHaveLength(1);

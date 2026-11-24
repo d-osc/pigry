@@ -975,3 +975,15 @@ select.prov-mgr__control {
 .prov-mgr__group-btn svg.is-collapsed {
   transform: rotate(-90deg);
 }
+
+/* ---- Provider CLI detail ---- */
+.prov-mgr__cli { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.prov-mgr__cli-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-xs); color: var(--text-primary); }
+.prov-mgr__cli-note { margin: 0; font-size: var(--fs-2xs); line-height: 1.5; color: var(--text-muted); }
+.prov-mgr__cli-title { margin: 6px 0 0; font-size: var(--fs-2xs); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.prov-mgr__cli-models { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.prov-mgr__cli-models button { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: none; color: var(--text-secondary); font-size: var(--fs-xs); cursor: pointer; }
+.prov-mgr__cli-models button:hover { color: var(--text-primary); }
+.prov-mgr__cli-models button.is-on { border-color: var(--accent-tint-3); background: var(--accent-tint-1); color: var(--accent); }
+.prov-mgr__spin { animation: prov-mgr-spin 0.9s linear infinite; }
+@keyframes prov-mgr-spin { to { transform: rotate(360deg); } }

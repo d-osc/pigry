@@ -8,7 +8,7 @@ export interface TreeNode {
 }
 
 /** Sorts folders before files, both alphabetically (case-insensitive). */
-export function buildTree(paths: string[]): TreeNode[] {
+export function buildTree(paths: string[], emptyFolders: string[] = []): TreeNode[] {
   const root: TreeNode = { name: '', path: '', kind: 'folder', children: [] };
   const indexes = new WeakMap<TreeNode, Map<string, TreeNode>>();
 
@@ -28,6 +28,24 @@ export function buildTree(paths: string[]): TreeNode[] {
           kind: isFile ? 'file' : 'folder',
           children: [],
         };
+        node.children.push(child);
+        childIndex.set(key, child);
+      }
+      node = child;
+    });
+  }
+
+  // Folders that are listed without their contents (ignored folders): shown as folder rows with no children.
+  for (const folder of emptyFolders) {
+    const segments = folder.split('/').filter(Boolean);
+    let node = root;
+    segments.forEach((segment, index) => {
+      let childIndex = indexes.get(node);
+      if (!childIndex) { childIndex = new Map(); indexes.set(node, childIndex); }
+      const key = `folder:${segment}`;
+      let child = childIndex.get(key);
+      if (!child) {
+        child = { name: segment, path: segments.slice(0, index + 1).join('/'), kind: 'folder', children: [] };
         node.children.push(child);
         childIndex.set(key, child);
       }

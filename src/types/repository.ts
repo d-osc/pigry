@@ -229,6 +229,8 @@ export interface FileTree {
   changed: { path: string; status: string }[];
   /** Paths touched by unpushed commits (upstream..HEAD). */
   unpushedPaths: string[];
+  /** Git-ignored files, and folders with a trailing slash (not walked) — shown dimmed in the tree. */
+  ignored?: string[];
 }
 
 export interface WorktreeFileContent {

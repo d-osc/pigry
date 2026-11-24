@@ -647,6 +647,12 @@ export async function cliAgentRun(cli: string, prompt: string, model?: string): 
   return invoke<string>('cli_agent_run', { cli, prompt, model: model ?? null });
 }
 
+/** One chat turn through the Claude Code CLI as a plain model (built-in tools off). `message` is a stream-json user line; returns JSON {text, isError, inputTokens, outputTokens}. */
+export async function cliChatRun(cli: string, message: string, model?: string, effort?: string): Promise<string> {
+  if (!isTauri()) throw new Error('CLI agents require the desktop app');
+  return invoke<string>('cli_chat', { cli, message, model: model ?? null, effort: effort ?? null });
+}
+
 export interface ZcodeEntry {
   key: string;
   iv: string;

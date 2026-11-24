@@ -1544,6 +1544,11 @@ pub async fn cli_agent_run(
 }
 
 #[tauri::command]
+pub async fn cli_chat(cli: String, model: Option<String>, effort: Option<String>, message: String) -> Result<String, String> {
+    ai::cli_chat(&cli, model.as_deref(), effort.as_deref(), &message)
+}
+
+#[tauri::command]
 pub async fn launch_app(
     kind: String,
     target: String,

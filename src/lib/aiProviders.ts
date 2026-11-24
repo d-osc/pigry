@@ -268,6 +268,7 @@ function dedupeAppProviders(list: AiProviderEntry[]): AiProviderEntry[] {
 /** Provider types that come from the installed-AI-apps scan. */
 const APP_PROVIDER_TYPES = new Set([
   'claude-code',
+  'antigravity',
   'codex',
   'copilot',
   'gemini',
@@ -615,8 +616,12 @@ const MODEL_SPECS_BY_ID = new Map(KNOWN_MODEL_SPECS);
 export const KNOWN_MODEL_IDS = [...MODEL_SPECS_BY_ID.keys()].sort();
 
 /** Resolves API aliases, provider namespaces, and dated snapshots. */
+/** Claude Code accepts the aliases opus / sonnet / haiku — they mean the newest model of that family. */
+const CLAUDE_ALIASES: Record<string, string> = { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5' };
+
 export function matchModelSpec(name: string): KnownModelSpec | null {
-  const modelId = name.trim().toLowerCase();
+  const typed = name.trim().toLowerCase();
+  const modelId = CLAUDE_ALIASES[typed] ?? typed;
   const id = modelId.slice(modelId.lastIndexOf('/') + 1)
     .replace(/^(claude-(?:opus|sonnet|haiku|fable)-\d+)\.(\d+)/, '$1-$2');
   return MODEL_SPECS_BY_ID.get(id)
@@ -689,6 +694,8 @@ export function effortPayloadFragment(
 
 /** The URL the agent should POST to for this provider. */
 export function resolveEndpoint(entry: AiProviderEntry): string {
+  // A CLI provider has no URL: the agent loop routes `cli://<binary>` requests to the installed CLI (see lib/cliChat.ts).
+  if (isCliProvider(entry)) return `cli://${entry.type === 'claude-code' ? 'claude' : entry.type === 'antigravity' ? 'agy' : entry.type}`;
   if (entry.baseUrl.trim()) return entry.baseUrl.trim();
   if (entry.type === 'zcode') return 'https://api.z.ai/api/coding/paas/v4/chat/completions';
   if (entry.apiFormat === 'anthropic') return 'https://api.anthropic.com/v1/messages';
@@ -716,6 +723,7 @@ export function providerStatus(entry: AiProviderEntry): 'ok' | 'warn' {
 /** Provider types backed by an installed CLI coding agent. */
 const CLI_PROVIDER_TYPES = new Set([
   'claude-code',
+  'antigravity',
   'codex',
   'copilot',
   'gemini',

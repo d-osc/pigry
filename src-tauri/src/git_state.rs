@@ -1276,6 +1276,9 @@ pub struct FileTree {
     /// Paths touched by commits that have not been pushed yet
     /// (only when the branch has an upstream).
     pub unpushed_paths: Vec<String>,
+    /// Git-ignored files and folders for the faded rows of the tree. An ignored folder is listed once with a trailing `/`
+    /// (its contents are not walked: node_modules would be huge), so the tree shows it dimmed and unexpanded, like VS Code.
+    pub ignored: Vec<String>,
 }
 
 /// One changed file with a combined index+worktree status letter.
@@ -1283,6 +1286,21 @@ pub struct FileTree {
 pub struct TreeChangedFile {
     pub path: String,
     pub status: String,
+}
+
+/// Top-most ignored paths (folders end with `/`), capped so a huge repo cannot flood the tree.
+fn list_ignored(repo: &Repository) -> Vec<String> {
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(false).include_ignored(true).recurse_ignored_dirs(false);
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else { return Vec::new() };
+    let mut out: Vec<String> = statuses
+        .iter()
+        .filter(|e| e.status().contains(Status::IGNORED))
+        .filter_map(|e| e.path().map(str::to_string))
+        .take(3000)
+        .collect();
+    out.sort();
+    out
 }
 
 pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
@@ -1397,7 +1415,7 @@ pub fn list_tree(repo_path: &Path) -> Result<FileTree> {
     }
     }
 
-    Ok(FileTree { entries: paths, changed, unpushed_paths })
+    Ok(FileTree { entries: paths, changed, unpushed_paths, ignored: list_ignored(&repo) })
 }
 
 #[derive(Serialize)]

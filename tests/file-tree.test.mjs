@@ -13,3 +13,12 @@ test('large sibling folders preserve sorted paths without duplicate nodes', () =
   assert.equal(expanded.length, 20001);
   assert.equal(expanded[1].depth, 1);
 });
+
+test('ignored folders are listed as childless folder rows, next to real files', () => {
+  const nodes = buildTree(['src/a.ts', 'debug.log'], ['node_modules', 'packages/app/dist']);
+  assert.deepEqual(nodes.map((n) => n.name), ['node_modules', 'packages/app/dist', 'src', 'debug.log']);
+  const dist = nodes.find((n) => n.name === 'packages/app/dist');
+  assert.equal(dist.path, 'packages/app/dist');
+  assert.deepEqual(dist.children, []);
+  assert.equal(nodes.find((n) => n.name === 'node_modules').children.length, 0);
+});

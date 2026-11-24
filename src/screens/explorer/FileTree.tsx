@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { buildTree, flattenVisibleTree, type TreeNode } from '../../lib/fileTree';
 import type { FileTree as FileTreeData } from '../../types/repository';
@@ -103,6 +103,9 @@ function folderIcon(name: string): string {
   return `/fileicons/${FOLDER_ICONS[name.toLowerCase()] ?? 'folder-base'}.svg`;
 }
 
+/** Paths git ignores — their rows are drawn faded, like VS Code. */
+const IgnoredContext = createContext<Set<string>>(new Set());
+
 function TreeRow({
   node,
   depth,
@@ -151,6 +154,8 @@ function TreeRow({
   const hadFocus = useRef(false);
   const rowRef = useRef<HTMLButtonElement | null>(null);
   const isSelected = !isFolder && selectedPath === node.path;
+  const ignoredPaths = useContext(IgnoredContext);
+  const ignored = ignoredPaths.has(node.path);
   const fileStatus = !isFolder ? statusMap.get(node.path) : undefined;
   const unpushed = !isFolder && unpushedSet.has(node.path);
   const iconSrc = isFolder ? folderIcon(node.name) : fileIcon(node.name);
@@ -176,7 +181,7 @@ function TreeRow({
         <i key={index} className="tree-row__guide" aria-hidden="true" />
       ))}
       {isFolder ? (
-        isOpen ? <ChevronDown size={8.5} strokeWidth={1.5} /> : <ChevronRight size={8.5} strokeWidth={1.5} />
+        isOpen ? <ChevronDown size={8.5} strokeWidth={1.5} /> : <ChevronRight size={8.5} strokeWidth={1.5} style={ignored && node.children.length === 0 ? { visibility: 'hidden' } : undefined} />
       ) : null}
       <img className="tree-row__fileicon" src={iconSrc} alt="" draggable={false} />
     </>
@@ -242,7 +247,7 @@ function TreeRow({
         ref={rowRef}
         data-path={node.path}
         type="button"
-        className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}${dropTarget ? ' tree-row--droptarget' : ''}`}
+        className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}${dropTarget ? ' tree-row--droptarget' : ''}${ignored ? ' tree-row--ignored' : ''}`}
         style={{ paddingLeft: 4 + depth * 12 }}
         onClick={handleClick}
         draggable={onMove != null}
@@ -270,7 +275,7 @@ function TreeRow({
         onContextMenu={(event) =>
           onContextMenu?.({ kind: isFolder ? 'folder' : 'file', path: node.path }, event)
         }
-        title={node.path}
+        title={ignored ? `${node.path} — ignored by git` : node.path}
       >
         {rowIcons}
         <span className="tree-row__name">{node.name}</span>
@@ -359,7 +364,14 @@ export function FileTree({
     return (tree?.entries ?? []).filter((entry) => entry.toLowerCase().includes(filter));
   }, [tree, filter]);
 
-  const nodes = useMemo(() => buildTree(visibleEntries), [visibleEntries]);
+  // Git-ignored files and folders are listed too (faded). An ignored folder comes without its contents.
+  const { ignoredFiles, ignoredDirs, ignoredSet } = useMemo(() => {
+    const all = (tree?.ignored ?? []).filter((p) => !filter || p.toLowerCase().includes(filter));
+    const dirs = all.filter((p) => p.endsWith('/')).map((p) => p.slice(0, -1));
+    const files = all.filter((p) => !p.endsWith('/'));
+    return { ignoredFiles: files, ignoredDirs: dirs, ignoredSet: new Set([...dirs, ...files]) };
+  }, [tree, filter]);
+  const nodes = useMemo(() => buildTree([...visibleEntries, ...ignoredFiles], ignoredDirs), [visibleEntries, ignoredFiles, ignoredDirs]);
   const rows = useMemo(() => flattenVisibleTree(nodes, expanded), [nodes, expanded]);
   const virtual = rows.length > 500;
   const rootOffset = (repoName || branch) && !filter ? 32 : 0;
@@ -384,6 +396,7 @@ export function FileTree({
   );
 
   return (
+    <IgnoredContext.Provider value={ignoredSet}>
     <div
       className="file-tree"
       ref={treeRef}
@@ -456,5 +469,6 @@ export function FileTree({
           />
         ))}
     </div>
+    </IgnoredContext.Provider>
   );
 }

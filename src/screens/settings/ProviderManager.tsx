@@ -23,6 +23,7 @@ import {
 import { useRepository } from '../../hooks/useRepository';
 import { aiChat, claudeUsage, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
+import { useCliProviders } from '../../hooks/useCliProviders';
 import {
   API_FORMAT_LABEL,
   activeProviderId,
@@ -50,6 +51,7 @@ type ModelTestState = 'running' | 'ok' | 'fail';
 
 export function ProviderManager() {
   const { notify } = useRepository();
+  const cli = useCliProviders();
   const [store, setStore] = useState<{ list: AiProviderEntry[]; selectedId: string }>(() => {
     const list = loadProviders();
     const active = activeProviderId();
@@ -274,7 +276,7 @@ export function ProviderManager() {
     if (nameEditing) nameInputRef.current?.focus();
   }, [nameEditing]);
 
-  if (!selected) {
+  if (!selected && cli.providers.length === 0) {
     return (
       <div className="prov-mgr">
         <div className="prov-mgr__empty-state">
@@ -286,6 +288,12 @@ export function ProviderManager() {
           <button type="button" className="prov-mgr__add" onClick={addProvider}>
             <Plus size={13} strokeWidth={1.75} />
             Add provider
+          </button>
+          <p className="prov-mgr__empty-hint" data-testid="cli-empty">
+            {cli.scanning ? 'Scanning for Claude Code, Codex and Antigravity…' : 'No CLI (Claude Code, Codex, Antigravity) found yet.'}
+          </p>
+          <button type="button" className="prov-mgr__ghost-btn" disabled={cli.scanning} onClick={() => void cli.rescan()}>
+            {cli.scanning ? 'Scanning…' : 'Rescan CLIs'}
           </button>
         </div>
       </div>
@@ -358,6 +366,93 @@ export function ProviderManager() {
     );
   };
 
+  const rescanButton = (
+    <button type="button" className="prov-mgr__ghost-btn" disabled={cli.scanning} onClick={() => void cli.rescan().then(() => notify('CLI providers rescanned', 'success'))}>
+      <RefreshCw size={12} strokeWidth={1.5} className={cli.scanning ? 'prov-mgr__spin' : undefined} />
+      {cli.scanning ? 'Scanning…' : 'Rescan CLIs'}
+    </button>
+  );
+  const cliGroup = cli.providers.length > 0
+    ? renderGroup('cli', 'Provider CLI', cli.providers)
+    : (
+      <div key="cli" className="prov-mgr__group-block">
+        <div className="prov-mgr__group-btn"><span className="prov-mgr__group">Provider CLI</span></div>
+        <p className="prov-mgr__cli-note prov-mgr__cli-empty" data-testid="cli-empty">
+          {cli.scanning ? 'Scanning for Claude Code, Codex and Antigravity…' : 'None found. Install a CLI and log in, then press Rescan CLIs.'}
+        </p>
+      </div>
+    );
+  const selectedCli = cli.providers.find((p) => p.id === store.selectedId) ?? (selected ? null : cli.providers[0] ?? null);
+  if (!selected || selectedCli) {
+    const current = selectedCli as AiProviderEntry;
+    const scanned = cli.scannedAt ? new Date(cli.scannedAt).toLocaleString() : 'never';
+    return (
+      <div className="prov-mgr">
+        <header className="prov-mgr__header">
+          <p className="prov-mgr__intro">Manage custom model providers. Once configured, they can be selected during chat.</p>
+          <div className="prov-mgr__header-actions">
+            {rescanButton}
+            <button type="button" className="prov-mgr__add" onClick={addProvider}>
+              <Plus size={13} strokeWidth={1.75} />
+              Add provider
+            </button>
+          </div>
+        </header>
+        <div className="prov-mgr__body">
+          <aside className="prov-mgr__rail" aria-label="Provider list">
+            {cliGroup}
+            {renderGroup('providers', 'Providers', builtins)}
+            {renderGroup('custom', 'Custom providers', customs)}
+          </aside>
+          <section className="prov-mgr__detail" aria-label={`${current.name} settings`}>
+            <header className="prov-mgr__detail-head">
+              <span className="prov-mgr__item-icon prov-mgr__item-icon--lg"><Box size={15} strokeWidth={1.5} /></span>
+              <span className="prov-mgr__name">{current.name}</span>
+              <button
+                type="button"
+                className="prov-mgr__ghost-btn"
+                onClick={() => {
+                  setActiveProvider(current.id);
+                  notify(`${current.name} is now the chat provider`, 'success');
+                }}
+              >
+                Use for chat
+              </button>
+            </header>
+            <div className="prov-mgr__cli">
+              <p className="prov-mgr__cli-status" data-testid="cli-status">
+                <span className={`prov-mgr__dot prov-mgr__dot--${providerStatus(current)}`} aria-hidden="true" />
+                {current.usable === false
+                  ? `Not ready — log in first by running \`${current.type === 'claude-code' ? 'claude' : current.type}\` once in a terminal, then Rescan.`
+                  : 'Ready — chats run through this CLI using its own login.'}
+              </p>
+              <p className="prov-mgr__cli-note">
+                No API key is stored in Pigry: the CLI keeps your sign-in{current.type === 'claude-code' ? ' (your Claude subscription)' : ''}. Last scan: {scanned}. The result is cached, so the machine is not scanned on every start.
+              </p>
+              <h4 className="prov-mgr__cli-title">Models</h4>
+              {current.models.length === 0 ? (
+                <p className="prov-mgr__cli-note">This CLI uses its own default model (set it in the CLI itself).</p>
+              ) : (
+                <ul className="prov-mgr__cli-models">
+                  {current.models.map((m) => (
+                    <li key={m.id}>
+                      <button type="button" className={m.name === current.model ? 'is-on' : undefined} onClick={() => cli.setModel(current.id, m.name)}>
+                        {m.name}{m.name === current.model ? ' · default' : ''}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="prov-mgr__cli-note">
+                Chats work like with an API provider: history, attached files, images, Pigry's tools, parallel agents and effort all go through this CLI as the model (its own built-in tools are switched off, so Pigry's guards apply). Each turn starts a CLI process, so replies take a few seconds longer.
+              </p>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="prov-mgr">
       <header className="prov-mgr__header">
@@ -365,6 +460,7 @@ export function ProviderManager() {
           Manage custom model providers. Once configured, they can be selected during chat.
         </p>
         <div className="prov-mgr__header-actions">
+          {rescanButton}
           <button
             type="button"
             className="prov-mgr__icon-btn"
@@ -386,6 +482,7 @@ export function ProviderManager() {
 
       <div className="prov-mgr__body">
         <aside className="prov-mgr__rail" aria-label="Provider list">
+          {cliGroup}
           {renderGroup('providers', 'Providers', builtins)}
           {renderGroup('custom', 'Custom providers', customs)}
         </aside>

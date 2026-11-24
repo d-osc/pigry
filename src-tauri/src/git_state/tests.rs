@@ -1496,3 +1496,22 @@ fn copy_worktree_path_copies_files_and_folders_without_overwriting() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+
+#[test]
+fn file_tree_reports_ignored_paths_without_walking_ignored_folders() {
+    let dir = scratch_repo("tree-ignored");
+    write(&dir, ".gitignore", "node_modules/\n*.log\n");
+    write(&dir, "src/a.ts", "export {}\n");
+    commit_all(&dir, "c1");
+    write(&dir, "node_modules/pkg/index.js", "x\n");
+    write(&dir, "node_modules/pkg/deep/more.js", "x\n");
+    write(&dir, "debug.log", "noise\n");
+
+    let tree = list_tree(&dir).unwrap();
+    assert!(tree.ignored.iter().any(|p| p == "node_modules/"), "ignored folder listed once: {:?}", tree.ignored);
+    assert!(tree.ignored.iter().any(|p| p == "debug.log"), "ignored file listed: {:?}", tree.ignored);
+    assert!(!tree.ignored.iter().any(|p| p.starts_with("node_modules/") && p != "node_modules/"), "its contents are not walked");
+    assert!(!tree.ignored.iter().any(|p| p == "src/a.ts"), "tracked files are not ignored");
+    assert!(!tree.entries.iter().any(|p| p.starts_with("node_modules/") || p.ends_with(".log")), "entries stay free of ignored paths");
+    let _ = fs::remove_dir_all(&dir);
+}
