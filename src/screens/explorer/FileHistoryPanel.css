@@ -51,12 +51,69 @@
 }
 
 .file-history__row {
+  position: relative;
+  border-radius: var(--radius-sm);
+}
+
+.file-history__pick {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  width: 100%;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   text-align: left;
+}
+
+/* Restore sits on the author line, so leave it room. */
+.file-history__row--restorable .file-history__author {
+  padding-right: 76px;
+}
+
+.file-history__restore {
+  position: absolute;
+  right: 8px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.file-history__row:hover .file-history__restore,
+.file-history__row--selected .file-history__restore,
+.file-history__restore:focus-visible {
+  opacity: 1;
+}
+
+.file-history__restore:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.file-history__restore:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.file-history__tag {
+  max-width: 140px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-history__row:hover {

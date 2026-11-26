@@ -1794,10 +1794,17 @@ pub struct FileCommitEntry {
     pub author_name: String,
     pub author_initials: String,
     pub time_seconds: i64,
+    /// The file's path in this commit. It differs from the requested path for
+    /// commits made before the file was renamed.
+    pub path: String,
+    /// This commit deleted the file, so it has no content to compare or restore.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deleted: bool,
 }
 
-/// Commits that changed `path`, newest first (like `git log -- <path>`,
-/// without rename following).
+/// Commits that changed `path`, newest first, following renames like
+/// `git log --follow -- <path>`. Commits that deleted the path (before it was
+/// added again) are listed with `deleted: true`.
 pub fn build_file_history(
     repo_path: &Path,
     path: &str,
@@ -1835,6 +1842,8 @@ pub fn build_file_history(
 
     let mut entries = Vec::new();
     let mut walked = 0usize;
+    // The path being followed; it switches to the old name at a rename.
+    let mut current = path.to_string();
     for oid in revwalk {
         if walked >= MAX_WALKED || entries.len() >= MAX_RESULTS {
             break;
@@ -1849,26 +1858,24 @@ pub fn build_file_history(
             continue;
         }
         let tree = commit.tree().map_err(err)?;
-
-        let entry = match tree.get_path(Path::new(path)) {
-            Ok(entry) => entry,
-            Err(_) => continue, // path not present in this commit
+        let parent_tree = parent.as_ref().and_then(|parent| parent.tree().ok());
+        let (here, before) = path_ids(&repo, &tree, parent_tree.as_ref(), &current);
+        // Only commits where the blob differs from the first parent count.
+        let (deleted, renamed_from) = match (here, before) {
+            (Some(now), Some(then)) if now == then => continue,
+            (Some(_), Some(_)) => (false, None),
+            // Added here, or renamed from an older path. A merge brings the
+            // file in from its other parent, so only plain commits rename.
+            (Some(_), None) => (
+                false,
+                parent_tree
+                    .as_ref()
+                    .filter(|_| commit.parent_count() == 1)
+                    .and_then(|parent_tree| rename_source(&repo, parent_tree, &tree, &current)),
+            ),
+            (None, Some(_)) => (true, None),
+            (None, None) => continue, // path not present on either side
         };
-        // Only include commits where the blob differs from the first parent
-        // (or the path is new relative to it).
-        let changed = match parent {
-            Some(parent) => match parent.tree() {
-                Ok(parent_tree) => match parent_tree.get_path(Path::new(path)) {
-                    Ok(parent_entry) => parent_entry.id() != entry.id(),
-                    Err(_) => true, // newly added in this commit
-                },
-                Err(_) => true,
-            },
-            None => true, // root commit
-        };
-        if !changed {
-            continue;
-        }
 
         let author = commit.author();
         entries.push(FileCommitEntry {
@@ -1878,9 +1885,199 @@ pub fn build_file_history(
             author_name: author.name().unwrap_or("Unknown").to_string(),
             author_initials: initials_for(author.name().unwrap_or("")),
             time_seconds: commit.time().seconds() as i64,
+            path: current.clone(),
+            deleted,
         });
+        if let Some(old_path) = renamed_from {
+            current = old_path;
+        }
     }
     Ok(entries)
+}
+
+/// Object ids of `path` in `tree` and in `other`. Walks both trees one folder
+/// at a time and stops at the first folder that is identical on both sides
+/// (then both ids are that folder's id, which compare equal), so commits that
+/// did not touch the file's folders load only their root trees.
+fn path_ids(
+    repo: &Repository,
+    tree: &git2::Tree,
+    other: Option<&git2::Tree>,
+    path: &str,
+) -> (Option<git2::Oid>, Option<git2::Oid>) {
+    let parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    let mut a = Some(tree.clone());
+    let mut b = other.cloned();
+    for (index, part) in parts.iter().enumerate() {
+        let id_a = a.as_ref().and_then(|t| t.get_name(part).map(|entry| entry.id()));
+        let id_b = b.as_ref().and_then(|t| t.get_name(part).map(|entry| entry.id()));
+        if index + 1 == parts.len() || id_a == id_b {
+            return (id_a, id_b);
+        }
+        a = id_a.and_then(|id| repo.find_tree(id).ok());
+        b = id_b.and_then(|id| repo.find_tree(id).ok());
+        if a.is_none() && b.is_none() {
+            return (None, None);
+        }
+    }
+    (None, None)
+}
+
+/// Files compared by content when looking for a rename with a new file name.
+const MAX_RENAME_CANDIDATES: usize = 50;
+
+/// The path `path` had in `old_tree` when `new_tree` renamed it, or `None`
+/// when it was really added. Only `path` is matched, never every file in the
+/// commit, because git's full similarity search takes seconds on a commit that
+/// moves a whole folder. The lookup tries the same blob (a pure move), then
+/// deleted files with the same name, then a few others. Each candidate counts
+/// as a rename when at least half its lines are kept, like git's 50% default.
+fn rename_source(
+    repo: &Repository,
+    old_tree: &git2::Tree,
+    new_tree: &git2::Tree,
+    path: &str,
+) -> Option<String> {
+    let new_id = new_tree.get_path(Path::new(path)).ok()?.id();
+    // A tree-to-tree diff compares ids only; no file content is read here.
+    let diff = repo.diff_tree_to_tree(Some(old_tree), Some(new_tree), None).ok()?;
+    let deleted: Vec<(String, git2::Oid)> = diff
+        .deltas()
+        .filter(|delta| delta.status() == Delta::Deleted)
+        .filter_map(|delta| {
+            let old = delta.old_file();
+            Some((old.path()?.to_string_lossy().replace('\\', "/"), old.id()))
+        })
+        .collect();
+    if let Some((old_path, _)) = deleted.iter().find(|(_, id)| *id == new_id) {
+        return Some(old_path.clone());
+    }
+    let new_blob = repo.find_blob(new_id).ok()?;
+    if new_blob.is_binary() {
+        return None;
+    }
+    let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
+    let wanted = name(path);
+    let (same_name, others): (Vec<_>, Vec<_>) = deleted.iter().partition(|(old_path, _)| name(old_path) == wanted);
+    same_name
+        .into_iter()
+        .chain(others.into_iter().take(MAX_RENAME_CANDIDATES))
+        .find(|(_, old_id)| {
+            repo.find_blob(*old_id)
+                .ok()
+                .filter(|old_blob| !old_blob.is_binary())
+                .is_some_and(|old_blob| kept_line_ratio(old_blob.content(), new_blob.content()) >= 0.5)
+        })
+        .map(|(old_path, _)| old_path.clone())
+}
+
+/// Share of lines that two texts have in common, over the longer one.
+fn kept_line_ratio(old: &[u8], new: &[u8]) -> f64 {
+    let lines = |text: &[u8]| text.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()).count();
+    let longest = lines(old).max(lines(new));
+    if longest == 0 {
+        return 1.0;
+    }
+    let mut options = DiffOptions::new();
+    options.context_lines(0);
+    let Ok(patch) = git2::Patch::from_buffers(old, None, new, None, Some(&mut options)) else {
+        return 0.0;
+    };
+    let Ok((_, _, deletions)) = patch.line_stats() else {
+        return 0.0;
+    };
+    lines(old).saturating_sub(deletions) as f64 / longest as f64
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoredFile {
+    /// Path the content was read from in the commit (the old name after a rename).
+    pub source_path: String,
+    pub short_oid: String,
+    pub binary: bool,
+}
+
+/// Writes `path` in the working tree with its content from commit `oid`, like
+/// `git restore --source=<oid> -- <path>`: only this file changes, the index
+/// is left alone and nothing is committed. `source_path` is the file's path in
+/// that commit when it was renamed since; when it is missing and `path` is not
+/// in the commit either, the commit-to-HEAD rename is detected.
+pub fn restore_file_from_commit(
+    repo_path: &Path,
+    path: &str,
+    oid: &str,
+    source_path: Option<&str>,
+) -> Result<RestoredFile> {
+    let repo = Repository::discover(repo_path).map_err(err)?;
+    let target = safe_worktree_path(&repo, path, false)?;
+    let commit = repo
+        .revparse_single(oid)
+        .map_err(|e| format!("invalid commit id {oid}: {}", e.message()))?
+        .peel_to_commit()
+        .map_err(err)?;
+    let short_oid = commit.id().to_string()[..7].to_string();
+    let tree = commit.tree().map_err(err)?;
+    let source = match source_path.filter(|source| !source.trim().is_empty()) {
+        Some(source) => source.to_string(),
+        None if tree.get_path(Path::new(path)).is_ok() => path.to_string(),
+        None => repo
+            .head()
+            .ok()
+            .and_then(|head| head.peel_to_tree().ok())
+            .and_then(|head_tree| rename_source(&repo, &tree, &head_tree, path))
+            .unwrap_or_else(|| path.to_string()),
+    };
+    let entry = tree.get_path(Path::new(&source)).map_err(|_| {
+        format!("{source} does not exist in commit {short_oid}: it was deleted there or added later")
+    })?;
+    if entry.kind() != Some(ObjectType::Blob) || entry.filemode() == 0o120000 {
+        return Err(format!("{source} is not a regular file in commit {short_oid}"));
+    }
+    let blob = repo.find_blob(entry.id()).map_err(err)?;
+    let binary = blob.is_binary();
+
+    // Check the file out through libgit2 into a scratch folder, so line-ending
+    // and other filters match `git restore`, then copy it to the current path
+    // (which differs from the commit's path after a rename).
+    let staging = std::env::temp_dir().join(format!(
+        "pigry-restore-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default()
+    ));
+    std::fs::create_dir_all(&staging).map_err(err)?;
+    let checked_out = (|| -> Result<Vec<u8>> {
+        let mut builder = CheckoutBuilder::new();
+        builder
+            .target_dir(&staging)
+            .path(&source)
+            .disable_pathspec_match(true)
+            .update_index(false)
+            .recreate_missing(true)
+            .force();
+        repo.checkout_tree(commit.as_object(), Some(&mut builder))
+            .map_err(|e| format!("failed to read {source} at {short_oid}: {e}"))?;
+        std::fs::read(staging.join(&source))
+            .map_err(|e| format!("failed to read {source} at {short_oid}: {e}"))
+    })();
+    let _ = std::fs::remove_dir_all(&staging);
+    let bytes = checked_out?;
+
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create the folder for {path}: {e}"))?;
+    }
+    std::fs::write(&target, bytes).map_err(|e| format!("failed to write {path}: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = if entry.filemode() == 0o100755 { 0o755 } else { 0o644 };
+        let _ = std::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode));
+    }
+    Ok(RestoredFile { source_path: source, short_oid, binary })
 }
 
 /// Blob content of `path` as stored in commit `oid`.

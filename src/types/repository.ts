@@ -247,6 +247,10 @@ export interface FileCommitEntry {
   authorName: string;
   authorInitials: string;
   timeSeconds: number;
+  /** The file's path in this commit (an older name before a rename). */
+  path?: string;
+  /** This commit deleted the file: nothing to compare or restore. */
+  deleted?: boolean;
 }
 
 export interface HunkInfo {

@@ -928,6 +928,24 @@ export async function readFileAtCommit(
   return invoke('read_file_at_commit', { path, oid });
 }
 
+export interface RestoredFile {
+  /** Path the content came from in the commit (the old name after a rename). */
+  sourcePath: string;
+  shortOid: string;
+  binary: boolean;
+}
+
+/** Writes `path` in the working tree with its content at `oid` (an unstaged
+ * change, like `git restore --source=<oid> -- <path>`). */
+export async function restoreFileFromCommit(
+  path: string,
+  oid: string,
+  sourcePath?: string | null,
+): Promise<RestoredFile> {
+  if (!isTauri()) throw new Error('Restoring a file needs the desktop app.');
+  return invoke('restore_file_from_commit', { path, oid, sourcePath: sourcePath ?? null });
+}
+
 export type NetResultLike = NetResult;
 
 export async function gitFetch(): Promise<NetResult> {

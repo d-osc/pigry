@@ -1630,6 +1630,24 @@ pub async fn read_file_at_commit(
     git_state::read_file_at_commit(&repo_path, &path, &oid)
 }
 
+/// Explorer File history "Restore": puts one file back to its content at a
+/// commit as an unstaged working change (nothing is committed).
+#[tauri::command]
+pub async fn restore_file_from_commit(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    oid: String,
+    source_path: Option<String>,
+) -> Result<git_state::RestoredFile, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        git_state::restore_file_from_commit(&repo_path, &path, &oid, source_path.as_deref())
+    }).await.map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn git_fetch(state: State<'_, Mutex<AppState>>) -> Result<crate::net::NetResult, String> {
     let repo_path = {

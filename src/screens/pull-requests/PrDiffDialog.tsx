@@ -1,15 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { DiffEditor } from '../../editor/ThemedEditors';
-import { Clock, FileClock, GitCompare, X } from 'lucide-react';
-import type { editor as MonacoEditorNS } from 'monaco-editor';
-import type { Monaco } from '@monaco-editor/react';
-import { relativeTime } from '../../lib/relativeTime';
-import { getFileBlame } from '../../lib/tauriClient';
-import { ResizeHandle } from '../../app/ResizeHandle';
-import type { BlameLine } from '../../types/repository';
-import '../../editor/monacoSetup';
-import { FileHistoryPanel } from '../explorer/FileHistoryPanel';
-import { ComparePanel } from '../explorer/ComparePanel';
+import { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
+import { DiffWorkbench } from './DiffWorkbench';
 import './PrDiffDialog.css';
 
 interface PrDiffFile {
@@ -65,27 +56,15 @@ export function PrDiffDialog({
   headRef?: string;
   onClose: () => void;
 }) {
-  const [activePath, setActivePath] = useState(initialPath ?? files[0]?.path ?? '');
-  // Resizable panes — same drag handles as the Explorer editor layout.
-  const [filesWidth, setFilesWidth] = useState(300);
-  const [historyHeight, setHistoryHeight] = useState(220);
-  const [compareHeight, setCompareHeight] = useState(300);
-  // Toggles — all start off so the dialog opens on the current code diff.
-  const [historyOn, setHistoryOn] = useState(false);
-  const [compareOn, setCompareOn] = useState(false);
-  const [blameOn, setBlameOn] = useState(false);
-  const [compareOid, setCompareOid] = useState<string | null>(null);
-  // Main (base→head) diff layout — split by default, toggleable inline.
-  const [mainSplit, setMainSplit] = useState(true);
-  const [blameRows, setBlameRows] = useState<BlameLine[] | null>(null);
-  const [blameError, setBlameError] = useState('');
-  const [modifiedEditor, setModifiedEditor] =
-    useState<MonacoEditorNS.IStandaloneCodeEditor | null>(null);
-  const [monacoInst, setMonacoInst] = useState<Monaco | null>(null);
-  const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
-
-  const active = files.find((file) => file.path === activePath) ?? files[0];
-  const stat = useMemo(() => (active ? fileStat(active) : { added: 0, removed: 0 }), [active]);
+  const [selectedPath, setSelectedPath] = useState(initialPath ?? files[0]?.path ?? '');
+  const active = files.find((file) => file.path === selectedPath) ?? files[0];
+  const listed = useMemo(
+    () => files.map((file) => {
+      const stat = fileStat(file);
+      return { path: file.path, additions: stat.added, deletions: stat.removed };
+    }),
+    [files],
+  );
 
   // Escape closes; clicking the dark backdrop also closes.
   useEffect(() => {
@@ -95,29 +74,6 @@ export function PrDiffDialog({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-
-  // Reset per-file data when switching files.
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      setCompareOid(null);
-      setBlameRows(null);
-      setBlameError('');
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [activePath]);
-
-  // Fetch blame for the active file when the Blame toggle turns on.
-  useEffect(() => {
-    if (!blameOn) return;
-    const t = window.setTimeout(() => {
-      getFileBlame(activePath, headRef ?? null)
-        .then((rows) => setBlameRows(rows))
-        .catch((error) =>
-          setBlameError(error instanceof Error ? error.message : String(error)),
-        );
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [blameOn, activePath, headRef]);
 
   // Clicking anywhere outside the dialog closes it (capture phase).
   useEffect(() => {
@@ -129,120 +85,6 @@ export function PrDiffDialog({
     document.addEventListener('mousedown', onDocMouseDown, true);
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
   }, [onClose]);
-
-  // Blame decorations: author + sha injected after each modified line
-  // (Explorer blame style). Cleared when toggled off or file changes. The
-  // previous collection is always cleared first so re-runs can never stack
-  // duplicate labels on the same line.
-  useEffect(() => {
-    decorationsRef.current?.clear();
-    if (!blameOn || !blameRows || !modifiedEditor) return;
-    const model = modifiedEditor.getModel();
-    if (!model) return;
-    const decorations = blameRows
-      .filter((line) => line.line <= model.getLineCount())
-      .map((line) => {
-        const maxCol = model.getLineMaxColumn(line.line);
-        const label = line.uncommitted
-          ? '  — Uncommitted'
-          : `  ${line.shortOid} ${line.authorName} · ${relativeTime(line.timeSeconds)}`;
-        return {
-          range: {
-            startLineNumber: line.line,
-            startColumn: 1,
-            endLineNumber: line.line,
-            endColumn: maxCol,
-          },
-          options: {
-            after: {
-              content: label,
-              inlineClassName: 'blame-annotation',
-            },
-          },
-        };
-      });
-    decorationsRef.current = modifiedEditor.createDecorationsCollection(decorations);
-  }, [blameOn, blameRows, modifiedEditor, activePath]);
-
-  // Blame hover popup: GitLens-style card on the modified editor.
-  useEffect(() => {
-    if (!blameOn || !blameRows || !modifiedEditor || !monacoInst) return;
-    const byLine = new Map(blameRows.map((line) => [line.line, line]));
-    const model = modifiedEditor.getModel();
-    if (!model) return;
-    const languageId = model.getLanguageId();
-    const disposable = monacoInst.languages.registerHoverProvider(languageId, {
-      provideHover: (
-        hoverModel: MonacoEditorNS.ITextModel,
-        position: { lineNumber: number },
-      ) => {
-        // Providers register per language; ignore hovers from other editors
-        // sharing the language so contents never merge across editors.
-        if (hoverModel.id !== model.id) return null;
-        const info = byLine.get(position.lineNumber);
-        if (!info) return null;
-        const range = new monacoInst.Range(position.lineNumber, 1, position.lineNumber, 1);
-
-        if (info.uncommitted) {
-          return {
-            range,
-            contents: [
-              { value: '**Uncommitted changes**' },
-              {
-                value: 'This line is edited in your working tree and is not part of any commit yet.',
-              },
-              {
-                value: `👤 You (working tree) · 📄 ${activePath} · line ${info.line}`,
-              },
-            ],
-          };
-        }
-
-        // Summary is collapsed to one line by git (newlines → spaces), so
-        // compare with whitespace normalized — a plain startsWith fails on
-        // multi-line first paragraphs and echoed the summary twice.
-        const summaryNorm = info.summary.replace(/\s+/g, ' ').trim();
-        const paragraphs = info.message
-          .split(/\n{2,}/)
-          .map((p) => p.replace(/\s+/g, ' ').trim())
-          .filter(Boolean);
-        const bodyParas =
-          paragraphs.length > 0 && paragraphs[0] === summaryNorm
-            ? paragraphs.slice(1)
-            : paragraphs;
-        const authored = new Date(info.timeSeconds * 1000);
-        const absolute = authored.toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        });
-
-        const contents: { value: string; isTrusted?: boolean }[] = [
-          { value: `**${info.summary}**` },
-        ];
-        for (const paragraph of bodyParas) {
-          contents.push({ value: paragraph });
-        }
-        contents.push(
-          { value: `👤 **${info.authorName}**${info.authorEmail ? ` \`<${info.authorEmail}>\`` : ''}` },
-          { value: `🕐 ${absolute} · ${relativeTime(info.timeSeconds)}` },
-          { value: `🔑 \`${info.oid}\`` },
-          { value: `📄 \`${activePath}\` · line ${info.line}` },
-        );
-        if (info.filesChanged !== undefined) {
-          contents.push({
-            value: `📊 ${info.filesChanged} file${info.filesChanged === 1 ? '' : 's'} changed · +${info.insertions ?? 0} −${info.deletions ?? 0}`,
-          });
-        }
-        return { range, contents };
-      },
-    });
-    return () => disposable.dispose();
-  }, [blameOn, blameRows, modifiedEditor, monacoInst, activePath]);
-
-  const statLabel = `+${stat.added} −${stat.removed}`;
 
   return (
     <div className="pr-diff-dialog" role="dialog" aria-modal="true" aria-label={title} onClick={onClose}>
@@ -262,202 +104,14 @@ export function PrDiffDialog({
           </div>
         </header>
 
-        <div className="pr-diff-dialog__body">
-          <aside className="pr-diff-dialog__files" style={{ width: filesWidth }}>
-            <p className="pr-diff-dialog__files-label">
-              {files.length} changed file{files.length === 1 ? '' : 's'}
-            </p>
-            {files.map((file) => {
-              const fileSt = fileStat(file);
-              return (
-                <button
-                  key={file.path}
-                  type="button"
-                  className={`pr-diff-dialog__file${file.path === activePath ? ' pr-diff-dialog__file--active' : ''}`}
-                  onClick={() => setActivePath(file.path)}
-                  title={file.path}
-                >
-                  <span className="pr-diff-dialog__file-path">{file.path}</span>
-                  <span className="pr-diff-dialog__file-stat">
-                    <span className="pr-diff--added">+{fileSt.added}</span>{' '}
-                    <span className="pr-diff--removed">−{fileSt.removed}</span>
-                  </span>
-                </button>
-              );
-            })}
-            {files.length === 0 && (
-              <p className="pr-diff-dialog__files-label">No changed files.</p>
-            )}
-          </aside>
-
-          <ResizeHandle
-            orientation="v"
-            label="Resize file list"
-            onDelta={(dx) => setFilesWidth((w) => Math.min(480, Math.max(220, w + dx)))}
-          />
-
-          <div className="pr-diff-dialog__compare">
-            <div className="diff-pane__controls pr-diff-dialog__controls">
-              <span className="diff-pane__comparison">{active ? active.path : 'No files'}</span>
-              <span className="diffstat">
-                <span className="diffstat__additions">+{stat.added}</span>
-                <span className="diffstat__deletions">−{stat.removed}</span>
-              </span>
-              <div className="segmented" role="group" aria-label="Diff layout">
-                <button
-                  type="button"
-                  className={`segmented__item${mainSplit ? ' is-active' : ''}`}
-                  onClick={() => setMainSplit(true)}
-                >
-                  Split
-                </button>
-                <button
-                  type="button"
-                  className={`segmented__item${!mainSplit ? ' is-active' : ''}`}
-                  onClick={() => setMainSplit(false)}
-                >
-                  Unified
-                </button>
-              </div>
-              <div className="diff-pane__view-options">
-                {blameOn && blameError && (
-                  <span className="pr-diff-dialog__hint">{blameError}</span>
-                )}
-                <div className="segmented" role="group" aria-label="Feature toggles">
-                  <button
-                    type="button"
-                    className={`segmented__item${historyOn ? ' is-active' : ''}`}
-                    onClick={() => setHistoryOn((value) => !value)}
-                    title="File history timeline (PR commits)"
-                  >
-                    <FileClock size={12} strokeWidth={1.5} />
-                    History
-                  </button>
-                  <button
-                    type="button"
-                    className={`segmented__item${compareOn ? ' is-active' : ''}`}
-                    onClick={() => setCompareOn((value) => !value)}
-                    title="Compare against the selected history commit"
-                  >
-                    <GitCompare size={12} strokeWidth={1.5} />
-                    Compare
-                  </button>
-                  <button
-                    type="button"
-                    className={`segmented__item${blameOn ? ' is-active' : ''}`}
-                    onClick={() => setBlameOn((value) => !value)}
-                    title="Per-line blame annotations"
-                  >
-                    <Clock size={12} strokeWidth={1.5} />
-                    Blame
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {historyOn && (
-              <>
-                <div className="pr-diff-dialog__history" style={{ height: historyHeight }}>
-                  <FileHistoryPanel
-                    path={activePath}
-                    refName={headRef}
-                    selectedOid={compareOid}
-                    onSelect={(oid) => {
-                      setCompareOid(oid);
-                      setCompareOn(true);
-                    }}
-                  />
-                </div>
-                <ResizeHandle
-                  orientation="h"
-                  label="Resize file history"
-                  onDelta={(_dx, dy) =>
-                    setHistoryHeight((h) => Math.min(480, Math.max(120, (h ?? 220) + dy)))
-                  }
-                />
-              </>
-            )}
-
-            {active && !active.original && !active.modified && (
-              <p className="diff-pane__notice">No text diff available for this file.</p>
-            )}
-            {active && (active.original || active.modified) && (
-              <div className="pr-diff-dialog__editor">
-                <DiffEditor
-                  key={active.path}
-                  original={active.original}
-                  modified={active.modified}
-                  language={active.language}
-                  onMount={(diffEditor, monaco) => {
-                    setModifiedEditor(diffEditor.getModifiedEditor());
-                    setMonacoInst(monaco);
-                    requestAnimationFrame(() => diffEditor.layout());
-                  }}
-                  options={{
-                    readOnly: true,
-                    renderSideBySide: mainSplit,
-                    ignoreTrimWhitespace: true,
-                    renderOverviewRuler: true,
-                    fontSize: 11,
-                    lineHeight: 18,
-                    fontFamily: "'Fira Code', ui-monospace, monospace",
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    renderLineHighlight: 'line',
-                    diffWordWrap: 'off',
-                    padding: { top: 8, bottom: 8 },
-                    automaticLayout: true,
-                    scrollbar: {
-                      verticalScrollbarSize: 10,
-                      horizontalScrollbarSize: 10,
-                      useShadows: false,
-                    },
-                    stickyScroll: { enabled: false },
-                  }}
-                  loading={<div className="diff-pane__notice">Loading diff…</div>}
-                />
-              </div>
-            )}
-
-            {compareOn && active && (
-              <>
-                <ResizeHandle
-                  orientation="h"
-                  label="Resize compare view"
-                  onDelta={(_dx, dy) =>
-                    setCompareHeight((h) => Math.min(560, Math.max(140, (h ?? 300) - dy)))
-                  }
-                />
-                <div className="pr-diff-dialog__comparewrap" style={{ height: compareHeight }}>
-                  <ComparePanel
-                  path={activePath}
-                  workingContent={active.modified}
-                  language={active.language}
-                  baseOid={compareOid}
-                  refName={headRef}
-                />
-              </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <footer className="pr-diff-dialog__foot">
-          <span>
-            {[
-              historyOn ? 'History on' : null,
-              compareOn ? 'Compare on' : null,
-              blameOn ? 'Blame on' : null,
-            ]
-              .filter(Boolean)
-              .join(' · ') || 'Current code diff'}
-          </span>
-          <span>
-            {statLabel} · {active?.path ?? ''}
-          </span>
-        </footer>
+        <DiffWorkbench
+          files={listed}
+          activePath={active?.path ?? ''}
+          onSelect={setSelectedPath}
+          content={active ? { kind: 'ready', ...active } : null}
+          headRef={headRef}
+        />
       </div>
     </div>
   );
 }
-

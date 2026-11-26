@@ -274,6 +274,7 @@ pub fn run() {
             commands::rename_worktree_folder,
             commands::get_file_history,
             commands::read_file_at_commit,
+            commands::restore_file_from_commit,
             commands::create_branch,
             commands::checkout_branch,
             commands::delete_branch,

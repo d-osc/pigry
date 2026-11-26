@@ -84,6 +84,30 @@
 }
 
 /* ---- Inline history block ---- */
+/* File history "Restore" confirmation (the file has work that would be lost). */
+.editor-pane__confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--orange, var(--accent));
+  background: var(--orange-tint, var(--accent-tint-1));
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.editor-pane__confirm-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-pane__confirm .primary-button,
+.editor-pane__confirm .outline-button {
+  padding: 3px 10px;
+  font-size: var(--fs-xs);
+}
+
 .editor-pane__history {
   display: flex;
   flex-direction: column;

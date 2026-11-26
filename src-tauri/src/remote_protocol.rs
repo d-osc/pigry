@@ -54,6 +54,7 @@ pub fn is_workspace_command(method: &str) -> bool {
             | "search_code"
             | "get_file_history"
             | "read_file_at_commit"
+            | "restore_file_from_commit"
             | "get_file_blame"
             | "get_line_changes"
             | "get_commit_oid_set"

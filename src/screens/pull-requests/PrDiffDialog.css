@@ -218,3 +218,22 @@
 .pr-diff-dialog__history .file-history {
   height: 100%;
 }
+
+/* Shared file list (DiffWorkbench) — used by the dialog and inline views */
+.pr-diff-dialog__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pr-diff-dialog__file-list .pr-diff-dialog__file {
+  width: 100%;
+}
+
+.pr-diff-dialog__file-path .push__file-status {
+  display: inline-block;
+  margin-right: 6px;
+}

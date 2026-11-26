@@ -317,6 +317,12 @@ const SHEET_TOOL_NAMES = ['sheet_list', 'sheet_read', 'sheet_write', 'sheet_edit
 /** The Docs tools (src/extensions/docs/docsTools.ts). */
 const DOCS_TOOL_NAMES = ['docs_list', 'docs_read', 'docs_write', 'docs_edit', 'docs_preview', 'docs_export', 'docs_open'];
 
+/** The Slides tools (src/extensions/slides/slidesTools.ts). */
+const SLIDES_TOOL_NAMES = ['slides_list', 'slides_read', 'slides_write', 'slides_edit', 'slides_preview', 'slides_export', 'slides_open'];
+
+/** The Notes tools (src/extensions/notes/notesTools.ts). */
+const NOTES_TOOL_NAMES = ['notes_list', 'notes_read', 'notes_search', 'notes_write', 'notes_edit', 'notes_open'];
+
 /** The Video Editor tools (src/extensions/videoeditor/videoTools.ts). */
 const VIDEO_TOOL_NAMES = ['video_list', 'video_read', 'video_write', 'video_edit', 'video_preview', 'video_export', 'video_open'];
 const GAME_TOOL_NAMES = ['game_list', 'game_read', 'game_write', 'game_edit', 'game_run', 'game_preview', 'game_export', 'game_open'];
@@ -399,6 +405,22 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     emoji: '📝',
     tools: [...DOCS_TOOL_NAMES, 'read_file', 'list_files', 'read_word', 'read_image', 'agent_lookup', 'agent_contacts'],
     skills: ['docs-editor', 'docs-structure-and-formatting', 'docs-review-and-suggestions'],
+  },
+  slides: {
+    username: 'slides',
+    role: 'Presentation assistant',
+    description: 'Builds and edits presentations in the Slides menu — layouts and themes, text, shapes, images, tables, charts and icons, alignment and grouping, transitions and animations, speaker notes and comments — looks at pictures of the slides and exports PowerPoint, PDF, PNG or an HTML presentation.',
+    emoji: '📽️',
+    tools: [...SLIDES_TOOL_NAMES, 'read_file', 'list_files', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['slides-editor', 'slides-design-principles', 'slides-review-checklist'],
+  },
+  notes: {
+    username: 'notes',
+    role: 'Notes assistant',
+    description: 'Keeps notes and lists in the Notes menu — takes notes and checklists, ticks and reorders items, adds labels, colours, images and reminders, pins, archives and tidies notes, and finds things across every notebook.',
+    emoji: '💡',
+    tools: [...NOTES_TOOL_NAMES, 'read_file', 'list_files', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['notes-editor', 'notes-organizing'],
   },
   videoeditor: {
     username: 'videoeditor',
@@ -741,6 +763,24 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '📊',
     tools: ['list_files', 'read_file', 'read_excel', 'web_search', ...SHEET_TOOL_NAMES],
     skills: ['sheet-editor', 'sheet-formulas', 'sheet-data-cleaning', 'sheet-analysis-and-pivots', 'sheet-charts-and-dashboards', 'sheet-financial-modeling', 'sheet-design-best-practices'],
+  }],
+  slides: [{
+    username: 'presenter',
+    name: 'Presenter',
+    role: 'Presentation designer and storyteller',
+    description: 'Builds decks the way a strong Google Slides presenter does: finds the one message and the audience first, outlines the story before designing, writes one idea per slide with sentence headlines backed by visual evidence, keeps text large and high-contrast with plenty of space, turns data into one clear chart with the takeaway as the title, moves detail into speaker notes, then checks every slide with a picture and the review before exporting.',
+    emoji: '🎤',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...SLIDES_TOOL_NAMES],
+    skills: ['slides-editor', 'slides-storytelling', 'slides-assertion-evidence', 'slides-design-principles', 'slides-data-and-charts', 'slides-deck-types', 'slides-speaker-notes-and-delivery', 'slides-accessibility', 'slides-review-checklist'],
+  }],
+  notes: [{
+    username: 'organizer',
+    name: 'Organizer',
+    role: 'Personal organizer and note-taker',
+    description: 'Keeps notes the way a tidy Google Keep user does: captures quickly and sorts later, turns anything with steps into a checklist, gives every note a short searchable title, uses a few broad labels and colours with one meaning each, pins only what is needed this week, sets reminders for things with a date, archives what is done instead of deleting it, and reviews the notes weekly to merge duplicates and clear finished lists.',
+    emoji: '🗂️',
+    tools: ['list_files', 'read_file', 'read_image', 'web_search', ...NOTES_TOOL_NAMES],
+    skills: ['notes-editor', 'notes-capture-and-lists', 'notes-organizing', 'notes-reminders-and-planning', 'notes-weekly-review'],
   }],
   docs: [{
     username: 'writer',

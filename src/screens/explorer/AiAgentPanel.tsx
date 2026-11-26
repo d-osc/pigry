@@ -18,7 +18,11 @@ import { AUDIO_TOOLS } from '../../extensions/audioeditor/audioTools';
 import { SHEET_TOOLS } from '../../extensions/sheet/sheetTools';
 import { getOpenSheet, getOpenSheetSelection } from '../../extensions/sheet/sheetStore';
 import { DOCS_TOOLS } from '../../extensions/docs/docsTools';
+import { SLIDES_TOOLS } from '../../extensions/slides/slidesTools';
 import { getOpenDoc, getOpenDocSelection } from '../../extensions/docs/docsStore';
+import { getOpenDeck, getOpenDeckSelection } from '../../extensions/slides/slidesStore';
+import { NOTES_TOOLS } from '../../extensions/notes/notesTools';
+import { getOpenBook, getOpenNote } from '../../extensions/notes/notesStore';
 import { getOpenAudio } from '../../extensions/audioeditor/audioStore';
 import { getOpenVideo } from '../../extensions/videoeditor/videoStore';
 import { getOpenModel } from '../../extensions/model3d/model3dStore';
@@ -1355,7 +1359,7 @@ const BROWSER_EXTRAS: ToolSpec[] = [
 
 const RUNTIME_AGENT_TOOLS = [
   ...FILE_TOOLS, ...WORKSPACE_AGENT_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS,
-  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
+  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
 ];
 
 /** Short label shown as a tool-activity chip in the chat bubble. */
@@ -1770,6 +1774,30 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
           'Use docs_list / docs_read / docs_write / docs_edit / docs_preview / docs_export / docs_open — do not hand-edit the JSON with write_file. ' +
           'Draft with Markdown (docs_write markdown or the insert op); in a document the user wrote, propose changes with suggest and comment instead of rewriting it. Read the Review lines and look at the pages with docs_preview before reporting it done. Word export keeps styles, lists, tables, images, footnotes, comments and suggestions (as tracked changes).' +
           (openDoc ? `\nThe user currently has the document "${openDoc}" open${selection ? ` with this selected: "${selection}"` : ''} (read it with docs_read before changing it).` : '');
+      }
+    }
+    {
+      const openDeck = getOpenDeck();
+      if (team === 'Slides' || openDeck) {
+        const where = getOpenDeckSelection();
+        context +=
+          '\n\n[Slides]\n' +
+          'Presentations live in .pigry/slides/<agent>/<name>.slides.json (one folder per agent) and are edited in the Slides menu: a Google Slides-style editor with themes (colours and fonts), layouts with placeholders, text boxes with rich text, shapes, lines and arrows, images, tables, charts, icons, video and link cards, grouping, alignment, transitions, click-by-click animations, speaker notes, comments and a present mode with presenter view. ' +
+          'Use slides_list / slides_read / slides_write / slides_edit / slides_preview / slides_export / slides_open — do not hand-edit the JSON with write_file. ' +
+          'Outline the story first (slides_write markdown is the fastest way to a first draft), keep one idea per slide with a sentence title, put detail in the speaker notes, use theme colours ($accent, $text…) instead of fixed ones, and look at the slides with slides_preview and read the Review lines before reporting it done. PowerPoint export keeps text, shapes, images, tables, backgrounds, transitions and notes; charts become pictures and animations are not written.' +
+          (openDeck ? `\nThe user currently has the presentation "${openDeck}" open${where ? ` at ${where}` : ''} (read it with slides_read before changing it).` : '');
+      }
+    }
+    {
+      const openBook = getOpenBook();
+      if (team === 'Notes' || openBook) {
+        const note = getOpenNote();
+        context +=
+          '\n\n[Notes]\n' +
+          'Notes live in notebooks, .pigry/notes/<agent>/<name>.notes.json (one folder per agent; the user\'s own notes are user/notes), shown in the Notes menu: a Google Keep-style board of note cards — text notes and checklists with colours, backgrounds, labels, images, reminders, pinned, archived and trashed notes. ' +
+          'Use notes_list / notes_read / notes_search / notes_write / notes_edit / notes_open — do not hand-edit the JSON with write_file. ' +
+          'notes_edit without a name adds to your own "notes" notebook; pass user/notes to change the user\'s notes. Address notes by the ids notes_read shows; prefer archive over trash, and never empty the trash or delete forever unless asked.' +
+          (openBook ? `\nThe user currently has the notebook "${openBook}" open${note ? ` and is editing note ${note}` : ''} (read it with notes_read before changing it).` : '');
       }
     }
     // Project instructions (.pigry/instructions.md) — always ride along.

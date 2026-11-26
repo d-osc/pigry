@@ -239,6 +239,12 @@ fn run(root: &PathBuf, method: &str, params: &Value) -> Result<Value> {
                     string!("path"),
                     string!("oid"),
                 )?),
+                "restore_file_from_commit" => value(git_state::restore_file_from_commit(
+                    root,
+                    string!("path"),
+                    string!("oid"),
+                    optional!("sourcePath"),
+                )?),
                 "get_file_blame" => {
                     match optional!("refName").filter(|name| !name.trim().is_empty()) {
                         Some(name) => value(git_state::blame_at(root, string!("path"), name)?),

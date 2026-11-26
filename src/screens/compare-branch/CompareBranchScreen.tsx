@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, ChevronDown, ChevronRight, GitCompare, RefreshCw } from 'lucide-react';
-import { DiffEditor } from '../../editor/ThemedEditors';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowRight, GitCompare, RefreshCw } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
-import { useRequestGate } from '../../hooks/useRequestGate';
 import {
   compareBranches,
   readFileAtCommit,
   type BranchComparison,
-  type MergePreviewCommitFile,
 } from '../../lib/tauriClient';
 import type { RepositoryState } from '../../types/repository';
+import { DiffWorkbench, type DiffWorkbenchContent } from '../pull-requests/DiffWorkbench';
 import '../push-commits/PushCommitsScreen.css';
 import './CompareBranchScreen.css';
 
@@ -20,7 +18,7 @@ export function CompareBranchScreen() {
   if (!repository) return null;
 
   return (
-    <div className="push-screen">
+    <div className="push-screen compare-branch">
       <h2 className="compare-branch__title"><GitCompare size={18} /> Compare branch</h2>
       {mode === 'tauri' ? (
         <BranchPicker key={repository.localPath} repository={repository} />
@@ -107,14 +105,10 @@ function BranchPicker({ repository }: { repository: RepositoryState }) {
 
 type LoadResult<T> = { data: T } | { error: string };
 type FileVersion = Awaited<ReturnType<typeof readFileAtCommit>> | null;
+type LoadedFile = { path: string; result: LoadResult<[FileVersion, FileVersion]> };
 
 function ComparisonResults({ baseRef, compareRef }: { baseRef: string; compareRef: string }) {
   const [result, setResult] = useState<LoadResult<BranchComparison> | null>(null);
-  const [visibleCount, setVisibleCount] = useState(FILE_PAGE_SIZE);
-  const [openFile, setOpenFile] = useState<string | null>(null);
-  const [versions, setVersions] = useState<LoadResult<[FileVersion, FileVersion]> | null>(null);
-  const [split, setSplit] = useState(true);
-  const fileGate = useRequestGate();
 
   useEffect(() => {
     let active = true;
@@ -127,112 +121,85 @@ function ComparisonResults({ baseRef, compareRef }: { baseRef: string; compareRe
 
   if (!result) return <p role="status">Comparing branches…</p>;
   if ('error' in result) return <p role="alert">Could not compare branches. {result.error}</p>;
+  return <ComparisonView comparison={result.data} compareRef={compareRef} />;
+}
 
-  const { baseOid, compareOid, baseOnly, compareOnly, files } = result.data;
-  const toggleFile = ({ path, status }: MergePreviewCommitFile) => {
-    const isCurrent = fileGate.begin();
-    setVersions(null);
-    if (openFile === path) {
-      setOpenFile(null);
-      return;
+/** Changed files on the left, the selected file's diff on the right — the PR "View full diff" layout, inline. */
+function ComparisonView({ comparison, compareRef }: { comparison: BranchComparison; compareRef: string }) {
+  const { baseOid, compareOid, baseOnly, compareOnly, files } = comparison;
+  const [visibleCount, setVisibleCount] = useState(FILE_PAGE_SIZE);
+  const [activePath, setActivePath] = useState(files[0]?.path ?? '');
+  const [loaded, setLoaded] = useState<LoadedFile | null>(null);
+  const activeFile = files.find(file => file.path === activePath);
+
+  // One request per file: revisiting a file (or StrictMode re-running the effect) reuses it.
+  const reads = useRef(new Map<string, Promise<[FileVersion, FileVersion]>>());
+
+  useEffect(() => {
+    if (!activeFile) return;
+    let live = true;
+    const { path, status } = activeFile;
+    let read = reads.current.get(path);
+    if (!read) {
+      read = Promise.all([
+        status === 'A' ? null : readFileAtCommit(path, baseOid),
+        status === 'D' ? null : readFileAtCommit(path, compareOid),
+      ]);
+      // A failed read is retried the next time the file is picked.
+      read.catch(() => reads.current.delete(path));
+      reads.current.set(path, read);
     }
-    setOpenFile(path);
-    Promise.all([
-      status === 'A' ? null : readFileAtCommit(path, baseOid),
-      status === 'D' ? null : readFileAtCommit(path, compareOid),
-    ]).then(
-      data => { if (isCurrent()) setVersions({ data }); },
-      error => { if (isCurrent()) setVersions({ error: String(error) }); },
+    read.then(
+      data => { if (live) setLoaded({ path, result: { data } }); },
+      error => { if (live) setLoaded({ path, result: { error: String(error) } }); },
     );
-  };
+    return () => { live = false; };
+  }, [activeFile, baseOid, compareOid]);
 
   return (
-    <section className="push__section" aria-label="Branch comparison">
+    <section className="push__section compare-branch__results" aria-label="Branch comparison">
       <div className="compare-branch__commits">
         <span>Base <code>{baseOid.slice(0, 7)}</code> · {baseOnly} {baseOnly === 1 ? 'unique commit' : 'unique commits'}</span>
         <span>Compare <code>{compareOid.slice(0, 7)}</code> · {compareOnly} {compareOnly === 1 ? 'unique commit' : 'unique commits'}</span>
       </div>
-      <div className="push__list-head">
-        <h3 className="push__section-title">Files changed ({files.length})</h3>
-        {files.length > 0 && (
-          <div className="push__view-mode" role="group" aria-label="Diff layout">
-            <button type="button" className={split ? 'is-active' : ''} aria-pressed={split} onClick={() => setSplit(true)}>Split</button>
-            <button type="button" className={!split ? 'is-active' : ''} aria-pressed={!split} onClick={() => setSplit(false)}>Unified</button>
-          </div>
-        )}
-      </div>
       {files.length === 0 ? (
-        <p role="status">No file differences between the selected branches.</p>
+        <>
+          <h3 className="push__section-title">Files changed (0)</h3>
+          <p role="status">No file differences between the selected branches.</p>
+        </>
       ) : (
-        <ul className="push__files compare-branch__files">
-          {files.slice(0, visibleCount).map(file => {
-            const expanded = openFile === file.path;
-            const Chevron = expanded ? ChevronDown : ChevronRight;
-            return (
-              <li key={file.path} className="push__file">
-                <button
-                  type="button"
-                  className="push__file-row"
-                  title={file.path}
-                  aria-expanded={expanded}
-                  onClick={() => toggleFile(file)}
-                >
-                  <Chevron size={14} aria-hidden="true" />
-                  <span className={`push__file-status push__file-status--${file.status}`}>{file.status}</span>
-                  <span className="push__file-path">{file.path}</span>
-                  <span className="push__file-stats">
-                    <span className="stats-add">+{file.additions}</span>
-                    <span className="stats-del">−{file.deletions}</span>
-                  </span>
-                </button>
-                {expanded && <FileComparison key={file.path} result={versions} split={split} />}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {files.length > visibleCount && (
-        <button
-          type="button"
-          className="push__show-more"
-          onClick={() => setVisibleCount(count => count + FILE_PAGE_SIZE)}
-        >
-          Show more files ({files.length - visibleCount} remaining)
-        </button>
+        <div className="compare-branch__workbench">
+          <DiffWorkbench
+            files={files.slice(0, visibleCount)}
+            activePath={activePath}
+            onSelect={setActivePath}
+            content={activeFile ? fileContent(loaded, activeFile.path) : null}
+            headRef={compareRef}
+            filesLabel={<h3 className="pr-diff-dialog__files-label">Files changed ({files.length})</h3>}
+            filesFooter={files.length > visibleCount && (
+              <button
+                type="button"
+                className="push__show-more"
+                onClick={() => setVisibleCount(count => count + FILE_PAGE_SIZE)}
+              >
+                Show more files ({files.length - visibleCount} remaining)
+              </button>
+            )}
+          />
+        </div>
       )}
     </section>
   );
 }
 
-function FileComparison({ result, split }: {
-  result: LoadResult<[FileVersion, FileVersion]> | null;
-  split: boolean;
-}) {
-  if (!result) return <p className="push__empty" role="status">Loading file comparison…</p>;
-  if ('error' in result) return <p className="push__empty" role="alert">Could not compare file. {result.error}</p>;
-  const [before, after] = result.data;
-  if (before?.tooLarge || after?.tooLarge) return <p className="push__empty">This file is too large to compare.</p>;
-  if (before?.binary || after?.binary) return <p className="push__empty">Binary file comparison is unavailable.</p>;
-  if ((before?.content ?? '') === (after?.content ?? '')) {
-    return <p className="push__empty">No text changes.</p>;
-  }
-
-  return (
-    <div className="compare-branch__diff">
-      <DiffEditor
-        height={320}
-        language={after?.language ?? before?.language ?? 'plaintext'}
-        original={before?.content ?? ''}
-        modified={after?.content ?? ''}
-        options={{
-          readOnly: true,
-          renderSideBySide: split,
-          useInlineViewWhenSpaceIsLimited: false,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          automaticLayout: true,
-        }}
-      />
-    </div>
-  );
+function fileContent(loaded: LoadedFile | null, path: string): DiffWorkbenchContent {
+  if (!loaded || loaded.path !== path) return { kind: 'loading' };
+  if ('error' in loaded.result) return { kind: 'error', message: `Could not compare file. ${loaded.result.error}` };
+  const [before, after] = loaded.result.data;
+  if (before?.tooLarge || after?.tooLarge) return { kind: 'notice', message: 'This file is too large to compare.' };
+  if (before?.binary || after?.binary) return { kind: 'notice', message: 'Binary file comparison is unavailable.' };
+  const original = before?.content ?? '';
+  const modified = after?.content ?? '';
+  if (original === modified) return { kind: 'notice', message: 'No text changes.' };
+  return { kind: 'ready', original, modified, language: after?.language ?? before?.language ?? 'plaintext' };
 }

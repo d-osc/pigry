@@ -32,6 +32,8 @@ const PREPARE = {
   videoeditor: async (page) => { await page.evaluate(() => window.__help.run('video_open', { name: 'launch-teaser' })); await quiet(page.locator('canvas[aria-label="Video preview"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(800); await click(page, page.getByRole('button', { name: /^text clip/ }).first()); await quiet(page.getByLabel('Ruler').click({ position: { x: 222, y: 12 }, timeout: 2500 })); await page.waitForTimeout(700); },
   sheet: async (page) => { await page.evaluate(() => window.__help.run('sheet_open', { name: 'sales-2026', cell: 'F2:F13' })); await quiet(page.locator('canvas[aria-label="Spreadsheet grid"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(900); },
   docs: async (page) => { await page.evaluate(() => window.__help.run('docs_open', { name: 'launch-proposal' })); await quiet(page.getByTestId('docs-surface').locator('[data-style="title"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(700); await click(page, page.getByTestId('comment-card')); await page.waitForTimeout(400); },
+  notes: async (page) => { await page.evaluate(() => window.__help.run('notes_open', { name: 'user/notes' })); await quiet(page.getByTestId('note-card').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(600); await quiet(page.getByTestId('note-card').filter({ hasText: 'Groceries' }).hover({ timeout: 2500 })); await page.waitForTimeout(300); },
+  slides: async (page) => { await page.evaluate(() => window.__help.run('slides_open', { name: 'launch-pitch', slide: '7' })); await quiet(page.getByTestId('slide-canvas').waitFor({ timeout: 4000 })); await page.waitForTimeout(700); await quiet(page.getByTestId('slide-canvas').click({ position: { x: 300, y: 260 }, timeout: 2500 })); await click(page, page.getByRole('button', { name: 'Animate' })); await page.waitForTimeout(500); },
   audioeditor: async (page) => { await page.evaluate(() => window.__help.run('audio_open', { name: 'podcast-episode' })); await quiet(page.locator('[data-testid="timeline"] canvas').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(1500); await quiet(page.locator('.au-lane').first().click({ position: { x: 330, y: 40 }, timeout: 2500 })); await page.waitForTimeout(500); },
   gameengine: async (page) => { await page.evaluate(() => window.__help.run('game_open', { name: 'playground' })); await quiet(page.locator('canvas[aria-label="Scene viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Node Player' }).locator('.gm-row-node')); await page.waitForTimeout(600); },
   model3d: async (page) => { await page.evaluate(() => window.__help.run('model_open', { name: 'workshop-table' })); await quiet(page.locator('canvas[aria-label="3D viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Object Mug' }).locator('.m3d-row')); await page.waitForTimeout(500); },
@@ -154,7 +156,9 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
     const { AUDIO_TOOLS } = await import('/src/extensions/audioeditor/audioTools.ts');
     const { SHEET_TOOLS } = await import('/src/extensions/sheet/sheetTools.ts');
     const { DOCS_TOOLS } = await import('/src/extensions/docs/docsTools.ts');
-    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS];
+    const { SLIDES_TOOLS } = await import('/src/extensions/slides/slidesTools.ts');
+    const { NOTES_TOOLS } = await import('/src/extensions/notes/notesTools.ts');
+    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS];
     window.__help = { run: (name, input) => all.find((tool) => tool.name === name).run({ agent: 'user', ...input }) };
     await window.__help.run('board_write', {
       name: 'checkout-retro', title: 'Checkout retro',
@@ -247,6 +251,31 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
         { op: 'table_cell', table: 'Timeline', row: 2, col: 3, text: 'Jan 12' },
         { op: 'table_cell', table: 'Timeline', row: 3, col: 3, text: 'Mar 2' },
         { op: 'table_cell', table: 'Timeline', row: 4, col: 3, text: 'May 18' },
+      ],
+    });
+    await window.__help.run('slides_write', {
+      name: 'launch-pitch', title: 'Lumen pitch', template: 'pitch',
+      ops: [
+        { op: 'text', slide: 1, el: 'title', text: 'Lumen' },
+        { op: 'text', slide: 1, el: 'subtitle', text: 'Meeting notes that write themselves — for teams of 5 to 50' },
+        { op: 'animate', slide: 7, el: 2, effect: 'fade-in' },
+        { op: 'animate', slide: 7, el: 'title', effect: 'fly-up', start: 'with' },
+        { op: 'notes', slide: 7, text: 'Pause on June. Say: the price change in March is what tripled revenue. Then hand over to the competition slide.' },
+        { op: 'comment', slide: 7, text: 'Add the source of these numbers?' },
+      ],
+    });
+    const sketch = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="260"><rect width="480" height="260" fill="#fef7e0"/><circle cx="380" cy="70" r="40" fill="#fbbc04"/><path d="M0 220 L120 120 L210 190 L300 110 L480 230 L480 260 L0 260Z" fill="#81c995"/><path d="M0 240 L160 170 L260 230 L480 200 L480 260 L0 260Z" fill="#34a853"/></svg>');
+    await window.__help.run('notes_write', {
+      name: 'notes', title: 'Notes', labels: ['Home', 'Work', 'Travel', 'Ideas'],
+      ops: [
+        { op: 'add', title: 'Book club', body: 'Next pick: The Remains of the Day.\nBring snacks for Thursday.', color: 'blossom', labels: ['Home'] },
+        { op: 'add', title: 'App ideas', body: 'A plant-watering reminder that learns from the weather.\n\nShared shopping list with aisle order.', color: 'dusk', background: 'notes', labels: ['Ideas'] },
+        { op: 'add', title: 'Lisbon weekend', body: 'Tram 28 early morning, Time Out Market for lunch, sunset at Miradouro da Senhora do Monte.', color: 'fog', background: 'travel', labels: ['Travel'] },
+        { op: 'add_image', note: 'Lisbon weekend', src: sketch, alt: 'Hills at sunset' },
+        { op: 'add', title: 'Sprint 14 actions', items: ['Write the release notes', 'Fix the login error message', '[x] Book the retro room', 'Review the checkout PR'], color: 'sand', labels: ['Work'], reminder: { at: 'tomorrow 9:00' } },
+        { op: 'add', title: 'Groceries', items: ['Oat milk', 'Eggs', 'Spinach', 'Coffee beans', '[x] Bread', '[x] Lemons'], color: 'mint', background: 'groceries', labels: ['Home'], pinned: true },
+        { op: 'add', title: 'Wi-Fi at the office', body: 'Network: Pigry-Guest\nAsk reception for the code', color: 'default', labels: ['Work'] },
+        { op: 'add', title: 'Call the dentist', body: 'Move the check-up to the week of the 8th.', color: 'coral', pinned: true, reminder: { at: 'today 17:30' } },
       ],
     });
     await window.__help.run('audio_write', {

@@ -1,7 +1,7 @@
 import type { MenuGuide } from '../menuGuides.types.ts';
 
 /** Guides for the menus where files, designs and tests are made: Explorer, Diagram, Design, Board, E2E Testing, Reports, Copilot. */
-export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'sheet' | 'docs' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
+export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'sheet' | 'docs' | 'slides' | 'notes' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
   extensions: {
     summary: "The Extension Store: search the packs of agents and skills Pigry offers and install them. What you installed is managed in Settings.",
     overview: [
@@ -475,6 +475,94 @@ export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawi
     ],
     agents: { default: "docs", base: "writer" },
     shots: [{ file: "docs.jpg", caption: "The Docs menu: menu bar and toolbar, the outline, the ruler, a project proposal on an A4 page with a footnote, a suggested edit and a checklist, the comment and suggestions in the side panel, and the page and word count; the AI Agent panel opens from the right edge." }],
+  },
+  slides: {
+    summary: "Presentations the Google Slides way — themes and layouts, text, shapes, images, tables, charts and icons on a canvas with smart guides, transitions and animations, speaker notes, comments, a full-screen present mode with presenter view, and PowerPoint, PDF, PNG and HTML export.",
+    overview: [
+      "Slides follows Google Slides' layout. A presentation is a deck of slides of one size (16:9, 4:3, 16:10 or A4), styled by a theme — nine colours and a title and body font that every slide uses. Everything is saved as one file in the repository (.pigry/slides/<owner>/<name>.slides.json, with large images as side files next to it), so the history of a deck lives in Git and the AI agents can read and edit it with their own tools.",
+      "The screen has the title and the Present button, the menu bar (File, Edit, View, Insert, Format, Slide, Arrange, Tools), the toolbar (new slide, undo, redo, paint format, zoom, select, text box, image, shapes, lines, table, chart, icon, comment, then text formatting when text is selected or Background, Layout, Theme and Transition when nothing is), the filmstrip of slides on the left, the slide canvas with the speaker notes under it, side panels for themes, motion, format options and comments, a status line, and the AI Agent panel.",
+    ],
+    features: [
+      { title: "Slides and the filmstrip", text: "Add slides with a layout (Title slide, Title and body, Section header, Title and two columns, Big number, Title only, Caption, Blank), duplicate, delete and skip them, drag thumbnails to reorder (Shift/Ctrl-click to pick several), right-click for more, or switch to the grid view (Ctrl+Alt+1) to see every slide at once." },
+      { title: "Objects on the canvas", text: "Text boxes, 23 shapes (rectangles, ovals, arrows, callouts, stars…), lines and arrows, images (upload, paste or replace; fill, fit or stretch; rounded corners), tables you type into, column, bar, line, pie and doughnut charts with their own data, emoji icons, and video and link cards. Click to select, Shift-click or drag a box to select several, drag to move, use the handles to resize (Shift keeps proportions) and the round handle to rotate (Shift snaps to 15°)." },
+      { title: "Smart guides and arranging", text: "While moving, objects snap to the slide's edges and centre and to other objects, with red guides showing the match (hold Alt to move freely). Arrange ▸ Order, Align, Distribute, Centre on page, Rotate, Group (Ctrl+Alt+G), Ungroup and Lock; arrow keys nudge (Shift for one pixel)." },
+      { title: "Rich text", text: "Double-click a text box or shape to type. Fonts (including Thai fonts), sizes, bold, italic, underline, strikethrough, colour and highlight, links, alignment, line spacing, bulleted and numbered lists with Tab to indent; with a box selected (not edited) the toolbar formats all of its text. Autofit can shrink text to fit or grow the box." },
+      { title: "Themes, layouts and backgrounds", text: "Pick one of eight themes, or edit the theme (Slide ▸ Edit theme) to change the colours and fonts every slide uses — the master. Placeholders take their font, size and colour from it. Each slide can have its own background colour, gradient or image, or reset to the theme." },
+      { title: "Transitions and animations", text: "The Motion panel sets a slide transition (dissolve, slide, zoom, flip) and its speed, for one slide or all of them, and an ordered list of object animations — appear, fade, fly in, zoom, spin, fade out — that start on click, with the previous one or after it." },
+      { title: "Present", text: "Present (Ctrl+F5) fills the screen: → / Space / ← move through slides and animations, a number and Enter jump to a slide, L shows a laser pointer, B and W black or white the screen, Esc exits. Presenter view (S, or Present ▸ Presenter view) shows the speaker notes, a timer and the next slide. Skipped slides are left out." },
+      { title: "Notes, comments, find and review", text: "Speaker notes under each slide; comments on a slide or an object with replies and resolve; find and replace across slides, tables and notes (Ctrl+F / Ctrl+H); undo and redo; a presentation review (Tools) that flags small text, low contrast, crowded slides, missing titles and alt text, overlaps and objects off the slide." },
+      { title: "Import and export", text: "Import a Markdown outline (# and ## start slides, - bullets, > speaker notes). Download PowerPoint (.pptx) with text, shapes, images, tables, backgrounds, transitions, skipped slides and speaker notes; PDF (one page per slide); PNG of one or every slide; a self-contained web presentation (.html) that plays with transitions, animations, notes and a laser pointer; or a Markdown or text outline. Every export is also saved next to the presentation in the repository." },
+      { title: "Agent tools and skills", text: "slides_list, slides_read, slides_write, slides_edit, slides_preview, slides_export and slides_open, and nine skills: the editor workflow, storytelling, assertion–evidence slides, design principles, data and charts, common deck types, speaker notes and delivery, accessible presentations and a review checklist." },
+    ],
+    tutorial: [
+      { title: "Create a presentation", text: "Press New presentation, pick Pitch deck and press Create. The filmstrip shows ten slides on the Focus theme." },
+      { title: "Edit text", text: "Double-click the title on slide 1 and type your own; press Esc when you are done. Select the subtitle box and press Ctrl+B to make all of it bold." },
+      { title: "Move and resize", text: "On slide 3 drag a card: red guides appear when it lines up with the others. Drag a corner handle with Shift held to keep its proportions." },
+      { title: "Add a chart", text: "Insert ▸ Chart ▸ Column, then Edit data in the toolbar: type your numbers. In Format options pick the bar to highlight and write the takeaway as the slide title." },
+      { title: "Change the look", text: "Press Theme in the toolbar (with nothing selected) and pick Midnight, or Slide ▸ Edit theme to set your brand colours and fonts for every slide." },
+      { title: "Add motion", text: "Select a card, press Animate and add Fade in, on click. In the Motion panel set the transition to Dissolve and press Apply to all slides." },
+      { title: "Write speaker notes", text: "Click under the slide and type what you will say; in presenter view the notes appear next to a timer and the next slide." },
+      { title: "Ask the Presenter", text: "In the AI Agent panel type: '@presenter turn these notes into a 6-slide update with one idea per slide'. It outlines the story, builds the slides, looks at pictures of them and fixes what the review flags." },
+      { title: "Present and export", text: "Press Present (Ctrl+F5), move with the arrow keys and press S for presenter view. Afterwards File ▸ Download ▸ Microsoft PowerPoint or PDF; the file is also saved next to the presentation." },
+    ],
+    tips: [
+      "Write sentence titles that state each slide's point and read the titles alone in order — they should tell the story (assertion–evidence, Michael Alley).",
+      "One idea per slide; put what you will say in the speaker notes, not on the slide.",
+      "Keep text at 18 pt or more and contrast at 4.5:1 or better; the presentation review (Tools) checks both.",
+      "Use theme colours and fonts instead of one-off styling, so changing the theme restyles every slide at once.",
+      "For data slides, show one chart per slide, title it with the takeaway and highlight the bar that matters (Storytelling with Data).",
+    ],
+    cautions: [
+      "This is an editor inspired by Google Slides, not Google Slides: there is no real-time collaboration, sharing, Q&A, captions or version-history browser, and the history is Git's history.",
+      "PowerPoint export writes charts as pictures and leaves out object animations and comments; PDF pages are pictures of the slides, so their text is not selectable. PowerPoint files cannot be imported — import a Markdown outline instead.",
+      "Charts have their own small data table and are not linked to a spreadsheet; video and link cards open their address when presenting but video does not play inside the slide.",
+      "There is no free drawing, connector or crop tool, and text boxes have no columns or tab stops.",
+      "Text is shrunk to fit by an estimate, so check the slides (or the agent's pictures) after big text changes.",
+    ],
+    agents: { default: "slides", base: "presenter" },
+    shots: [{ file: "slides.jpg", caption: "The Slides menu: menu bar and toolbar, the filmstrip, a pitch-deck slide with a highlighted chart selected on the canvas, the speaker notes, the Motion panel with the slide's animations, and the AI Agent panel." }],
+  },
+  notes: {
+    summary: "Notes and lists the Google Keep way — a board of colourful cards with checklists, labels, images, reminders, pinned, archived and trashed notes, search and filters, and drag to reorder.",
+    overview: [
+      "Notes follows Google Keep's layout. A notebook is a board of note cards in a masonry grid (or a single list): each note is a text note or a checklist with a title, a colour, a background, labels, pictures and an optional reminder. Everything is saved as one file in the repository (.pigry/notes/<owner>/<name>.notes.json, with large images as side files next to it) — your own notes are user/notes — so the history lives in Git and the AI agents can read and add notes with their own tools.",
+      "The screen has the main menu button, the search box with type, label and colour filters and the grid / list switch on top; the side menu (Notes, Reminders, your labels, Edit labels, Archive, Trash) on the left; the \"Take a note…\" box, the Pinned and Others sections of cards in the middle; and the AI Agent panel on the right.",
+    ],
+    features: [
+      { title: "Take a note", text: "Click \"Take a note…\" (or press C) and type a title and the note; the box closes and saves when you click outside or press Close. The list button (or L) starts a checklist, the picture button a note with an image." },
+      { title: "Checklists", text: "Type an item and press Enter for the next one (Enter in the middle of an item splits it; Backspace at the start joins it with the one above). Tick items to move them under \"Checked items\", which you can fold away; drag the handle or press Alt+↑ / Alt+↓ to reorder. More ▸ Show / Hide checkboxes turns a text note into a list and back." },
+      { title: "Colours, backgrounds and images", text: "Background options gives twelve colours (Coral, Peach, Sand, Mint, Sage, Fog, Storm, Dusk, Blossom, Clay, Chalk) and background patterns (Groceries, Food, Music, Recipes, Notes, Places, Travel, Video, Celebration). Add pictures with the image button, by pasting or by dropping image files onto an open note." },
+      { title: "Labels", text: "More ▸ Add label puts labels on a note (type a new name to create one). Labels appear in the side menu as views; Edit labels creates, renames and deletes them." },
+      { title: "Pin, archive, trash", text: "Pin keeps a note at the top in Pinned. Archive moves it out of the way (Archive view, still searchable); Delete note moves it to the Trash, where you restore it or delete it forever, or empty the Trash. Every one of these can be undone from the message at the bottom left." },
+      { title: "Reminders", text: "Remind me sets later today, tomorrow, next week or a date and time, optionally repeating daily, weekly, monthly or yearly. The reminder shows as a chip on the card and the note appears in the Reminders view, sorted by time; passed reminders are crossed out." },
+      { title: "Search and filters", text: "Search (/) looks through titles, text, list items, labels and picture names in Notes and Archive; narrow it by type (text notes, lists, images, reminders), label and colour. Ctrl+G switches between the grid and a single list." },
+      { title: "Edit, copy and reorder", text: "Click a card to open it in the editor dialog; changes save as you type, and the dialog shows when it was last edited. More ▸ Make a copy duplicates a note. Drag cards to reorder them; dropping a card among the pinned notes pins it." },
+      { title: "Agent tools and skills", text: "notes_list, notes_read, notes_search, notes_write, notes_edit and notes_open, and five skills: the editor workflow, capturing notes and lists, organising with labels, colours, pins and the archive, reminders and planning, and a weekly review." },
+    ],
+    tutorial: [
+      { title: "Write a note", text: "Click Take a note…, type \"Lisbon trip\" as the title and a few lines of text, then click outside the box. The card appears under Others." },
+      { title: "Make a list", text: "Press the list button, title it \"Groceries\" and type milk, Enter, eggs, Enter, bread. Tick milk: it moves under Checked items." },
+      { title: "Colour and label it", text: "Hover the Groceries card, press Background options and pick Mint, then More ▸ Add label and type \"Home\" to create the label." },
+      { title: "Pin and remind", text: "Press the pin on the Lisbon card so it moves to Pinned, then Remind me ▸ Tomorrow. The chip shows Tomorrow, 8:00 AM." },
+      { title: "Find it again", text: "Type \"eggs\" in the search box, or pick Lists in the type filter; click Home in the side menu to see the notes with that label." },
+      { title: "Tidy up", text: "Archive a finished note with the archive button (press Undo if it was a mistake), and drag cards to put related notes side by side." },
+      { title: "Ask the Organizer", text: "In the AI Agent panel type: '@organizer turn my meeting notes into a checklist of action items and label them Work'. It reads your notes, adds the list to user/notes and tells you what it changed." },
+    ],
+    tips: [
+      "One topic per note with a short title you would search for; capture first and tidy later.",
+      "Anything with steps is a checklist: one action per item, starting with a verb.",
+      "Keep a handful of broad labels and give each colour one meaning (for example coral = urgent).",
+      "Pin only this week's notes and archive the rest — archived notes are still found by search.",
+      "Keyboard: C new note, L new list, / search, J / K move between cards, Enter open, E archive, F pin, # delete, Ctrl+G grid or list.",
+    ],
+    cautions: [
+      "This is an app inspired by Google Keep, not Google Keep: there is no sharing, collaborators, drawing, voice notes or sync to other devices, and the history is Git's history.",
+      "Reminders are shown in the app (chips and the Reminders view); Pigry does not send system notifications or alarms.",
+      "Notes in the Trash are not deleted after seven days — empty the Trash yourself.",
+      "Images are stored next to the notebook in the repository, so very large pictures make the repository bigger.",
+    ],
+    agents: { default: "notes", base: "organizer" },
+    shots: [{ file: "notes.jpg", caption: "The Notes menu: the search box with filters, the side menu with labels, the Take a note box, pinned and other notes as coloured cards with checklists, labels, a picture and reminder chips; the AI Agent panel opens from the right edge." }],
   },
   board: {
     summary: "Run workshops on a digital whiteboard: sections, sticky notes, votes, connectors, and live embeds of diagrams, designs and code.",

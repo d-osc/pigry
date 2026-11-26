@@ -6,8 +6,14 @@
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--tree-row-gap);
   padding: 0 8px;
+  /* Tree geometry: every row is padded by depth x indent, then a fixed
+     chevron slot, then the icon. Guides sit under each ancestor's chevron. */
+  --tree-row-gap: 2px;
+  --tree-pad: 4px;
+  --tree-indent: 12px;
+  --tree-twisty: 12px;
 }
 
 /* Repository root row — filled chip with branch badge */
@@ -51,7 +57,6 @@
 /* Folder rows — real names, no case mangling */
 .tree-row--folder {
   height: 30px;
-  padding: 0 4px 0 4px !important;
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -64,13 +69,17 @@
   color: var(--text-primary);
 }
 
+/* Folder rows keep a tighter right edge; the left edge is the shared indent. */
+.tree-row.tree-row--folder { padding-right: 4px; }
+
 /* File rows — filled rows */
 .tree-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 8px 0 calc(var(--tree-pad) + var(--tree-depth, 0) * var(--tree-indent));
+  position: relative;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
@@ -99,13 +108,26 @@
   white-space: nowrap;
 }
 
-/* Indent guide for nested files */
-.tree-row__guide {
-  width: 8px;
+/* Chevron slot — present on every row (empty for files) so same-depth
+   files and folders share one icon column. */
+.tree-row__twisty {
+  width: var(--tree-twisty);
   flex-shrink: 0;
-  align-self: stretch;
+  display: grid;
+  place-items: center;
+}
+
+/* Indent guide: one per ancestor level, centred under that ancestor's
+   chevron. It reaches up across the row gap so consecutive rows join into a
+   single unbroken line from the parent down to its last child. */
+.tree-row__guide {
+  position: absolute;
+  top: calc(-1 * var(--tree-row-gap));
+  bottom: 0;
+  left: calc(var(--tree-pad) + var(--tree-guide-level, 0) * var(--tree-indent) + var(--tree-twisty) / 2);
+  width: 0;
   border-left: 1px solid var(--border-subtle);
-  margin-left: -3px;
+  pointer-events: none;
 }
 
 /* Material icon (15px SVG) */

@@ -132,7 +132,7 @@ export function MergePanel({
   useEffect(() => {
     if (!baseCommit) return;
     let cancelled = false;
-    readFileAtCommit(path, baseCommit.oid)
+    readFileAtCommit(baseCommit.path || path, baseCommit.oid)
       .then((at) => {
         if (!cancelled) setBaseContent(at.binary || at.tooLarge ? null : at.content);
       })

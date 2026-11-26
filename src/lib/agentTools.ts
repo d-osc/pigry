@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Sheet' | 'Docs' | 'Board' | 'E2E' | 'Agents';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Sheet' | 'Docs' | 'Slides' | 'Notes' | 'Board' | 'E2E' | 'Agents';
   description: string;
 }
 
@@ -136,6 +136,21 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'docs_preview', name: 'docs_preview', group: 'Docs', description: 'Render pictures of document pages you can see on the next turn' },
   { id: 'docs_export', name: 'docs_export', group: 'Docs', description: 'Export Word (.docx), Markdown, print-friendly HTML or plain text' },
   { id: 'docs_open', name: 'docs_open', group: 'Docs', description: 'Open a document in the Docs menu' },
+  // Slides (Google Slides-style presentations under .pigry/slides/<agent>/)
+  { id: 'slides_list', name: 'slides_list', group: 'Slides', description: 'List the presentations saved in the workspace' },
+  { id: 'slides_read', name: 'slides_read', group: 'Slides', description: 'Read a presentation: slides, elements with positions, notes, animations, comments and a design review' },
+  { id: 'slides_write', name: 'slides_write', group: 'Slides', description: 'Create a presentation (template, theme or a Markdown outline) and edit it with operations' },
+  { id: 'slides_edit', name: 'slides_edit', group: 'Slides', description: 'Add, change, arrange and animate slides and elements, themes, transitions, notes and comments' },
+  { id: 'slides_preview', name: 'slides_preview', group: 'Slides', description: 'Render pictures of slides you can see on the next turn' },
+  { id: 'slides_export', name: 'slides_export', group: 'Slides', description: 'Export PowerPoint (.pptx), PDF, PNG per slide, an HTML presentation or a Markdown outline' },
+  { id: 'slides_open', name: 'slides_open', group: 'Slides', description: 'Open a presentation in the Slides menu' },
+  // Notes (Google Keep-style notebooks under .pigry/notes/<agent>/)
+  { id: 'notes_list', name: 'notes_list', group: 'Notes', description: 'List the notebooks saved in the workspace' },
+  { id: 'notes_read', name: 'notes_read', group: 'Notes', description: 'Read a notebook: notes and checklists with ids, labels, colours, reminders and state' },
+  { id: 'notes_search', name: 'notes_search', group: 'Notes', description: 'Search notes across every notebook by text, label, colour and type' },
+  { id: 'notes_write', name: 'notes_write', group: 'Notes', description: 'Create a notebook, optionally with notes' },
+  { id: 'notes_edit', name: 'notes_edit', group: 'Notes', description: 'Add, change, check, label, pin, archive, trash, copy and reorder notes and list items' },
+  { id: 'notes_open', name: 'notes_open', group: 'Notes', description: 'Open a notebook or a note in the Notes menu' },
   // Video Editor (the Video Editor — CapCut-style projects under .pigry/videos/<agent>/)
   { id: 'video_list', name: 'video_list', group: 'Video Editor', description: 'List the video projects saved in the workspace' },
   { id: 'video_read', name: 'video_read', group: 'Video Editor', description: 'Read a video project: format, media, tracks, clips and review warnings' },
@@ -221,7 +236,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Board', 'E2E', 'Agents'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Slides', 'Notes', 'Board', 'E2E', 'Agents'];
 
 export function selectAgentTools(
   tools: ToolSpec[],

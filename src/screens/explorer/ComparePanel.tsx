@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { DiffEditor } from '../../editor/ThemedEditors';
-import { GitCompare } from 'lucide-react';
+import { GitCompare, RotateCcw } from 'lucide-react';
 import { readFileAtCommit } from '../../lib/tauriClient';
 import { useFileHistory } from '../../hooks/useFileHistory';
 import { relativeTime } from '../../lib/relativeTime';
 import type { FileCommitEntry } from '../../types/repository';
+import { canRestoreFromCommit, restoreButtonTitle, restoreSourcePath } from '../../lib/fileRestore';
 import '../../editor/monacoSetup';
 import './ComparePanel.css';
 
@@ -16,6 +17,9 @@ interface ComparePanelProps {
   baseOid: string | null;
   /** History walks this ref instead of HEAD (e.g. a PR head branch). */
   refName?: string | null;
+  /** Shows "Restore this version" for the BASE commit. */
+  onRestore?: (commit: FileCommitEntry) => void;
+  restoring?: boolean;
 }
 
 interface BaseEntry {
@@ -31,6 +35,8 @@ export function ComparePanel({
   language,
   baseOid,
   refName,
+  onRestore,
+  restoring = false,
 }: ComparePanelProps) {
   const { commits, error: historyError, retry: retryHistory } = useFileHistory(path, refName ?? null);
   const [attempt, setAttempt] = useState(0);
@@ -47,7 +53,11 @@ export function ComparePanel({
   useEffect(() => {
     if (!baseCommit) return;
     let cancelled = false;
-    readFileAtCommit(path, baseCommit.oid)
+    // A commit that deleted the file compares against an empty BASE.
+    const read = baseCommit.deleted
+      ? Promise.resolve({ content: '', binary: false, tooLarge: false })
+      : readFileAtCommit(restoreSourcePath(path, baseCommit), baseCommit.oid);
+    read
       .then((result) => {
         if (!cancelled) {
           setBase({
@@ -88,6 +98,18 @@ export function ComparePanel({
         <span className="compare-panel__title">Compare code</span>
         <span className="compare-panel__file">{fileName}</span>
         <span className="compare-panel__mode">Inline comparison</span>
+        {onRestore && (
+          <button
+            type="button"
+            className="compare-panel__restore"
+            title={restoreButtonTitle(path, baseCommit)}
+            disabled={restoring || !canRestoreFromCommit(baseCommit)}
+            onClick={() => onRestore(baseCommit)}
+          >
+            <RotateCcw size={11} strokeWidth={1.75} />
+            Restore this version
+          </button>
+        )}
         <div className="compare-panel__layout" role="group" aria-label="Compare layout">
           <button
             type="button"

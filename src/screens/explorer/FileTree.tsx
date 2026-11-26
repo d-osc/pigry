@@ -175,17 +175,29 @@ function TreeRow({
     }
   };
 
+  // Guides are drawn out of flow (one per ancestor level, under that
+  // ancestor's chevron), so they never push the row content sideways. Every
+  // row also reserves the chevron slot — files leave it empty — so files and
+  // folders at the same depth line up.
   const rowIcons = (
     <>
       {Array.from({ length: depth }).map((_, index) => (
-        <i key={index} className="tree-row__guide" aria-hidden="true" />
+        <i
+          key={index}
+          className="tree-row__guide"
+          aria-hidden="true"
+          style={{ '--tree-guide-level': index } as React.CSSProperties}
+        />
       ))}
-      {isFolder ? (
-        isOpen ? <ChevronDown size={8.5} strokeWidth={1.5} /> : <ChevronRight size={8.5} strokeWidth={1.5} style={ignored && node.children.length === 0 ? { visibility: 'hidden' } : undefined} />
-      ) : null}
+      <span className="tree-row__twisty" aria-hidden="true">
+        {isFolder && (isOpen
+          ? <ChevronDown size={10} strokeWidth={1.75} />
+          : <ChevronRight size={10} strokeWidth={1.75} style={ignored && node.children.length === 0 ? { visibility: 'hidden' } : undefined} />)}
+      </span>
       <img className="tree-row__fileicon" src={iconSrc} alt="" draggable={false} />
     </>
   );
+  const indentStyle = { '--tree-depth': depth } as React.CSSProperties;
 
   // While renaming, the row becomes a plain div — nesting the input inside
   // the row button steals its focus (invalid interactive nesting).
@@ -195,7 +207,7 @@ function TreeRow({
         <div
           className={`tree-row tree-row--renaming${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}`}
           data-path={node.path}
-          style={{ paddingLeft: 4 + depth * 12 }}
+          style={indentStyle}
         >
           {rowIcons}
           <input
@@ -248,7 +260,7 @@ function TreeRow({
         data-path={node.path}
         type="button"
         className={`tree-row${isFolder ? ' tree-row--folder' : ''}${isSelected ? ' tree-row--selected' : ''}${dropTarget ? ' tree-row--droptarget' : ''}${ignored ? ' tree-row--ignored' : ''}`}
-        style={{ paddingLeft: 4 + depth * 12 }}
+        style={indentStyle}
         onClick={handleClick}
         draggable={onMove != null}
         onDragStart={(event) => {

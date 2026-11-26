@@ -35,6 +35,35 @@
   color: var(--text-muted);
 }
 
+.compare-panel__restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--fs-2xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.compare-panel__restore:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.compare-panel__restore + .compare-panel__layout {
+  margin-left: 8px;
+}
+
+.compare-panel__restore:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .compare-panel__meta {
   display: flex;
   gap: 16px;

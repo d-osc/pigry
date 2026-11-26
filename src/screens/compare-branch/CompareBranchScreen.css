@@ -42,22 +42,27 @@
   font-size: var(--fs-xs);
 }
 
-.compare-branch__files {
-  min-width: 0;
+/* Two-pane layout: changed files (left) + diff editor (right) fill the screen */
+.compare-branch__results {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
-.compare-branch__files .push__file-row {
-  padding: 6px 8px;
-}
-
-.compare-branch__files .push__file-row > svg {
-  flex-shrink: 0;
-  color: var(--text-muted);
-}
-
-.compare-branch__diff {
-  min-width: 0;
+.compare-branch__workbench {
+  flex: 1 1 auto;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+}
+
+.compare-branch__workbench .pr-diff-dialog__files-label {
+  margin-top: 2px;
+}
+
+.compare-branch__workbench .push__show-more {
+  margin: 6px 4px 2px;
 }

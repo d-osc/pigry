@@ -60,6 +60,8 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     audioeditor: 'sound-engineer',
     sheet: 'analyst',
     docs: 'writer',
+    slides: 'presenter',
+    notes: 'organizer',
     board: 'board-sa',
     e2e: 'e2e-qa',
     reports: 'report-reviewer',

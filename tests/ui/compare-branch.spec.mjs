@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installBackend, openFixture } from './backend.mjs';
 
-test('compares local and remote-tracking branches and expands file diffs', async ({ page }) => {
+test('compares local and remote-tracking branches with files on the left and the diff on the right', async ({ page }) => {
   const comparison = {
     baseOid: '1'.repeat(40),
     compareOid: '2'.repeat(40),
@@ -23,26 +23,61 @@ test('compares local and remote-tracking branches and expands file diffs', async
   await expect(page.getByText('Compare 2222222 · 2 unique commits')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Files changed (3)' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Show more files/ })).toHaveCount(0);
-  const edited = page.getByRole('button', { name: /edited\.txt/ });
+
+  const fileList = page.getByRole('complementary', { name: 'Changed files' });
+  const edited = fileList.getByRole('button', { name: /edited\.txt/ });
+  await expect(edited).toContainText('M');
   await expect(edited).toContainText('+1');
   await expect(edited).toContainText('−2');
 
-  const diff = page.locator('.monaco-diff-editor');
+  // The first file opens straight away in the editor pane on the right.
+  const diff = page.locator('.compare-branch__workbench .monaco-diff-editor');
+  const activeName = page.locator('.compare-branch__workbench .diff-pane__comparison');
+  await expect(edited).toHaveAttribute('aria-current', 'true');
+  await expect(activeName).toHaveText('edited.txt');
+  await expect(diff).toBeVisible();
+  const listBox = await fileList.boundingBox();
+  const diffBox = await diff.boundingBox();
+  expect(diffBox.x).toBeGreaterThanOrEqual(listBox.x + listBox.width);
+  expect(diffBox.height).toBeGreaterThan(200);
+
   for (const file of comparison.files) {
-    await page.getByRole('button', { name: new RegExp(file.path) }).click();
+    const row = fileList.getByRole('button', { name: new RegExp(file.path) });
+    await row.click();
+    await expect(row).toHaveAttribute('aria-current', 'true');
+    await expect(activeName).toHaveText(file.path);
     await expect(diff).toBeVisible();
+    await expect(page.locator('.compare-branch__workbench .diffstat'))
+      .toHaveText(`+${file.additions}−${file.deletions}`);
   }
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(diff.getByText('before', { exact: true }).first()).toBeVisible();
+
   await expect(page.getByRole('button', { name: 'Split' })).toHaveAttribute('aria-pressed', 'true');
   await expect(diff).toHaveClass(/side-by-side/);
   await page.getByRole('button', { name: 'Unified' }).click();
   await expect(page.getByRole('button', { name: 'Unified' })).toHaveAttribute('aria-pressed', 'true');
   await expect(diff).not.toHaveClass(/side-by-side/);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // The divider between the panes resizes the file list.
+  const handle = page.getByRole('separator', { name: 'Resize file list' });
+  const before = (await fileList.boundingBox()).width;
+  const handleBox = await handle.boundingBox();
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 80, handleBox.y + handleBox.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await fileList.boundingBox()).width).toBeGreaterThan(before + 40);
+
   const calls = await page.evaluate(() => window.testBackend.calls);
   expect(calls.filter(({ cmd }) => cmd === 'compare_branches').at(-1).args).toEqual({
     baseRef: 'refs/heads/main',
     compareRef: 'refs/remotes/origin/feat/graph-search',
   });
-  expect(calls.filter(({ cmd }) => cmd === 'read_file_at_commit').map(({ args }) => args)).toEqual([
+  // Only the reads for the comparison on screen (the first branch pair also opened its first file).
+  const lastComparison = calls.findLastIndex(({ cmd }) => cmd === 'compare_branches');
+  expect(calls.slice(lastComparison).filter(({ cmd }) => cmd === 'read_file_at_commit').map(({ args }) => args)).toEqual([
     { path: 'edited.txt', oid: comparison.baseOid },
     { path: 'edited.txt', oid: comparison.compareOid },
     { path: 'added.txt', oid: comparison.compareOid },

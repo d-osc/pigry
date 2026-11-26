@@ -3,14 +3,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { Monaco } from '@monaco-editor/react';
 import { Editor } from '../../editor/ThemedEditors';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
-import { GitCompare, GitMerge, History, Quote, Eye,
+import { GitCompare, GitMerge, History, Quote, Eye, RotateCcw,
 } from 'lucide-react';
-import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal } from '../../lib/tauriClient';
+import { readWorktreeFile, writeWorktreeFile, readBinaryFile, openPathExternal, restoreFileFromCommit } from '../../lib/tauriClient';
+import {
+  canRestoreFromCommit, restoreConfirmMessage, restoreNeedsConfirm, restoreSourcePath, restoreToastMessage,
+} from '../../lib/fileRestore';
 import { useRepository } from '../../hooks/useRepository';
 import { useFileBlame } from '../../hooks/useFileBlame';
 import { useLineChanges } from '../../hooks/useLineChanges';
 import { relativeTime } from '../../lib/relativeTime';
-import type { WorktreeFileContent } from '../../types/repository';
+import type { FileCommitEntry, WorktreeFileContent } from '../../types/repository';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { FileHistoryPanel } from './FileHistoryPanel';
 import { MergePanel } from './MergePanel';
@@ -91,7 +94,7 @@ export function EditorPane({
   onHistorySelect,
   onStatusChange,
 }: EditorPaneProps) {
-  const { refresh, busy, repository } = useRepository();
+  const { refresh, busy, repository, notify } = useRepository();
   const [entry, setEntry] = useState<{
     path: string;
     content: WorktreeFileContent;
@@ -106,6 +109,10 @@ export function EditorPane({
   const [compareOn, setCompareOn] = useState(false);
   const [mergeOn, setMergeOn] = useState(false);
   const [baseOid, setBaseOid] = useState<string | null>(null);
+  // File history "Restore": the commit waiting for confirmation (it belongs
+  // to the file it was asked for) and whether a restore is running.
+  const [restoreAsk, setRestoreAsk] = useState<{ path: string; commit: FileCommitEntry } | null>(null);
+  const [restoring, setRestoring] = useState(false);
   // Switching files drops the history selection — it belongs to the old file
   // (adjust-state-on-change, no effect needed).
   const [prevPath, setPrevPath] = useState(path);
@@ -394,6 +401,44 @@ export function EditorPane({
   const segments = path.split('/');
   const dirty = entry?.path === path && draft !== entry.content.content;
   const languageLabel = entry?.content.language || 'plaintext';
+  const workingChange = repository?.files.some((file) => file.path === path) ?? false;
+
+  /** Puts the working file back to its content at `commit` (an unstaged
+   * change, nothing committed), then reloads the buffer and working changes. */
+  const runRestore = async (commit: FileCommitEntry) => {
+    setRestoreAsk(null);
+    if (restoring || busy) return;
+    setRestoring(true);
+    try {
+      const result = await restoreFileFromCommit(path, commit.oid, restoreSourcePath(path, commit));
+      if (isEditableText) {
+        const content = await readWorktreeFile(path);
+        if (currentPath.current === path) {
+          setLoadError(null);
+          setSaveError(null);
+          setEntry({ path, content });
+          draftRef.current = content.content;
+          setDraft(content.content);
+          onBufferChange({ content: content.content, language: content.language, dirty: false }, path);
+        }
+      } else {
+        const content = await readBinaryFile(path);
+        if (currentPath.current === path) setBin(content);
+      }
+      await refresh();
+      notify(restoreToastMessage(path, result), 'success');
+    } catch (error) {
+      notify(`Could not restore ${path}: ${error instanceof Error ? error.message : String(error)}`, 'error');
+    } finally {
+      setRestoring(false);
+    }
+  };
+  const requestRestore = (commit: FileCommitEntry) => {
+    if (!canRestoreFromCommit(commit) || restoring) return;
+    if (restoreNeedsConfirm({ unsavedEdits: dirty, workingChange })) setRestoreAsk({ path, commit });
+    else void runRestore(commit);
+  };
+  const pendingRestore = restoreAsk?.path === path ? restoreAsk.commit : null;
   // Live info for the merged status bar — reported while this pane is the
   // focused group; the callback flips to undefined when focus moves away.
   useEffect(() => {
@@ -620,16 +665,15 @@ export function EditorPane({
               Open externally
             </button>
           )}
-          {isEditableText && (
-            <button
-              type="button"
-              className={`editor-toggle${historyOn ? ' editor-toggle--on' : ''}`}
-              onClick={() => setHistoryOn((value) => !value)}
-            >
-              <History size={12} strokeWidth={1.5} />
-              History
-            </button>
-          )}
+          {/* History works for every file: binaries can be restored too. */}
+          <button
+            type="button"
+            className={`editor-toggle${historyOn ? ' editor-toggle--on' : ''}`}
+            onClick={() => setHistoryOn((value) => !value)}
+          >
+            <History size={12} strokeWidth={1.5} />
+            History
+          </button>
           {isEditableText && (
             <button
               type="button"
@@ -663,6 +707,21 @@ export function EditorPane({
         </div>
       </div>
 
+      {pendingRestore && (
+        <div className="editor-pane__confirm" role="alertdialog" aria-label="Confirm restore">
+          <RotateCcw size={12} strokeWidth={1.75} />
+          <span className="editor-pane__confirm-text">
+            {restoreConfirmMessage(path, pendingRestore, { unsavedEdits: dirty, workingChange })}
+          </span>
+          <button type="button" className="primary-button" onClick={() => void runRestore(pendingRestore)}>
+            Restore
+          </button>
+          <button type="button" className="outline-button" onClick={() => setRestoreAsk(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
       {historyOn && (
         <>
           <div
@@ -673,6 +732,8 @@ export function EditorPane({
               path={path}
               selectedOid={baseOid}
               onSelect={setBaseOid}
+              onRestore={requestRestore}
+              restoring={restoring}
             />
           </div>
           <ResizeHandle
@@ -770,6 +831,8 @@ export function EditorPane({
               workingContent={draft}
               language={entry.content.language}
               baseOid={baseOid}
+              onRestore={requestRestore}
+              restoring={restoring}
             />
           </div>
         </>

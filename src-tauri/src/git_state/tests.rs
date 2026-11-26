@@ -486,6 +486,184 @@ fn file_history_lists_only_changing_commits() {
 }
 
 #[test]
+fn file_history_follows_a_large_folder_move_quickly() {
+    // Moving a whole folder renames every file in one commit; git's full
+    // similarity search over all of them took seconds per history load.
+    let dir = scratch_repo("file-history-folder-move");
+    for i in 0..1500 {
+        write(&dir, &format!("pkg/src/file-{i:04}.ts"), &format!("export const value{i} = {i};\nexport const twice{i} = {};\n", i * 2));
+    }
+    commit_all(&dir, "add package");
+    write(&dir, "pkg/src/file-0007.ts", "export const value7 = 7;\nexport const twice7 = 14;\nexport const more = 1;\n");
+    commit_all(&dir, "edit before the move");
+    let repo = Repository::open(&dir).unwrap();
+    let mut index = repo.index().unwrap();
+    for i in 0..1500 {
+        let old = format!("pkg/src/file-{i:04}.ts");
+        let new = format!("libs/pkg/src/file-{i:04}.ts");
+        fs::create_dir_all(dir.join("libs/pkg/src")).unwrap();
+        fs::rename(dir.join(&old), dir.join(&new)).unwrap();
+        index.remove_path(Path::new(&old)).unwrap();
+    }
+    index.write().unwrap();
+    drop(repo);
+    // Edit while moving, so it is not an exact (same blob) rename.
+    write(&dir, "libs/pkg/src/file-0007.ts", "export const value7 = 7;\nexport const twice7 = 14;\nexport const more = 2;\n");
+    commit_all(&dir, "move into libs");
+
+    let start = std::time::Instant::now();
+    let history = build_file_history(&dir, "libs/pkg/src/file-0007.ts", None).unwrap();
+    let elapsed = start.elapsed();
+    let rows: Vec<(&str, &str)> = history.iter().map(|e| (e.summary.as_str(), e.path.as_str())).collect();
+    assert_eq!(rows, vec![
+        ("move into libs", "libs/pkg/src/file-0007.ts"),
+        ("edit before the move", "pkg/src/file-0007.ts"),
+        ("add package", "pkg/src/file-0007.ts"),
+    ]);
+    assert!(elapsed < std::time::Duration::from_secs(3), "history across a folder move took {elapsed:?}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_history_follows_renames_and_lists_deletions() {
+    let dir = scratch_repo("file-history-follow");
+    let body = "line one\nline two\nline three\nline four\nline five\n";
+    write(&dir, "old/name.txt", body);
+    commit_all(&dir, "add under old name");
+    fs::rename(dir.join("old/name.txt"), dir.join("new.txt")).unwrap();
+    commit_all(&dir, "rename to new");
+    write(&dir, "new.txt", &format!("{body}line six\n"));
+    commit_all(&dir, "edit after rename");
+
+    let history = build_file_history(&dir, "new.txt", None).unwrap();
+    let rows: Vec<(&str, &str)> = history.iter().map(|e| (e.summary.as_str(), e.path.as_str())).collect();
+    assert_eq!(rows, vec![
+        ("edit after rename", "new.txt"),
+        ("rename to new", "new.txt"),
+        ("add under old name", "old/name.txt"),
+    ], "history follows the rename and reports the path at each commit");
+    assert!(history.iter().all(|e| !e.deleted));
+
+    // Deleted, then added again: the deleting commit is listed as deleted.
+    let gone = scratch_repo("file-history-deleted");
+    write(&gone, "keep.txt", "k\n");
+    write(&gone, "back.txt", "first life\n");
+    commit_all(&gone, "add");
+    let repo = Repository::open(&gone).unwrap();
+    let mut index = repo.index().unwrap();
+    fs::remove_file(gone.join("back.txt")).unwrap();
+    index.remove_path(Path::new("back.txt")).unwrap();
+    index.write().unwrap();
+    drop(repo);
+    commit_all(&gone, "delete");
+    write(&gone, "back.txt", "second life\n");
+    commit_all(&gone, "add again");
+    let history = build_file_history(&gone, "back.txt", None).unwrap();
+    let rows: Vec<(&str, bool)> = history.iter().map(|e| (e.summary.as_str(), e.deleted)).collect();
+    assert_eq!(rows, vec![("add again", false), ("delete", true), ("add", false)]);
+
+    let _ = fs::remove_dir_all(&dir);
+    let _ = fs::remove_dir_all(&gone);
+}
+
+fn head_and_parents(dir: &PathBuf) -> Vec<String> {
+    let repo = Repository::open(dir).unwrap();
+    let mut commit = repo.head().unwrap().peel_to_commit().unwrap();
+    let mut oids = vec![commit.id().to_string()];
+    while let Ok(parent) = commit.parent(0) {
+        oids.push(parent.id().to_string());
+        commit = parent;
+    }
+    oids
+}
+
+#[test]
+fn restore_file_from_commit_writes_only_the_worktree_file() {
+    let dir = scratch_repo("restore-file");
+    write(&dir, "app.ts", "const v = 1;\n");
+    write(&dir, "other.ts", "other 1\n");
+    commit_all(&dir, "v1");
+    write(&dir, "app.ts", "const v = 2;\n");
+    write(&dir, "other.ts", "other 2\n");
+    commit_all(&dir, "v2");
+    write(&dir, "app.ts", "const v = 3; // unsaved work\n");
+    let oids = head_and_parents(&dir);
+    let v1 = &oids[1];
+
+    let restored = restore_file_from_commit(&dir, "app.ts", v1, None).unwrap();
+    assert_eq!(restored.source_path, "app.ts");
+    assert_eq!(restored.short_oid, v1[..7]);
+    assert!(!restored.binary);
+    assert_eq!(fs::read_to_string(dir.join("app.ts")).unwrap(), "const v = 1;\n");
+    assert_eq!(fs::read_to_string(dir.join("other.ts")).unwrap(), "other 2\n", "other files stay");
+
+    // An unstaged change: the index and HEAD still hold v2, nothing was committed.
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id().to_string(), oids[0]);
+    let status = repo.status_file(Path::new("app.ts")).unwrap();
+    assert_eq!(status, Status::WT_MODIFIED, "restored file is an unstaged change: {status:?}");
+    drop(repo);
+
+    // Short ids work; bad ids and paths are rejected.
+    restore_file_from_commit(&dir, "app.ts", &oids[0][..7], None).unwrap();
+    assert_eq!(fs::read_to_string(dir.join("app.ts")).unwrap(), "const v = 2;\n");
+    assert!(restore_file_from_commit(&dir, "app.ts", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", None).is_err());
+    assert!(restore_file_from_commit(&dir, "../escape.ts", v1, None).is_err());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn restore_file_from_commit_handles_renames_deletions_and_binaries() {
+    let dir = scratch_repo("restore-rename");
+    let body = "alpha\nbeta\ngamma\ndelta\nepsilon\n";
+    write(&dir, "src/old.txt", body);
+    fs::write(dir.join("logo.bin"), [0u8, 159, 146, 150, 0, 1, 2]).unwrap();
+    commit_all(&dir, "first");
+    fs::create_dir_all(dir.join("lib")).unwrap();
+    fs::rename(dir.join("src/old.txt"), dir.join("lib/new.txt")).unwrap();
+    write(&dir, "lib/new.txt", &format!("{body}zeta\n"));
+    fs::write(dir.join("logo.bin"), [9u8, 9, 0, 9]).unwrap();
+    commit_all(&dir, "rename and edit");
+    let oids = head_and_parents(&dir);
+    let first = &oids[1];
+
+    // Explicit source path (from the history entry), written to the current path.
+    let restored = restore_file_from_commit(&dir, "lib/new.txt", first, Some("src/old.txt")).unwrap();
+    assert_eq!(restored.source_path, "src/old.txt");
+    assert_eq!(fs::read_to_string(dir.join("lib/new.txt")).unwrap(), body);
+    assert!(!dir.join("src/old.txt").exists(), "the old path is not recreated");
+
+    // Without a source path the commit-to-HEAD rename is detected.
+    write(&dir, "lib/new.txt", "scratch\n");
+    let restored = restore_file_from_commit(&dir, "lib/new.txt", first, None).unwrap();
+    assert_eq!(restored.source_path, "src/old.txt");
+    assert_eq!(fs::read_to_string(dir.join("lib/new.txt")).unwrap(), body);
+
+    // Binary content is copied byte for byte.
+    let restored = restore_file_from_commit(&dir, "logo.bin", first, None).unwrap();
+    assert!(restored.binary);
+    assert_eq!(fs::read(dir.join("logo.bin")).unwrap(), vec![0u8, 159, 146, 150, 0, 1, 2]);
+
+    // A path missing from the commit (deleted there or added later) is refused.
+    let err = restore_file_from_commit(&dir, "nope.txt", first, None).unwrap_err();
+    assert!(err.contains("does not exist in commit"), "{err}");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn restore_file_from_commit_applies_line_ending_filters() {
+    let dir = scratch_repo("restore-crlf");
+    write(&dir, "notes.txt", "one\ntwo\n");
+    commit_all(&dir, "lf");
+    Repository::open(&dir).unwrap().config().unwrap().set_bool("core.autocrlf", true).unwrap();
+    let head = head_and_parents(&dir).remove(0);
+    restore_file_from_commit(&dir, "notes.txt", &head, None).unwrap();
+    assert_eq!(fs::read(dir.join("notes.txt")).unwrap(), b"one\r\ntwo\r\n",
+        "checkout filters match `git restore` (core.autocrlf)");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn file_history_does_not_decode_large_unchanged_trees() {
     let dir = scratch_repo("large-unchanged-file-history");
     let repo = Repository::open(&dir).unwrap();
