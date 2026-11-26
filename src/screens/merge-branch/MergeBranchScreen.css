@@ -181,22 +181,12 @@
   padding: 14px 18px;
 }
 
-.merge-branch__conflict-hint {
-  margin: 0 0 10px;
-  font-size: var(--fs-xs);
-  color: var(--text-secondary);
-}
-
-.merge-branch__conflict-list {
-  margin: 0;
-  padding-left: 20px;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  color: var(--text-primary);
-}
-
-.merge-branch__conflict-list li {
-  margin: 3px 0;
+/* The conflict editor brings its own banner and frame. */
+.merge-branch__conflict--editor {
+  border: none;
+  background: none;
+  padding: 0;
+  scroll-margin-top: 12px;
 }
 
 .merge-branch__log {
@@ -474,33 +464,6 @@
   overflow: hidden;
 }
 
-.merge-branch__conflict-editor-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.merge-branch__save-btn {
-  padding: 4px 12px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--accent-tint-1);
-  color: var(--accent);
-  font-weight: 600;
-  font-size: var(--fs-2xs);
-  cursor: pointer;
-}
-
-.merge-branch__save-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.merge-branch__conflict-editor-host {
-  height: 300px;
-}
-
 .merge-branch__file-view {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -527,47 +490,6 @@
   padding: 8px 12px;
   font-size: var(--fs-xs);
   color: var(--success, #6dd6ad);
-}
-
-.merge-branch__conflict-file-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.merge-branch__conflict-file-btn {
-  display: inline-block;
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  cursor: pointer;
-}
-
-.merge-branch__conflict-file-btn:hover,
-.merge-branch__conflict-file-btn.is-open {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.merge-branch__git-add-btn {
-  padding: 3px 10px;
-  border: 1px solid var(--success, #6dd6ad);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--success, #6dd6ad);
-  font-family: var(--font-mono);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.merge-branch__git-add-btn:hover {
-  background: rgba(109, 214, 173, 0.12);
 }
 
 .merge-branch__view-mode {

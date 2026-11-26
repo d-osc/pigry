@@ -1755,6 +1755,28 @@ pub async fn delete_remote_branch(
 }
 
 #[tauri::command]
+pub async fn list_checkout_refs(state: State<'_, Mutex<AppState>>) -> Result<Vec<ops::CheckoutRef>, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || ops::list_checkout_refs(&repo_path))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn checkout_tag(state: State<'_, Mutex<AppState>>, name: String) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::checkout_tag(&repo_path, &name)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
 pub async fn checkout_branch(
     app: tauri::AppHandle,
     state: State<'_, Mutex<AppState>>,
@@ -2023,6 +2045,46 @@ pub async fn duplicate_commit(
     };
     tauri::async_runtime::spawn_blocking(move || {
         ops::duplicate_commit(&repo_path, &source_branch, &destination_branch, &oid)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn duplicate_commit_conflicts(
+    state: State<'_, Mutex<AppState>>,
+    source_branch: String,
+    destination_branch: String,
+    oid: String,
+) -> Result<ops::DuplicateConflicts, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::duplicate_commit_conflicts(&repo_path, &source_branch, &destination_branch, &oid)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn duplicate_commit_resolved(
+    state: State<'_, Mutex<AppState>>,
+    source_branch: String,
+    destination_branch: String,
+    oid: String,
+    destination_oid: String,
+    resolutions: Vec<ops::DuplicateResolution>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::duplicate_commit_resolved(&repo_path, &source_branch, &destination_branch, &oid, &destination_oid, &resolutions)
     })
     .await
     .map_err(|error| error.to_string())??;
@@ -2341,6 +2403,64 @@ pub async fn merge_abort(
 }
 
 #[tauri::command]
+pub async fn conflict_state(state: State<'_, Mutex<AppState>>) -> Result<ops::ConflictState, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::conflict_state(&repo_path)
+}
+
+#[tauri::command]
+pub async fn conflict_versions(state: State<'_, Mutex<AppState>>, path: String) -> Result<ops::ConflictVersions, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::conflict_versions(&repo_path, &path)
+}
+
+#[tauri::command]
+pub async fn conflict_resolve_file(
+    state: State<'_, Mutex<AppState>>,
+    path: String,
+    side: Option<String>,
+    content: Option<String>,
+) -> Result<(), String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::conflict_resolve_file(&repo_path, &path, side.as_deref(), content.as_deref())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn conflict_continue(state: State<'_, Mutex<AppState>>) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::conflict_continue(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
+pub async fn conflict_abort(state: State<'_, Mutex<AppState>>) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    ops::conflict_abort(&repo_path)?;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
+#[tauri::command]
 pub async fn merge_file_versions(
     state: State<'_, Mutex<AppState>>,
     path: String,
@@ -2624,7 +2744,7 @@ pub async fn git_cli_status() -> Result<GitCliStatus, String> {
 
 /// `scope` selects the memory store inside .pigry -- "teams/<team>" is the
 /// team-wide store, "teams/<team>/agents/<username>" an agent's private one;
-/// omitted = the project-wide store (.pigry/memory.vector.json).
+/// omitted = the project-wide scope of .pigry/memory.json.
 #[tauri::command]
 pub async fn memory_list(
     state: State<'_, Mutex<AppState>>,

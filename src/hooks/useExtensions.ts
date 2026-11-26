@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { EXTENSIONS_CHANGED, listExtensions } from '../lib/extensions';
 import type { InstalledExtension } from '../lib/extensionManifest';
 import { EXTENSIONS_CHANGED as CHANGED, readDisabledMenus } from '../lib/builtinExtensions';
+import { QUICK_ACCESS_CHANGED, readQuickAccess } from '../lib/quickAccess';
 
 /** The installed extensions, kept current when one is installed, switched or removed. */
 export function useExtensions(): InstalledExtension[] {
@@ -12,6 +13,18 @@ export function useExtensions(): InstalledExtension[] {
     return () => window.removeEventListener(EXTENSIONS_CHANGED, refresh);
   }, []);
   return extensions;
+}
+
+/** The menus pinned to the side bar's Quick access group, in order. */
+export function useQuickAccess(): string[] {
+  const [ids, setIds] = useState<string[]>(() => readQuickAccess());
+  useEffect(() => {
+    const refresh = () => setIds(readQuickAccess());
+    window.addEventListener(QUICK_ACCESS_CHANGED, refresh);
+    window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener(QUICK_ACCESS_CHANGED, refresh); window.removeEventListener('storage', refresh); };
+  }, []);
+  return ids;
 }
 
 /** The built-in extension menus the user switched off (they disappear from the side bar and the command palette). */

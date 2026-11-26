@@ -8,7 +8,6 @@ async function setup(page) {
 }
 
 const nav = (page) => page.locator('.nav-sidebar');
-const calls = (page, cmd) => page.evaluate((cmd) => window.testBackend.calls.filter((call) => call.cmd === cmd), cmd);
 
 test('right-clicking a workspace menu offers Open, Open guide and the side bar actions', async ({ page }) => {
   await setup(page);
@@ -40,30 +39,18 @@ test('right-clicking a workspace menu offers Open, Open guide and the side bar a
   await expect(nav(page).locator('.nav-item--active')).toContainText('Merge branch');
 });
 
-test('branches have Checkout, Copy name and Delete; the current branch cannot be checked out or deleted', async ({ page }) => {
+test('the side bar lists only menus — no branches, tags, stashes or worktrees', async ({ page }) => {
   await setup(page);
-  await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (text) => { window.__copied = text; } }, configurable: true }); });
-
-  await nav(page).locator('.nav-branch', { hasText: 'main' }).first().click({ button: 'right' });
-  const mainMenu = page.getByRole('menu', { name: 'Branch main menu' });
-  await expect(mainMenu.getByRole('menuitem', { name: 'Checkout' })).toBeDisabled();
-  await expect(mainMenu.getByRole('menuitem', { name: 'Delete branch' })).toBeDisabled();
-  await page.keyboard.press('Escape');
-
-  await nav(page).locator('.nav-branch', { hasText: 'feat/graph-search' }).first().click({ button: 'right' });
-  const menu = page.getByRole('menu', { name: 'Branch feat/graph-search menu' });
-  await menu.getByRole('menuitem', { name: 'Copy branch name' }).click();
-  expect(await page.evaluate(() => window.__copied)).toBe('feat/graph-search');
-
-  await nav(page).locator('.nav-branch', { hasText: 'feat/graph-search' }).first().click({ button: 'right' });
-  await menu.getByRole('menuitem', { name: 'Checkout' }).click();
-  await expect.poll(async () => (await calls(page, 'checkout_branch')).length).toBe(1);
-  expect((await calls(page, 'checkout_branch'))[0].args.name).toBe('feat/graph-search');
+  await expect(nav(page).getByRole('button', { name: /Cherry Pick/ })).toBeVisible();
+  for (const title of ['Local branches', 'Remotes', 'Tags', 'Stashes', 'Worktrees', 'Submodules']) {
+    await expect(nav(page).getByText(title, { exact: true })).toHaveCount(0);
+  }
+  await expect(nav(page).locator('.nav-branch, .nav-stash, .nav-section')).toHaveCount(0);
 });
 
 test('the side bar background has a menu, and the search box keeps the native one', async ({ page }) => {
   await setup(page);
-  await nav(page).locator('.nav-sidebar__footer .repo-health').click({ button: 'right' });
+  await nav(page).locator('.nav-sidebar__footer').click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Side bar menu' });
   await expect(menu).toBeVisible();
   await menu.getByRole('menuitem', { name: /^Collapse side bar/ }).click();

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { CLI_PROVIDERS_ENABLED } from '../../src/lib/featureFlags.ts';
 import { demoTree } from '../../src/lib/demoWorkspace.ts';
 import { installBackend, openFixture } from './backend.mjs';
 
@@ -62,7 +63,8 @@ for (const [team, prefix] of [['Explorer', ''], ['Copilot', 'copilot-']]) {
   });
 }
 
-for (const providerType of ['custom', 'codex']) {
+// The codex variant chats through the Codex CLI provider, which is switched off for now (src/lib/featureFlags.ts).
+for (const providerType of CLI_PROVIDERS_ENABLED ? ['custom', 'codex'] : ['custom']) {
   test(`${providerType}: assigned and tagged skills use the current project override once`, async ({ page }) => {
     await page.addInitScript((type) => {
       localStorage.setItem('pigry:ai-providers', JSON.stringify([{

@@ -6,6 +6,7 @@ import { isReadOnlyCall, runInBatches } from '../../lib/toolBatch';
 import { ASK_NOTE, askTools } from '../../lib/askMode';
 import { beginFanOut, endFanOut, exclusive, guardedChange, noteRead, type Snapshot } from '../../lib/writeGuard';
 import { findDefinition } from '../../lib/symbolLookup';
+import { withCaller } from '../../lib/ownedFiles';
 import { DIAGRAM_TOOLS } from '../../extensions/diagram/diagramTools';
 import { DESIGN_TOOLS } from '../../extensions/design/designTools';
 import { DRAWING_TOOLS } from '../../extensions/drawing/drawingTools';
@@ -14,6 +15,10 @@ import { GAME_TOOLS } from '../../extensions/gameengine/gameTools';
 import { getOpenGame } from '../../extensions/gameengine/gameStore';
 import { VIDEO_TOOLS } from '../../extensions/videoeditor/videoTools';
 import { AUDIO_TOOLS } from '../../extensions/audioeditor/audioTools';
+import { SHEET_TOOLS } from '../../extensions/sheet/sheetTools';
+import { getOpenSheet, getOpenSheetSelection } from '../../extensions/sheet/sheetStore';
+import { DOCS_TOOLS } from '../../extensions/docs/docsTools';
+import { getOpenDoc, getOpenDocSelection } from '../../extensions/docs/docsStore';
 import { getOpenAudio } from '../../extensions/audioeditor/audioStore';
 import { getOpenVideo } from '../../extensions/videoeditor/videoStore';
 import { getOpenModel } from '../../extensions/model3d/model3dStore';
@@ -226,6 +231,8 @@ const ANALYSIS_TOOLS = new Set([
   'compare_branches',
   'preview_sync_commits',
   'preview_merge',
+  'conflict_list',
+  'conflict_read',
   'preview_stash',
   'check_duplicate_commit',
   'repo_insights',
@@ -1348,7 +1355,7 @@ const BROWSER_EXTRAS: ToolSpec[] = [
 
 const RUNTIME_AGENT_TOOLS = [
   ...FILE_TOOLS, ...WORKSPACE_AGENT_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS,
-  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
+  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
 ];
 
 /** Short label shown as a tool-activity chip in the chat bubble. */
@@ -1741,6 +1748,30 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
           (openAudio ? `\nThe user currently has the audio project "${openAudio}" open in the editor (read it with audio_read before changing it).` : '');
       }
     }
+    {
+      const openSheet = getOpenSheet();
+      if (team === 'Sheet' || openSheet) {
+        const selection = getOpenSheetSelection();
+        context +=
+          '\n\n[Sheet]\n' +
+          'Spreadsheets live in .pigry/sheets/<agent>/<name>.sheet.json (one folder per agent) and are edited in the Sheet menu: a Google Sheets-style workbook with several sheets, formulas (A1 references, $absolute, Sheet2!A1:B9 cross-sheet, named ranges, 200+ functions incl. SUMIFS, XLOOKUP, FILTER, UNIQUE, SORT, SEQUENCE, PMT, NPV), number formats, data validation (dropdowns, checkboxes), conditional formatting, filters, sorting, pivot summaries and charts. ' +
+          'Use sheet_list / sheet_read / sheet_write / sheet_edit / sheet_query / sheet_preview / sheet_export / sheet_open — do not hand-edit the JSON with write_file. ' +
+          'Type values as a person would (formulas start with "="); prefer formulas over typed results so the sheet stays live; check the numbers with sheet_query and the look with sheet_preview before reporting it done, and read the Review warnings. XLSX export keeps values, formulas and number formats but not colours, conditional formatting, validation or charts.' +
+          (openSheet ? `\nThe user currently has the spreadsheet "${openSheet}" open${selection ? ` with ${selection} selected` : ''} (read it with sheet_read before changing it).` : '');
+      }
+    }
+    {
+      const openDoc = getOpenDoc();
+      if (team === 'Docs' || openDoc) {
+        const selection = getOpenDocSelection();
+        context +=
+          '\n\n[Docs]\n' +
+          'Documents live in .pigry/docs/<agent>/<name>.doc.json (one folder per agent) and are edited in the Docs menu: a Google Docs-style editor with paragraph styles (title, subtitle, h1–h6), lists and checklists, tables with merged cells, images, links, footnotes, equations, a table of contents, page setup, header and footer, comments and suggested edits (tracked changes). ' +
+          'Use docs_list / docs_read / docs_write / docs_edit / docs_preview / docs_export / docs_open — do not hand-edit the JSON with write_file. ' +
+          'Draft with Markdown (docs_write markdown or the insert op); in a document the user wrote, propose changes with suggest and comment instead of rewriting it. Read the Review lines and look at the pages with docs_preview before reporting it done. Word export keeps styles, lists, tables, images, footnotes, comments and suggestions (as tracked changes).' +
+          (openDoc ? `\nThe user currently has the document "${openDoc}" open${selection ? ` with this selected: "${selection}"` : ''} (read it with docs_read before changing it).` : '');
+      }
+    }
     // Project instructions (.pigry/instructions.md) — always ride along.
     try {
       const instructions = (await readInstructions()).trim();
@@ -1851,8 +1882,8 @@ function createAgentTurnRunner({allProviders, active, ownerName, agentUsername, 
     rawInput: Record<string, unknown>,
     agent?: string,
   ): Promise<string> => {
-    // Diagram/design tools keep files per agent (.pigry/<kind>/<agent>/…) — tell them who is calling.
-    const input = agent && (name.startsWith('diagram_') || name.startsWith('design_') || name.startsWith('board_') || name.startsWith('e2e_') || name === 'read_image') ? { ...rawInput, agent } : rawInput;
+    // Editor tools keep files per agent (.pigry/<kind>/<agent>/…) — tell them who is calling.
+    const input = withCaller(name, rawInput, agent);
     const id = liveStart({ kind: 'tool', title: name, detail: clip(rawInput, 400), status: 'running' });
     try {
       const paths = changedPaths(name, rawInput);

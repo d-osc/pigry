@@ -1,7 +1,7 @@
 import { demoAppState, demoHistory, demoTree, demoFileContent, demoStats, demoCommitDetail } from '../../src/lib/demoWorkspace.ts';
 
 /** Test-only IPC boundary. No test hook or fake backend is shipped in the app. */
-export async function installBackend(page, { entries, incoming = [], branchComparison, branchHistory = demoHistory, duplicateMatches = {}, clean = false } = {}) {
+export async function installBackend(page, { entries, incoming = [], branchComparison, branchHistory = demoHistory, duplicateMatches = {}, duplicateConflicts = {}, clean = false } = {}) {
   const state = structuredClone(demoAppState);
   state.activePath = '/fixtures/workspace';
   state.recent = [state.activePath];
@@ -12,7 +12,7 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
   const changedFile = { id: 'fixture.txt:unstaged', path: 'fixture.txt', name: 'fixture.txt', directory: '', status: 'M', additions: 1, deletions: 1, staged: false, untracked: false };
   state.repository.files = clean ? [] : [changedFile];
   const detail = demoCommitDetail(demoHistory.commits[0].oid);
-  await page.addInitScript(({ state, history, tree, content, stats, detail, incoming, branchComparison, branchHistory, duplicateMatches, changedFile }) => {
+  await page.addInitScript(({ state, history, tree, content, stats, detail, incoming, branchComparison, branchHistory, duplicateMatches, duplicateConflicts, changedFile }) => {
     let opened = false;
     let sshConnection = null;
     let sshPath = null;
@@ -162,10 +162,46 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
           case 'duplicate_commit_candidates':
             return branchHistory.commits.filter(row =>
               !row.isMerge && !(duplicateMatches[args.destinationBranch] ?? []).includes(row.oid)).map(row => row.oid);
+          case 'duplicate_commit_conflicts':
+            return {
+              destinationOid: state.repository.branches.find(branch => branch.name === args.destinationBranch).oid ?? 'c'.repeat(40),
+              commitOid: args.oid,
+              commitSummary: branchHistory.commits.find(row => row.oid === args.oid)?.summary ?? '',
+              files: duplicateConflicts[args.oid] ?? [],
+            };
+          case 'duplicate_commit_resolved':
           case 'duplicate_commit':
             duplicateMatches[args.destinationBranch] ??= [];
             duplicateMatches[args.destinationBranch].push(args.oid);
             state.repository.branches.find(branch => branch.name === args.destinationBranch).oid = 'd'.repeat(40);
+            return structuredClone(state);
+          case 'list_checkout_refs': {
+            // The full list: more than the app state carries (a remote-only branch, an older tag).
+            const repo = state.repository;
+            const ref = (kind, name, extra = {}) => ({ kind, name, remote: null, branch: null, shortOid: 'abc1234', subject: '', timeSeconds: 0, isHead: false, ...extra });
+            return [
+              ...repo.branches.map(branch => ref('local', branch.name, { shortOid: (branch.oid ?? 'abc1234').slice(0, 7), subject: `Tip of ${branch.name}`, isHead: branch.name === repo.currentBranch })),
+              ...repo.remotes.flatMap(({ remote, branches }) => [...branches, 'release/2.0'].map(branch => ref('remote', `${remote}/${branch}`, { remote, branch }))),
+              ...repo.tags.map(tag => ref('tag', tag.name, { shortOid: (tag.commitOid ?? '').slice(0, 7) })),
+              ref('tag', 'v0.1.0', { shortOid: '0a1b2c3' }),
+            ];
+          }
+          case 'checkout_branch':
+          case 'checkout_remote_branch':
+          case 'create_branch': {
+            const repo = state.repository;
+            const name = args.name;
+            if (cmd === 'checkout_branch' && !repo.branches.some(branch => branch.name === name)) throw `branch '${name}' not found`;
+            if (!repo.branches.some(branch => branch.name === name)) repo.branches.push({ name, isHead: false, oid: repo.headOid });
+            if (cmd !== 'create_branch' || args.checkout) {
+              repo.currentBranch = name;
+              for (const branch of repo.branches) branch.isHead = branch.name === name;
+            }
+            return structuredClone(state);
+          }
+          case 'checkout_tag':
+            state.repository.currentBranch = 'HEAD';
+            for (const branch of state.repository.branches) branch.isHead = false;
             return structuredClone(state);
           case 'git_fetch':
             incomingCommits = incoming;
@@ -185,7 +221,7 @@ export async function installBackend(page, { entries, incoming = [], branchCompa
         }
       },
     };
-  }, { state, history: demoHistory, tree: entries ? { ...demoTree, entries } : demoTree, content: demoFileContent, stats: demoStats, detail, incoming, branchComparison, branchHistory, duplicateMatches, changedFile });
+  }, { state, history: demoHistory, tree: entries ? { ...demoTree, entries } : demoTree, content: demoFileContent, stats: demoStats, detail, incoming, branchComparison, branchHistory, duplicateMatches, duplicateConflicts, changedFile });
 }
 
 export async function openFixture(page) {

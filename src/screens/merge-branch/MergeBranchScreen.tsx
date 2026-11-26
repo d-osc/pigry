@@ -1,26 +1,24 @@
 import { useRequestGate } from '../../hooks/useRequestGate';
 /** Merge Branch screen — merge a branch INTO the checked-out branch with
- * strategy choice, conflict handling (file list + abort) and a result log. */
-import { useEffect, useRef, useState } from 'react';
-import { Editor } from '../../editor/ThemedEditors';
+ * strategy choice, a conflict editor when the merge stops on conflicts, and a result log. */
+import { useEffect, useState } from 'react';
 import { GitBranch, GitMerge, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
   mergePreview,
   mergeFileVersions,
   mergeStatus,
-  writeWorktreeFile,
-  stagePaths,
+  mergeBranch as runMerge,
   readFileAtCommit,
   type MergePreview,
   type MergeStatusInfo,
 } from '../../lib/tauriClient';
-import { ConflictController } from '../../editor/conflictMarkers';
 import { relativeTime } from '../../lib/relativeTime';
 import { languageForPath } from '../../lib/ghData';
 import { shareCommitWithChat } from '../../lib/chatBridge';
 import { ChatAwareDiffEditor } from '../../lib/ChatAwareDiffEditor';
 import '../../editor/monacoSetup';
+import { MergeConflictPanel } from './MergeConflictPanel';
 import './MergeBranchScreen.css';
 
 type MergeStrategy = 'ff' | 'no-ff' | 'squash';
@@ -34,7 +32,7 @@ const STRATEGIES: Array<{ id: MergeStrategy; title: string; detail: string }> = 
 export function MergeBranchScreen() {
   const versionsGate = useRequestGate();
   const commitGate = useRequestGate();
-  const { repository, refresh, notify, mergeBranch, mergeAbort } = useRepository();
+  const { repository, refresh, notify, mergeAbort, conflictContinue, busy } = useRepository();
   const currentBranch = repository?.currentBranch ?? '';
   const branches = (repository?.branches ?? []).filter((b) => !b.isHead && b.name !== currentBranch);
 
@@ -90,26 +88,6 @@ export function MergeBranchScreen() {
       setCommitCompare(null);
     } finally {
       if (isCurrent()) setLoadingCommitCompare(false);
-    }
-  };
-
-  // Conflicted files are ALL open at once; this set holds collapsed ones.
-  const [collapsedConflicts, setCollapsedConflicts] = useState<Set<string>>(new Set());
-
-  // git add one conflicted file straight from its row — refuses while the
-  // working file still contains conflict markers.
-  const stageOne = async (file: string) => {
-    try {
-      const versions = await mergeFileVersions(file, effectiveSource || currentBranch);
-      if ((versions.workdir ?? '').includes('<<<<<<<')) {
-        notify(`${file} still has conflict markers — resolve them first`, 'error');
-        return;
-      }
-      await stagePaths([file]);
-      notify(`Staged ${file} — commit to finish the merge`, 'success');
-      refresh();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
     }
   };
 
@@ -199,33 +177,42 @@ export function MergeBranchScreen() {
   };
 
   const doMerge = async () => {
-    if (!effectiveSource || merging) return;
+    if (!effectiveSource || merging || busy) return;
     setMerging(true);
     try {
-      const merged = await mergeBranch(effectiveSource, strategy);
-      if (!merged) {
-        const status = await mergeStatus().catch(() => null);
-        if (status) setConflict(status);
-        addLog('Merge did not complete. Check the error and resolve any conflicts before retrying.', 'error');
-        return;
-      }
+      // Called directly (not through the repository context) so a conflict opens the editor below instead of being
+      // reported as an error.
+      await runMerge(effectiveSource, strategy);
       addLog(`Merged ${effectiveSource} into ${currentBranch}.`, 'success');
       setConflict(null);
-      refresh();
+      await refresh();
       notify(`Merged ${effectiveSource} into ${currentBranch}`, 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.toUpperCase().includes('CONFLICT')) {
-        addLog('Merge conflict — resolve in Working changes, then commit.', 'error');
-        const status = await mergeStatus().catch(() => null);
-        if (status) setConflict(status);
-        notify('Merge conflict — resolve in Working changes', 'error');
+      const status = await mergeStatus().catch(() => null);
+      await refresh();
+      if (status?.inProgress && status.conflicted.length > 0) {
+        setConflict(status);
+        addLog(`Merge stopped on conflicts in ${status.conflicted.length} file${status.conflicted.length === 1 ? '' : 's'} — resolve them below.`, 'info');
+        showConflicts();
       } else {
+        if (status?.inProgress) setConflict(status);
         addLog(message, 'error');
         notify(message, 'error');
       }
     } finally {
       setMerging(false);
+    }
+  };
+
+  const showConflicts = () =>
+    window.requestAnimationFrame(() =>
+      document.querySelector('.merge-branch__conflict')?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+
+  const finishMerge = async () => {
+    if (await conflictContinue()) {
+      addLog(`Merge committed on ${currentBranch}.`, 'success');
+      setConflict(null);
     }
   };
 
@@ -526,13 +513,14 @@ export function MergeBranchScreen() {
           <button
             type="button"
             className="merge-branch__run-btn"
-            disabled={!effectiveSource || merging}
+            disabled={!effectiveSource || merging || Boolean(conflict)}
+            title={conflict ? 'Finish or abort the merge in progress first' : undefined}
             onClick={() => void doMerge()}
           >
             <GitMerge size={14} strokeWidth={1.5} />
             {merging ? 'Merging…' : `Merge ${effectiveSource || '…'} into ${currentBranch || '…'}`}
           </button>
-          {conflict && (
+          {conflict && conflict.conflicted.length === 0 && (
             <button
               type="button"
               className="merge-branch__abort-btn"
@@ -544,7 +532,7 @@ export function MergeBranchScreen() {
         </div>
 
         {conflict && (
-          <section className="merge-branch__section merge-branch__conflict">
+          <section className={`merge-branch__section merge-branch__conflict${conflict.conflicted.length ? ' merge-branch__conflict--editor' : ''}`}>
             {conflict.conflicted.length === 0 ? (
               <>
                 <h3 className="merge-branch__section-title">
@@ -554,61 +542,21 @@ export function MergeBranchScreen() {
                 <p className="merge-branch__conflict-resolved">
                   Every conflicted file is staged — commit to finish the merge.
                 </p>
+                <button type="button" className="merge-branch__run-btn" disabled={busy} onClick={() => void finishMerge()}>
+                  <CheckCircle2 size={14} strokeWidth={1.5} /> Commit merge
+                </button>
               </>
             ) : (
-              <>
-                <h3 className="merge-branch__section-title">
-                  <AlertTriangle size={13} strokeWidth={1.5} />
-                  Conflicts ({conflict.conflicted.length})
-                </h3>
-                <p className="merge-branch__conflict-hint">
-                  Every conflicted file is open below — resolve each with the accept
-                  buttons, or abort to restore the branch.
-                </p>
-                <ul className="merge-branch__conflict-list">
-                  {conflict.conflicted.map((file) => {
-                    const collapsed = collapsedConflicts.has(file);
-                    return (
-                      <li key={file} className="merge-branch__conflict-file">
-                        <div className="merge-branch__conflict-file-row">
-                          <button
-                            type="button"
-                            className={`merge-branch__conflict-file-btn${collapsed ? '' : ' is-open'}`}
-                            title={collapsed ? 'Show conflict editor' : 'Collapse this conflict'}
-                            onClick={() =>
-                              setCollapsedConflicts((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(file)) next.delete(file);
-                                else next.add(file);
-                                return next;
-                              })
-                            }
-                          >
-                            {file}
-                          </button>
-                          <button
-                            type="button"
-                            className="merge-branch__git-add-btn"
-                            title={`git add ${file} — stage the resolved content`}
-                            onClick={() => void stageOne(file)}
-                          >
-                            git add
-                          </button>
-                        </div>
-                        {!collapsed && (
-                          <div className="merge-branch__conflict-editor">
-                            <ConflictEditor
-                              key={`${file}:${effectiveSource || currentBranch}`}
-                              path={file}
-                              branch={effectiveSource || currentBranch}
-                            />
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
+              <MergeConflictPanel
+                conflicted={conflict.conflicted}
+                currentBranch={currentBranch}
+                fallbackSource={effectiveSource}
+                onCommitted={(incoming) => {
+                  addLog(`Merged ${incoming} into ${currentBranch} — conflicts resolved.`, 'success');
+                  setConflict(null);
+                }}
+                onAbort={doAbort}
+              />
             )}
           </section>
         )}
@@ -634,167 +582,3 @@ export function MergeBranchScreen() {
     </div>
   );
 }
-
-
-/** Editable conflict-marker editor for one file — the VS Code-style accept
- * widget is attached through ConflictController; Save writes the resolved
- * buffer back to the working file. Loads its own working-tree content so
- * every conflicted file can stay open at once. */
-function ConflictEditor({ path, branch }: { path: string; branch: string }) {
-  const { refresh, notify } = useRepository();
-  const [text, setText] = useState<string | null>(null);
-  const [value, setValue] = useState('');
-  const valueRef = useRef('');
-  const [saving, setSaving] = useState(false);
-  const controllerRef = useRef<ConflictController | null>(null);
-  const saveRef = useRef<() => void>(() => {});
-
-  useEffect(() => {
-    let alive = true;
-    mergeFileVersions(path, branch)
-      .then((versions) => {
-        if (!alive) return;
-        const workdir = versions.workdir ?? '';
-        setText(workdir);
-        setValue(workdir);
-        valueRef.current = workdir;
-      })
-      .catch(() => {
-        if (alive) setText('');
-      });
-    return () => {
-      alive = false;
-    };
-  }, [path, branch]);
-
-  const controllerAccept = (kind: 'current' | 'incoming' | 'both') => {
-    const controller = controllerRef.current;
-    if (!controller) return;
-    controller.accept(kind);
-    const resolved = controller.getValue();
-    setValue(resolved);
-    valueRef.current = resolved;
-  };
-
-  const save = async () => {
-    if (saving) return;
-    setSaving(true);
-    try {
-      await writeWorktreeFile(path, valueRef.current);
-      // A conflict only leaves the list once the index is updated — stage
-      // the file automatically when the markers are gone; keep it listed
-      // (and editable) while markers remain.
-      if (!valueRef.current.includes('<<<<<<<')) {
-        await stagePaths([path]);
-        notify('Conflict resolved and staged — commit to finish the merge', 'success');
-      } else {
-        notify('Saved — conflict markers remain, keep resolving', 'error');
-      }
-      refresh();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-  useEffect(() => {
-    saveRef.current = () => void save();
-  });
-
-  if (text === null) {
-    return (
-      <div className="merge-branch__conflict-editor">
-        <p className="merge-branch__empty">Loading {path}…</p>
-      </div>
-    );
-  }
-
-  const stageAndReport = async () => {
-    try {
-      await stagePaths([path]);
-      notify('File staged — commit to finish the merge', 'success');
-      refresh();
-    } catch (error) {
-      notify(error instanceof Error ? error.message : String(error), 'error');
-    }
-  };
-
-  if (!text.includes('<<<<<<<')) {
-    return (
-      <div className="merge-branch__conflict-editor">
-        <div className="merge-branch__conflict-editor-toolbar">
-          <p className="merge-branch__conflict-resolved">
-            No conflict markers remain — stage the file to finish.
-          </p>
-          <button type="button" className="merge-branch__save-btn" onClick={() => void stageAndReport()}>
-            Stage file
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="merge-branch__conflict-editor">
-      <div className="merge-branch__conflict-editor-toolbar">
-        <div className="merge-branch__accept-actions">
-          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('current')}>
-            ✓ Accept Current
-          </button>
-          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('incoming')}>
-            ✓ Accept Incoming
-          </button>
-          <button type="button" className="merge-branch__save-btn" onClick={() => controllerAccept('both')}>
-            ⇉ Accept Both
-          </button>
-        </div>
-        <button
-          type="button"
-          className="merge-branch__save-btn"
-          disabled={saving}
-          onClick={() => void save()}
-        >
-          {saving ? 'Saving…' : 'Save resolved file'}
-        </button>
-      </div>
-      <div className="merge-branch__conflict-editor-host">
-        <Editor
-          key={path}
-          value={value}
-          language="plaintext"
-          onChange={(next) => {
-            const nextText = next ?? '';
-            setValue(nextText);
-            valueRef.current = nextText;
-          }}
-          onMount={(editor, monaco) => {
-            const controller = new ConflictController(editor, monaco);
-            controllerRef.current = controller;
-            controller.onChange = (text2) => {
-              setValue(text2);
-              valueRef.current = text2;
-            };
-            controller.update();
-            // Ctrl+S saves + stages the resolution, like the Save button.
-            const saveAction = editor.addAction({
-              id: 'pigry.saveConflictResolution',
-              label: 'Save conflict resolution',
-              keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-              precondition: 'editorTextFocus',
-              run: () => { saveRef.current(); },
-            });
-            editor.onDidDispose(() => saveAction.dispose());
-          }}
-          options={{
-            fontSize: 11,
-            lineHeight: 18,
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-

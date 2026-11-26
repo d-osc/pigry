@@ -4,9 +4,9 @@
  *
  *   .pigry/agents.json                                     ALL agent definitions (registry + markdown)
  *   .pigry/teams/<team>/chat/<id>.json                     team chat sessions
- *   .pigry/teams/<team>/memory.vector.json                 shared team memory
+ *   .pigry/memory.json                                     ALL memories (project / team / agent scopes), text only
+ *   .pigry/cache/memory.db                                 local SQLite vector index (git-ignored, rebuilt on demand)
  *   .pigry/teams/<team>/agents/<username>/chat/<id>.json   private chat
- *   .pigry/teams/<team>/agents/<username>/memory.vector.json  private memory
  *
  * Legacy layout (agents.json + AGENT.md per team folder) is still read for
  * migration but new writes go to the consolidated .pigry/agents.json.
@@ -56,9 +56,9 @@ export function agentChatDir(team: string, username: string): string {
   return `${agentRoot(team, username)}/chat/`;
 }
 
-/** One agent's private vector memory store. */
+/** Where one agent's private memories live: the shared store, under its own scope. */
 export function agentMemoryFile(team: string, username: string): string {
-  return `${agentRoot(team, username)}/memory.vector.json`;
+  return `.pigry/memory.json (scope: agent/${team}/${username})`;
 }
 
 /** Memory scope for the memory_* Tauri commands: team store, or the agent's

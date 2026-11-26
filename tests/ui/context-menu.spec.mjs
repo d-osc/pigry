@@ -13,7 +13,8 @@ async function installWorktree(page) {
       if (cmd === 'read_worktree_file' && files.has(args.path)) return { path: args.path, content: files.get(args.path), binary: false, tooLarge: false, language: 'json' };
       if (cmd === 'write_worktree_file') { files.set(args.path, args.content); return null; }
       if (cmd === 'write_worktree_binary') { window.__binary.set(args.path, args.data); return null; }
-      if (cmd === 'delete_worktree_file') { files.delete(args.path); return null; }
+      if (cmd === 'read_binary_file' && window.__binary.has(args.path)) { const data = window.__binary.get(args.path); return { data, mime: 'image/png', size: atob(data).length }; }
+      if (cmd === 'delete_worktree_file') { files.delete(args.path); window.__binary.delete(args.path); return null; }
       return invoke(cmd, args);
     };
   });

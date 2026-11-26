@@ -8,7 +8,7 @@ import { GO_SCREEN_EVENT, setMenuEnabled } from '../../lib/builtinExtensions';
 import { MENU_GUIDES } from '../../lib/menuGuides';
 import type { InstalledExtension } from '../../lib/extensionManifest';
 import {
-  EXTENSION_OPEN, EXTENSIONS_CHANGED, listExtensions, setExtensionEnabled, takePendingOpenExtension, uninstallExtension,
+  EXTENSION_OPEN, EXTENSIONS_CHANGED, listExtensions, peekPendingOpenExtension, setExtensionEnabled, takePendingOpenExtension, uninstallExtension,
 } from '../../lib/extensions';
 import { useExtensionInstall } from './useExtensionInstall';
 import './ExtensionsPanel.css';
@@ -36,8 +36,9 @@ function Contents({ extension }: { extension: InstalledExtension }) {
 
 export function InstalledExtensionsPanel() {
   const [installed, setInstalled] = useState<InstalledExtension[]>(() => listExtensions());
-  // An extension picked in the side bar before Settings was open is waiting for us.
-  const [selectedId, setSelectedId] = useState<string | null>(() => takePendingOpenExtension());
+  // An extension picked in the side bar before Settings was open is waiting for us. It is only read here and taken in the effect below:
+  // this screen loads lazily, and a render that React throws away (Suspense, slow machines) must not use the request up.
+  const [selectedId, setSelectedId] = useState<string | null>(() => peekPendingOpenExtension());
   const [open, setOpen] = useState<Set<string>>(() => (selectedId ? new Set([selectedId]) : new Set()));
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const [pasting, setPasting] = useState(false);
@@ -52,6 +53,8 @@ export function InstalledExtensionsPanel() {
     setPasted('');
     setOpen((current) => new Set(current).add(extension.id));
   });
+
+  useEffect(() => { takePendingOpenExtension(); }, []);
 
   useEffect(() => {
     const refresh = () => setInstalled(listExtensions());

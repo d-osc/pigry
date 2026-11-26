@@ -1,6 +1,7 @@
 /** Games in the workspace (.pigry/games/<owner>/<name>.game.json) plus the small bits of state shared by the Game
  * Engine editor and the agent's game tools: change events, "flush unsaved edits" and "open this game". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { GAMES_DIR, GAME_EXT, parseGameJson, serializeGame, type Game, type NormalizeResult } from './game';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -26,7 +27,7 @@ export async function resolveGame(name: string, caller?: string): Promise<Resolv
 }
 
 export async function loadGame(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(gamePath(ref));
+  const file = await readDocText(gamePath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${gamePath(ref)} is not a readable game file`);
   return { ...parseGameJson(file.content, ref.slug), ref };
 }
@@ -36,13 +37,13 @@ export function notifyGameChanged(change: GameChange): void {
 }
 
 export async function saveGame(ref: OwnedRef, game: Game, source: GameChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(gamePath(ref), serializeGame(game));
+  await writeDocText(gamePath(ref), serializeGame(game));
   notifyGameChanged({ key: refKey(ref), source });
   return gamePath(ref);
 }
 
 export async function removeGame(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(gamePath(ref));
+  await deleteDoc(gamePath(ref));
   notifyGameChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

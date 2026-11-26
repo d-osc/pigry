@@ -311,6 +311,12 @@ const E2E_TOOL_NAMES = ['e2e_list', 'e2e_read', 'e2e_write', 'e2e_edit', 'e2e_ru
 /** The Audio Editor tools (src/extensions/audioeditor/audioTools.ts). */
 const AUDIO_TOOL_NAMES = ['audio_list', 'audio_read', 'audio_write', 'audio_edit', 'audio_preview', 'audio_analyze', 'audio_export', 'audio_open'];
 
+/** The Sheet tools (src/extensions/sheet/sheetTools.ts). */
+const SHEET_TOOL_NAMES = ['sheet_list', 'sheet_read', 'sheet_write', 'sheet_edit', 'sheet_query', 'sheet_preview', 'sheet_export', 'sheet_open'];
+
+/** The Docs tools (src/extensions/docs/docsTools.ts). */
+const DOCS_TOOL_NAMES = ['docs_list', 'docs_read', 'docs_write', 'docs_edit', 'docs_preview', 'docs_export', 'docs_open'];
+
 /** The Video Editor tools (src/extensions/videoeditor/videoTools.ts). */
 const VIDEO_TOOL_NAMES = ['video_list', 'video_read', 'video_write', 'video_edit', 'video_preview', 'video_export', 'video_open'];
 const GAME_TOOL_NAMES = ['game_list', 'game_read', 'game_write', 'game_edit', 'game_run', 'game_preview', 'game_export', 'game_open'];
@@ -378,6 +384,22 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     tools: [...AUDIO_TOOL_NAMES, 'read_image', 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
     skills: ['audio-editor', 'audio-restoration-and-noise-reduction', 'audio-dynamics-and-loudness'],
   },
+  sheet: {
+    username: 'sheet',
+    role: 'Spreadsheet assistant',
+    description: 'Builds and edits spreadsheets in the Sheet menu — values, formulas and functions, number formats, validation, conditional formatting, sorting, filters, pivot summaries and charts — checks the numbers with formulas and looks at a picture of the result.',
+    emoji: '📊',
+    tools: [...SHEET_TOOL_NAMES, 'read_file', 'list_files', 'read_excel', 'agent_lookup', 'agent_contacts'],
+    skills: ['sheet-editor', 'sheet-formulas', 'sheet-design-best-practices'],
+  },
+  docs: {
+    username: 'docs',
+    role: 'Document assistant',
+    description: 'Writes and edits documents in the Docs menu — headings and styles, lists and checklists, tables, images, links, footnotes, page setup, header and footer — reviews them with comments and suggested edits, looks at pictures of the pages and exports Word, Markdown or HTML.',
+    emoji: '📝',
+    tools: [...DOCS_TOOL_NAMES, 'read_file', 'list_files', 'read_word', 'read_image', 'agent_lookup', 'agent_contacts'],
+    skills: ['docs-editor', 'docs-structure-and-formatting', 'docs-review-and-suggestions'],
+  },
   videoeditor: {
     username: 'videoeditor',
     role: 'Video editing assistant',
@@ -425,6 +447,14 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     emoji: '🌿',
     tools: [...GIT_REVIEW_TOOLS, 'preview_merge', 'stage_changes', 'read_image'],
     skills: ['merge-conflict', 'git-commit-style'],
+  },
+  'merge-conflicts': {
+    username: 'merge-conflicts',
+    role: 'Conflict resolution guide',
+    description: 'Explains each conflict in plain words — what your side and the incoming side changed — and resolves the blocks you agree on.',
+    emoji: '🧩',
+    tools: [...GIT_REVIEW_TOOLS, 'conflict_list', 'conflict_read', 'conflict_resolve', 'stage_changes'],
+    skills: ['conflict-resolution', 'merge-conflict'],
   },
   'compare-branch': {
     username: 'compare-branch',
@@ -703,6 +733,24 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     tools: ['list_files', 'read_file', 'read_image', 'web_search', ...AUDIO_TOOL_NAMES],
     skills: ['audio-editor', 'audio-restoration-and-noise-reduction', 'audio-eq-and-mixing', 'audio-dynamics-and-loudness', 'podcast-and-voiceover-production', 'music-editing-and-mastering', 'sound-design-and-effects', 'audio-formats-and-export', 'audio-review-checklist'],
   }],
+  sheet: [{
+    username: 'analyst',
+    name: 'Data Analyst',
+    role: 'Data analyst and spreadsheet modeller',
+    description: 'Turns raw data into trustworthy spreadsheets the way a Google Sheets power user does: one tidy table per sheet, cleaned and validated input, formulas instead of typed results, summaries with SUMIFS and pivot tables, charts that answer one question each, and financial models with separate inputs, calculations and outputs — then checks every number with formulas and a picture before reporting.',
+    emoji: '📊',
+    tools: ['list_files', 'read_file', 'read_excel', 'web_search', ...SHEET_TOOL_NAMES],
+    skills: ['sheet-editor', 'sheet-formulas', 'sheet-data-cleaning', 'sheet-analysis-and-pivots', 'sheet-charts-and-dashboards', 'sheet-financial-modeling', 'sheet-design-best-practices'],
+  }],
+  docs: [{
+    username: 'writer',
+    name: 'Writer',
+    role: 'Writer and editor',
+    description: 'Plans, drafts and edits documents the way a careful Google Docs writer does: knows the reader and the purpose first, outlines with real headings, leads with the point, writes plainly in short paragraphs, uses lists and tables where they help, cites sources in footnotes, then reviews with suggested edits and comments instead of silent rewrites, checks the pages with a picture and exports the format the reader needs.',
+    emoji: '✍️',
+    tools: ['list_files', 'read_file', 'read_word', 'read_image', 'web_search', ...DOCS_TOOL_NAMES],
+    skills: ['docs-editor', 'docs-plain-language', 'docs-structure-and-formatting', 'docs-document-types', 'docs-review-and-suggestions', 'docs-tables-figures-and-citations', 'docs-accessibility'],
+  }],
   videoeditor: [{
     username: 'filmmaker',
     name: 'Video Producer',
@@ -791,6 +839,15 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '🔀',
     tools: [...GIT_REVIEW_TOOLS, 'preview_merge', 'compare_branches'],
     skills: ['merge-conflict', 'code-review'],
+  }],
+  'merge-conflicts': [{
+    username: 'conflict-resolver',
+    name: 'Conflict Resolver',
+    role: 'Merge conflict resolver',
+    description: 'Reads both sides of every conflict and their history, works out what each side meant, keeps both intents where they fit, resolves the markers, checks that nothing is left behind, and says which files still need a human decision.',
+    emoji: '🧩',
+    tools: [...GIT_REVIEW_TOOLS, 'conflict_list', 'conflict_read', 'conflict_resolve', 'preview_merge', 'compare_branches', 'stage_changes'],
+    skills: ['conflict-resolution', 'merge-conflict', 'code-review'],
   }],
   'compare-branch': [{
     username: 'branch-diff-reviewer',

@@ -2,7 +2,8 @@
  * one folder per agent — "user" for the editor) plus the small bits of shared
  * state between the Diagram editor screen and the agent's diagram tools:
  * change events, "flush unsaved edits" and "open this diagram". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { DIAGRAMS_DIR, DIAGRAM_EXT, parseDiagramJson, serializeDiagram, type Diagram, type NormalizeResult } from './diagram';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -29,7 +30,7 @@ export async function resolveDiagram(name: string, caller?: string): Promise<Res
 }
 
 export async function loadDiagram(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(diagramPath(ref));
+  const file = await readDocText(diagramPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${diagramPath(ref)} is not a readable diagram file`);
   return { ...parseDiagramJson(file.content, ref.slug), ref };
 }
@@ -39,13 +40,13 @@ export function notifyDiagramChanged(change: DiagramChange): void {
 }
 
 export async function saveDiagram(ref: OwnedRef, diagram: Diagram, source: DiagramChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(diagramPath(ref), serializeDiagram(diagram));
+  await writeDocText(diagramPath(ref), serializeDiagram(diagram));
   notifyDiagramChanged({ key: refKey(ref), source });
   return diagramPath(ref);
 }
 
 export async function removeDiagram(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(diagramPath(ref));
+  await deleteDoc(diagramPath(ref));
   notifyDiagramChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

@@ -24,6 +24,7 @@ import { useRepository } from '../../hooks/useRepository';
 import { aiChat, claudeUsage, launchApp, zcodePlanSubscription } from '../../lib/tauriClient';
 import { detectZcodeGlm } from '../../lib/zcode';
 import { useCliProviders } from '../../hooks/useCliProviders';
+import { CLI_PROVIDERS_ENABLED } from '../../lib/featureFlags';
 import {
   API_FORMAT_LABEL,
   activeProviderId,
@@ -289,12 +290,16 @@ export function ProviderManager() {
             <Plus size={13} strokeWidth={1.75} />
             Add provider
           </button>
-          <p className="prov-mgr__empty-hint" data-testid="cli-empty">
-            {cli.scanning ? 'Scanning for Claude Code, Codex and Antigravity…' : 'No CLI (Claude Code, Codex, Antigravity) found yet.'}
-          </p>
-          <button type="button" className="prov-mgr__ghost-btn" disabled={cli.scanning} onClick={() => void cli.rescan()}>
-            {cli.scanning ? 'Scanning…' : 'Rescan CLIs'}
-          </button>
+          {CLI_PROVIDERS_ENABLED && (
+            <>
+              <p className="prov-mgr__empty-hint" data-testid="cli-empty">
+                {cli.scanning ? 'Scanning for Claude Code, Codex and Antigravity…' : 'No CLI (Claude Code, Codex, Antigravity) found yet.'}
+              </p>
+              <button type="button" className="prov-mgr__ghost-btn" disabled={cli.scanning} onClick={() => void cli.rescan()}>
+                {cli.scanning ? 'Scanning…' : 'Rescan CLIs'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -366,13 +371,13 @@ export function ProviderManager() {
     );
   };
 
-  const rescanButton = (
+  const rescanButton = CLI_PROVIDERS_ENABLED && (
     <button type="button" className="prov-mgr__ghost-btn" disabled={cli.scanning} onClick={() => void cli.rescan().then(() => notify('CLI providers rescanned', 'success'))}>
       <RefreshCw size={12} strokeWidth={1.5} className={cli.scanning ? 'prov-mgr__spin' : undefined} />
       {cli.scanning ? 'Scanning…' : 'Rescan CLIs'}
     </button>
   );
-  const cliGroup = cli.providers.length > 0
+  const cliGroup = !CLI_PROVIDERS_ENABLED ? null : cli.providers.length > 0
     ? renderGroup('cli', 'Provider CLI', cli.providers)
     : (
       <div key="cli" className="prov-mgr__group-block">

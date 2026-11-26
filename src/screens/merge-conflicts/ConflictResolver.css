@@ -1,0 +1,91 @@
+/* ConflictResolver — layered on the Merge conflicts styles (mc-*). */
+.cr {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.cr .mc-main {
+  height: max(460px, calc(100vh - 300px));
+}
+
+.cr .cr-file--done .mc-file__icon {
+  color: var(--green);
+}
+
+.cr-file__status {
+  flex-shrink: 0;
+  font-size: var(--fs-2xs);
+  color: var(--orange);
+}
+
+.cr-file--done .cr-file__status {
+  color: var(--green);
+}
+
+.cr-views {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.cr-pad {
+  padding: 8px 10px;
+}
+
+.cr .cr-preview {
+  max-height: 480px;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.cr .mc-ok,
+.cr .mc-warn {
+  margin: 0;
+  flex-wrap: wrap;
+}
+
+.cr-result .mc-edit__area {
+  min-height: 240px;
+}
+
+.cr .mc-side__head > span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cr .mc-whole {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 1150px) {
+  .cr .mc-main {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .cr .mc-files {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .cr .mc-files h3 {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .cr .mc-file {
+    flex: 0 1 260px;
+    min-width: 0;
+  }
+
+  .cr .mc-detail,
+  .cr .mc-cards {
+    flex: none;
+    overflow: visible;
+  }
+}

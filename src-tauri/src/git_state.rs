@@ -1563,11 +1563,11 @@ pub fn write_worktree_file(repo_path: &Path, path: &str, content: &str) -> Resul
 /// binaries elsewhere in the workspace.
 pub fn write_worktree_binary(repo_path: &Path, path: &str, data_base64: &str) -> Result<()> {
     let rel = path.trim().replace('\\', "/");
-    let ext_ok = [".png", ".jpg", ".jpeg", ".webp", ".webm"]
+    let ext_ok = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".webm"]
         .iter()
         .any(|ext| rel.to_ascii_lowercase().ends_with(ext));
     if !rel.starts_with(".pigry/") || !ext_ok || rel.contains("..") || rel.contains(':') {
-        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.webm".to_string());
+        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.gif/.webm".to_string());
     }
     use base64::Engine as _;
     let bytes = base64::engine::general_purpose::STANDARD
@@ -1600,9 +1600,9 @@ pub fn write_worktree_binary_chunk(repo_path: &Path, path: &str, data_base64: &s
         return Err("binary files can only be written under .pigry/".to_string());
     }
     let audio = lower.starts_with(".pigry/audio/") && AUDIO_EXTS.iter().any(|ext| lower.ends_with(ext));
-    let image = [".png", ".jpg", ".jpeg", ".webp", ".webm"].iter().any(|ext| lower.ends_with(ext));
+    let image = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".webm"].iter().any(|ext| lower.ends_with(ext));
     if !audio && !image {
-        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.webm, or audio under .pigry/audio/".to_string());
+        return Err("binary files can only be written under .pigry/ as .png/.jpg/.webp/.gif/.webm, or audio under .pigry/audio/".to_string());
     }
     let limit = if audio { MAX_AUDIO_BYTES } else { MAX_BINARY_BYTES as u64 };
     use base64::Engine as _;

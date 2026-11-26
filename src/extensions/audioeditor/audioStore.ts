@@ -1,6 +1,7 @@
 /** Audio projects in the workspace (.pigry/audio/<owner>/<name>.audio.json) plus the small bits of state shared by
  * the Audio editor and the agent's audio tools: change events, "flush unsaved edits" and "open this project". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { AUDIO_DIR, AUDIO_EXT, parseProjectJson, serializeProject, type Project, type NormalizeResult } from './audio';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -26,7 +27,7 @@ export async function resolveAudio(name: string, caller?: string): Promise<Resol
 }
 
 export async function loadAudio(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(audioPath(ref));
+  const file = await readDocText(audioPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${audioPath(ref)} is not a readable audio project`);
   return { ...parseProjectJson(file.content, ref.slug), ref };
 }
@@ -36,13 +37,13 @@ export function notifyAudioChanged(change: AudioChange): void {
 }
 
 export async function saveAudio(ref: OwnedRef, project: Project, source: AudioChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(audioPath(ref), serializeProject(project));
+  await writeDocText(audioPath(ref), serializeProject(project));
   notifyAudioChanged({ key: refKey(ref), source });
   return audioPath(ref);
 }
 
 export async function removeAudio(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(audioPath(ref));
+  await deleteDoc(audioPath(ref));
   notifyAudioChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

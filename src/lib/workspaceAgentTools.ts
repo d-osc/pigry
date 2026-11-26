@@ -1,5 +1,6 @@
 import { AGENT_TOOLS, type ToolSpec } from './agentTools';
 import * as client from './tauriClient';
+import { autoChoice, blockContext, choiceFromName, describeBlock, hasConflictMarkers, parseConflicts, resolveText, type Choice } from './conflicts';
 
 type Input = Record<string, unknown>;
 
@@ -155,6 +156,69 @@ const gitTools: ToolSpec[] = [
       return json({ ...preview, commits: [...preview.commits].reverse().slice(0, limit(input)) });
     }
     throw new Error('direction must be pull or push');
+  }),
+  registeredTool('conflict_list', {}, [], async () => {
+    const state = await client.conflictState();
+    return json({
+      operation: state.operation, branch: state.branch, current: state.currentLabel, incoming: state.incomingLabel, incomingCommit: state.incomingCommit, step: state.step,
+      conflicted: state.conflicted,
+      next: state.conflicted.length
+        ? 'Read each file with conflict_read, then resolve it with conflict_resolve (stage: true when no markers are left).'
+        : state.operation ? 'No conflicted files are left: the user can finish the operation in the Merge conflicts menu.' : 'There are no conflicts.',
+    });
+  }),
+  registeredTool('conflict_read', { path: pathField }, ['path'], async input => {
+    const path = text(input, 'path');
+    const file = await client.readWorktreeFile(path);
+    if (file.binary || file.tooLarge) throw new Error(`${path} is ${file.binary ? 'binary' : 'too large'}; it has to be resolved as a whole file`);
+    const parsed = parseConflicts(file.content);
+    const state = await client.conflictState().catch(() => null);
+    return json({
+      path, operation: state?.operation ?? null, current: state?.currentLabel, incoming: state?.incomingLabel, malformed: parsed.malformed,
+      conflicts: parsed.blocks.map(block => ({
+        conflict: block.index + 1, line: block.startLine, currentLabel: block.currentLabel, incomingLabel: block.incomingLabel,
+        summary: describeBlock(block), current: block.current.join('\n'), incoming: block.incoming.join('\n'), ancestor: block.base?.join('\n') ?? null,
+        suggestion: autoChoice(block) ? { take: autoChoice(block)!.choice.kind === 'both' ? 'both' : autoChoice(block)!.choice.kind, reason: autoChoice(block)!.reason } : null,
+        ...blockContext(parsed, block.index, 3),
+      })),
+    });
+  }),
+  registeredTool('conflict_resolve', {
+    path: pathField,
+    resolutions: {
+      type: 'array',
+      description: 'One entry per conflict to resolve (numbers from conflict_read). take: current | incoming | both | both-incoming-first | base | custom (custom needs text).',
+      items: { type: 'object', properties: { conflict: { type: 'integer', minimum: 1 }, take: { type: 'string' }, text: { type: 'string' } }, required: ['conflict', 'take'] },
+    },
+    stage: { type: 'boolean', description: 'Stage the file (mark it resolved) when no conflict markers are left. Default false.' },
+  }, ['path', 'resolutions'], async input => {
+    const path = text(input, 'path');
+    const file = await client.readWorktreeFile(path);
+    if (file.binary || file.tooLarge) throw new Error(`${path} is ${file.binary ? 'binary' : 'too large'}`);
+    const parsed = parseConflicts(file.content);
+    if (parsed.malformed) throw new Error(`the markers in ${path} are broken (${parsed.malformed}); fix the file with write_file instead`);
+    const list = Array.isArray(input.resolutions) ? input.resolutions as Array<Record<string, unknown>> : [];
+    if (!list.length) throw new Error('resolutions must list at least one conflict');
+    const choices: Record<number, Choice> = {};
+    for (const item of list) {
+      const n = Number(item.conflict);
+      const block = parsed.blocks[n - 1];
+      if (!block) throw new Error(`conflict ${String(item.conflict)} does not exist (the file has ${parsed.blocks.length})`);
+      const choice = choiceFromName(String(item.take ?? ''), typeof item.text === 'string' ? item.text : undefined);
+      if (!choice) throw new Error(`conflict ${n}: take must be current, incoming, both, both-incoming-first, base or custom (with text)`);
+      if (choice.kind === 'base' && !block.base) throw new Error(`conflict ${n} has no common ancestor in the file; use current, incoming, both or custom`);
+      choices[block.index] = choice;
+    }
+    const result = resolveText(parsed, choices);
+    await client.writeWorktreeFile(path, result);
+    const left = parsed.blocks.length - Object.keys(choices).length;
+    const markers = hasConflictMarkers(result);
+    if (input.stage === true && !markers) await client.stagePaths([path]);
+    return json({
+      path, resolved: Object.keys(choices).length, left,
+      staged: input.stage === true && !markers,
+      note: markers ? 'Conflict markers are still in the file; resolve the rest before staging.' : input.stage === true ? 'The file is resolved and staged.' : 'The file has no markers left; pass stage: true (or use the Merge conflicts menu) to mark it resolved.',
+    });
   }),
   registeredTool('preview_merge', { branch: { type: 'string' }, limit: limitField }, ['branch'], async input => {
     const preview = await client.mergePreview(text(input, 'branch'));

@@ -8,6 +8,7 @@ import { relaunch as relaunchApp } from '@tauri-apps/plugin-process';
 import { readThemePreference, writeThemePreference, type ThemePreference } from '../../lib/theme';
 import { ProviderManager } from './ProviderManager';
 import { ImportAgentsPanel } from './ImportAgentsPanel';
+import { IMPORT_AGENTS_ENABLED } from '../../lib/featureFlags';
 import { InstalledExtensionsPanel } from '../extensions/InstalledExtensionsPanel';
 import appPackage from '../../../package.json';
 import type { GhAccount } from '../../types/repository';
@@ -17,7 +18,7 @@ type DefaultScreen = 'explorer' | 'commit-graph' | 'working-changes';
 export type SectionId = 'appearance' | 'text-editor' | 'ai-provider' | 'import' | 'extensions' | 'token' | 'accounts' | 'update' | 'about';
 type GhStatus = 'unknown' | 'checking' | 'in' | 'out' | 'missing';
 
-const SECTIONS: Array<{ id: SectionId; label: string }> = [
+const ALL_SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'text-editor', label: 'Text Editor' },
   { id: 'ai-provider', label: 'AI Provider' },
@@ -28,6 +29,8 @@ const SECTIONS: Array<{ id: SectionId; label: string }> = [
   { id: 'update', label: 'Update' },
   { id: 'about', label: 'About' },
 ];
+/** Sections that are switched off for now (featureFlags.ts) are left out of the list and never shown. */
+const SECTIONS = ALL_SECTIONS.filter((section) => section.id !== 'import' || IMPORT_AGENTS_ENABLED);
 
 const readBool = (key: string, fallback: boolean) => {
   try {
@@ -87,7 +90,9 @@ export function AppSettingsScreen({
   initialSection?: SectionId;
 }) {
   const { notify } = useRepository();
-  const [activeSection, setActiveSection] = useState<SectionId>(initialSection ?? 'appearance');
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    initialSection && SECTIONS.some((section) => section.id === initialSection) ? initialSection : 'appearance',
+  );
   const [search, setSearch] = useState('');
 
   // Appearance / startup
@@ -814,7 +819,7 @@ export function AppSettingsScreen({
             </section>
           )}
 
-          {showSection('import', importMatch) && (
+          {IMPORT_AGENTS_ENABLED && showSection('import', importMatch) && (
             <section className="app-settings__section">
               <h2>Import from other agents</h2>
               <ImportAgentsPanel />

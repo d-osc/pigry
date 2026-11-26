@@ -28,6 +28,20 @@ pub fn spawn(app: tauri::AppHandle) -> FileWatcher {
     spawn_with_callback(move || { let _ = app.emit("repo-changed", ()); })
 }
 
+/// Events that only touch Pigry's own local cache (`.pigry/cache/`, e.g. the
+/// SQLite memory index) are not repository changes and must not trigger a refresh.
+fn only_cache(event: &notify::Result<notify::Event>) -> bool {
+    match event {
+        Ok(event) => !event.paths.is_empty() && event.paths.iter().all(|path| is_cache_path(path)),
+        Err(_) => false,
+    }
+}
+
+fn is_cache_path(path: &std::path::Path) -> bool {
+    let parts: Vec<_> = path.components().map(|c| c.as_os_str()).collect();
+    parts.windows(2).any(|w| w[0] == ".pigry" && w[1] == "cache")
+}
+
 fn spawn_with_callback(on_change: impl Fn() + Send + 'static) -> FileWatcher {
     let (tx, rx) = mpsc::channel::<WatcherCommand>();
 
@@ -63,8 +77,10 @@ fn spawn_with_callback(on_change: impl Fn() + Send + 'static) -> FileWatcher {
 
             // 2. Drain file events (non-blocking) — collect dirtiness.
             let mut dirty = false;
-            while let Ok(_event) = event_rx.try_recv() {
-                dirty = true;
+            while let Ok(event) = event_rx.try_recv() {
+                if !only_cache(&event) {
+                    dirty = true;
+                }
             }
 
             // 3. Debounce and emit.
@@ -117,5 +133,17 @@ mod tests {
         assert_eq!(count.load(Ordering::SeqCst), before);
         drop(watcher); std::thread::sleep(Duration::from_millis(300));
         std::fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn writes_to_the_local_cache_do_not_count_as_repository_changes() {
+        assert!(is_cache_path(std::path::Path::new("C:/repo/.pigry/cache/memory.db")));
+        assert!(is_cache_path(std::path::Path::new("/repo/.pigry/cache/memory.db-wal")));
+        assert!(!is_cache_path(std::path::Path::new("/repo/.pigry/memory.json")));
+        assert!(!is_cache_path(std::path::Path::new("/repo/src/cache/x.ts")));
+        let event = |paths: &[&str]| Ok(notify::Event { paths: paths.iter().map(std::path::PathBuf::from).collect(), ..Default::default() });
+        assert!(only_cache(&event(&["/repo/.pigry/cache/memory.db", "/repo/.pigry/cache/memory.db-journal"])));
+        assert!(!only_cache(&event(&["/repo/.pigry/cache/memory.db", "/repo/.pigry/memory.json"])));
+        assert!(!only_cache(&event(&[])));
     }
 }

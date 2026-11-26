@@ -1,6 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { resolveContextWindow } from '../../src/lib/aiProviders.ts';
 import { installBackend, openFixture } from './backend.mjs';
+import { CLI_PROVIDERS_ENABLED } from '../../src/lib/featureFlags.ts';
+
+// Every test here chats through a CLI provider, which is switched off for now (src/lib/featureFlags.ts).
+test.skip(!CLI_PROVIDERS_ENABLED, 'Provider CLI is switched off');
 
 /** The Claude subscription runs through the installed, logged-in Claude Code CLI: it must be listed in the model picker and chat through it. */
 async function setup(page, { usable = true } = {}) {

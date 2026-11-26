@@ -1,7 +1,8 @@
 /** Design files in the workspace (.pigry/designs/<owner>/<name>.design.json)
  * plus the small bits of shared state between the Design editor screen and the
  * agent's design tools: change events, "flush unsaved edits" and "open this design". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { DESIGNS_DIR, DESIGN_EXT, parseDesignJson, serializeDesign, type Design, type NormalizeResult } from './design';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -27,7 +28,7 @@ export async function resolveDesign(name: string, caller?: string): Promise<Reso
 }
 
 export async function loadDesign(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(designPath(ref));
+  const file = await readDocText(designPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${designPath(ref)} is not a readable design file`);
   return { ...parseDesignJson(file.content, ref.slug), ref };
 }
@@ -37,13 +38,13 @@ export function notifyDesignChanged(change: DesignChange): void {
 }
 
 export async function saveDesign(ref: OwnedRef, design: Design, source: DesignChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(designPath(ref), serializeDesign(design));
+  await writeDocText(designPath(ref), serializeDesign(design));
   notifyDesignChanged({ key: refKey(ref), source });
   return designPath(ref);
 }
 
 export async function removeDesign(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(designPath(ref));
+  await deleteDoc(designPath(ref));
   notifyDesignChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

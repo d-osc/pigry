@@ -1,9 +1,8 @@
 /** Project knowledge dialogs — memory + skills, stored IN the working repo
  * so they are versionable with the code:
- *   memory → three vector tiers: project-wide (.pigry/memory.vector.json),
- *     team-shared (.pigry/teams/<team>/memory.vector.json) and per-agent
- *     (.pigry/teams/<team>/agents/<user>/memory.vector.json), each with a
- *     human-readable .md mirror
+ *   memory → three scopes (project, team, agent) in one committed text file,
+ *     .pigry/memory.json, with a human-readable .pigry/memory.md mirror; the
+ *     search vectors live in a local SQLite index (.pigry/cache/memory.db)
  *   skills → .pigry/skills/<slug>.md (one markdown file per skill)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -37,9 +36,9 @@ const TIER_LABEL: Record<MemoryTier, string> = {
 };
 
 const TIER_PATH: Record<MemoryTier, string> = {
-  main: '.pigry/memory.vector.json (scope: project)',
-  team: '.pigry/memory.vector.json (scope: team/<team>)',
-  agent: '.pigry/memory.vector.json (scope: agent/<team>/<user>)',
+  main: '.pigry/memory.json (scope: project)',
+  team: '.pigry/memory.json (scope: team/<team>)',
+  agent: '.pigry/memory.json (scope: agent/<team>/<user>)',
 };
 
 /** Vector-backed memory across three tiers: project-wide, team-shared and

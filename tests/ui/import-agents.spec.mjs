@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { installBackend, openFixture } from './backend.mjs';
+import { IMPORT_AGENTS_ENABLED } from '../../src/lib/featureFlags.ts';
+
+// Settings → Import agents is switched off for now (src/lib/featureFlags.ts).
+test.skip(!IMPORT_AGENTS_ENABLED, 'Import agents is switched off');
 
 const CODEX = {
   agent: 'codex', root: '~/.codex', found: true, skipped: ['skill lint: 1 supporting file(s) next to SKILL.md are not imported'],

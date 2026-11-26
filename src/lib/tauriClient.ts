@@ -1042,6 +1042,30 @@ export async function renameBranch(oldName: string, newName: string): Promise<Ap
   return invoke('rename_branch', { oldName, newName });
 }
 
+/** A branch or tag the status-bar picker can check out. */
+export interface CheckoutRefInfo {
+  kind: 'local' | 'remote' | 'tag';
+  /** "main", "origin/feature/x", "v1.2.0". */
+  name: string;
+  remote: string | null;
+  /** Remote branch name without the remote ("feature/x"). */
+  branch: string | null;
+  shortOid: string;
+  subject: string;
+  timeSeconds: number;
+  isHead: boolean;
+}
+
+/** Every local branch, remote branch and tag, newest commit first. */
+export async function listCheckoutRefs(): Promise<CheckoutRefInfo[]> {
+  return invoke('list_checkout_refs');
+}
+
+/** Checks out a tag as a detached HEAD. */
+export async function checkoutTag(name: string): Promise<AppStatePayload> {
+  return invoke('checkout_tag', { name });
+}
+
 export async function checkoutRemoteBranch(remote: string, name: string): Promise<AppStatePayload> {
   if (!isTauri()) return demoAppState;
   return invoke('checkout_remote_branch', { remote, name });
@@ -1212,6 +1236,58 @@ export async function getDuplicateCommitCandidates(
   return invoke('duplicate_commit_candidates', { sourceBranch, destinationBranch });
 }
 
+/** One file a duplicated commit conflicts on. Ours is the destination branch, theirs is the commit,
+ * base is the commit's parent. `merged` has diff3-style conflict markers; it is null when a side
+ * deleted the file or a version is binary. */
+export interface DuplicateConflictFile {
+  path: string;
+  base: string | null;
+  ours: string | null;
+  theirs: string | null;
+  merged: string | null;
+  binary: boolean;
+}
+
+export interface DuplicateConflicts {
+  /** The destination tip the conflicts were computed against. */
+  destinationOid: string;
+  commitOid: string;
+  commitSummary: string;
+  /** Empty when the commit applies cleanly. */
+  files: DuplicateConflictFile[];
+}
+
+/** How one conflicted file is resolved: either a whole version (`side`; a version that does not exist
+ * deletes the file) or the new text (`content`; null deletes the file). */
+export interface ConflictFileResolution {
+  path: string;
+  content?: string | null;
+  side?: 'ours' | 'theirs';
+}
+
+export type DuplicateResolution = ConflictFileResolution;
+
+/** Replays the commit in memory and lists its conflicts with the destination. Writes nothing. */
+export async function getDuplicateCommitConflicts(
+  sourceBranch: string,
+  destinationBranch: string,
+  oid: string,
+): Promise<DuplicateConflicts> {
+  return invoke('duplicate_commit_conflicts', { sourceBranch, destinationBranch, oid });
+}
+
+/** Commits the duplicate with every conflicted file resolved. Fails without changing anything when
+ * the destination moved past `destinationOid`. */
+export async function duplicateCommitResolved(
+  sourceBranch: string,
+  destinationBranch: string,
+  oid: string,
+  destinationOid: string,
+  resolutions: DuplicateResolution[],
+): Promise<AppStatePayload> {
+  return invoke('duplicate_commit_resolved', { sourceBranch, destinationBranch, oid, destinationOid, resolutions });
+}
+
 export async function mergeBranch(
   branch: string,
   strategy?: string,
@@ -1332,6 +1408,49 @@ export async function pushPreview(): Promise<PushPreview> {
 export async function pullPreview(): Promise<PushPreviewCommit[]> {
   if (!isTauri()) return [];
   return invoke('pull_preview');
+}
+
+export interface ConflictStateInfo {
+  /** 'merge' | 'rebase' | 'cherry-pick' | 'revert', or null (conflicts from a stash, a --no-commit pick…). */
+  operation: 'merge' | 'rebase' | 'cherry-pick' | 'revert' | null;
+  branch: string | null;
+  currentLabel: string;
+  incomingLabel: string;
+  incomingCommit: string | null;
+  conflicted: string[];
+  step: [number, number] | null;
+}
+
+export interface ConflictVersionsInfo {
+  base: string | null;
+  current: string | null;
+  incoming: string | null;
+  binary: boolean;
+}
+
+export async function conflictState(): Promise<ConflictStateInfo> {
+  return invoke('conflict_state');
+}
+
+export async function conflictVersions(path: string): Promise<ConflictVersionsInfo> {
+  return invoke('conflict_versions', { path });
+}
+
+/** Resolves one conflicted working-tree file and stages it (see ConflictFileResolution). */
+export async function conflictResolveFile(resolution: ConflictFileResolution): Promise<void> {
+  return invoke('conflict_resolve_file', {
+    path: resolution.path,
+    side: resolution.side ?? null,
+    content: resolution.side ? null : resolution.content ?? null,
+  });
+}
+
+export async function conflictContinue(): Promise<AppStatePayload> {
+  return invoke('conflict_continue');
+}
+
+export async function conflictAbort(): Promise<AppStatePayload> {
+  return invoke('conflict_abort');
 }
 
 export async function mergeStatus(): Promise<MergeStatusInfo> {
@@ -1461,12 +1580,13 @@ export async function ghTraffic(): Promise<GhTraffic> {
   return invoke('gh_traffic');
 }
 
-/** ---- Vector-backed project memory (.pigry/memory.vector.json) ---- */
+/** ---- Vector-backed memory: text in .pigry/memory.json (committed), vectors in the SQLite index .pigry/cache/memory.db (local) ---- */
 
 export interface MemoryEntry {
   id: string;
   text: string;
-  vector: number[];
+  /** Not sent any more: the vectors stay in the backend's SQLite index. */
+  vector?: number[];
   createdAt: number;
 }
 

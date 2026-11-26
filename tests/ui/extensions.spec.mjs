@@ -37,8 +37,9 @@ const PACK = {
 test('the side bar has an Extensions group next to Workspace, starting with the Extension Store', async ({ page }) => {
   await setup(page);
   const headings = nav(page).locator('.nav-sidebar__heading');
-  await expect(headings.nth(0)).toHaveText('Workspace');
-  await expect(headings.nth(1)).toHaveText('Extensions');
+  await expect(headings.nth(0)).toHaveText('Quick access');
+  await expect(headings.nth(1)).toHaveText('Workspace');
+  await expect(headings.nth(2)).toHaveText('Extensions');
   await expect(nav(page).getByRole('navigation', { name: 'Extensions' }).getByRole('button').first()).toContainText('Extension Store');
   await expect(page.locator('.nav-item--extension')).toHaveCount(0);
 });
@@ -267,7 +268,7 @@ test('the command palette and the guide know about the Extension Store', async (
   await expect(dialog.getByRole('heading', { name: 'Ask the agents' })).toHaveCount(0); // no agent panel in this menu
 });
 
-const MENUS = ['Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Board', 'E2E Testing', 'Reports'];
+const MENUS = ['Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Board', 'E2E Testing', 'Reports'];
 
 test('Diagram, Design, Board, E2E Testing and Reports are built-in extensions in the Extensions group', async ({ page }) => {
   await setup(page);
@@ -381,7 +382,7 @@ test('the built-in menus are in the Extension Store: searchable, with a page and
   await expect(page.getByRole('article', { name: 'Diagram (built-in)' })).toContainText('Included');
   await page.getByRole('group', { name: 'Categories' }).getByRole('button', { name: 'Built-in' }).click();
   await search.fill('');
-  await expect(page.locator('.store-card')).toHaveCount(10);
+  await expect(page.locator('.store-card')).toHaveCount(12);
 
   await page.getByRole('button', { name: 'Open Reports page' }).click();
   const detail = page.getByRole('article', { name: 'Reports extension' });

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installBackend, openFixture } from './backend.mjs';
 
-test('sidebar search filters menu items and refs, Enter opens the first match', async ({ page }) => {
+test('sidebar search filters menu items, Enter opens the first match', async ({ page }) => {
   await installBackend(page);
   await openFixture(page);
   const nav = page.locator('.nav-sidebar');
@@ -13,9 +13,9 @@ test('sidebar search filters menu items and refs, Enter opens the first match', 
   await expect(nav.getByRole('button', { name: /Merge branch/ })).toHaveCount(0);
   await expect(nav.getByText('Local branches')).toHaveCount(0);
 
+  // Branches, tags and stashes are not listed in the side bar, so they never match.
   await search.fill('graph-search');
-  await expect(nav.locator('.nav-branch__name', { hasText: 'feat/graph-search' })).toHaveCount(2); // local + origin
-  await expect(nav.locator('.nav-branch__name', { hasText: 'fix/lane-rendering' })).toHaveCount(0);
+  await expect(nav.getByText(/No match for/)).toBeVisible();
 
   await search.fill('zzz-no-such-thing');
   await expect(nav.getByText(/No match for/)).toBeVisible();

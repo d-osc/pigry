@@ -1,5 +1,15 @@
-//! Vector-backed memory — ONE store for the whole app:
-//! `.pigry/memory.vector.json` in the repo.
+//! Vector-backed memory — ONE store for the whole app.
+//!
+//! What is kept where:
+//!   `.pigry/memory.json`       the memories themselves (id, text, scope, time):
+//!                              small, diff-friendly, committed with the repo
+//!   `.pigry/memory.md`         a human-readable mirror, grouped by scope
+//!   `.pigry/cache/memory.db`   SQLite index of the embedding vectors: derived
+//!                              data, rebuilt on demand, never committed (the
+//!                              cache folder carries its own `.gitignore`)
+//!
+//! Older versions kept the vectors inside `.pigry/memory.vector.json`; that file
+//! is migrated once (text to memory.json, vectors to the index) and removed.
 //!
 //! Every entry carries a `scope` tag saying who owns it:
 //!   ""                       project-wide memory
@@ -9,18 +19,23 @@
 //! with it, so an agent always finds its own memories in the single store.
 //!
 //! Each memory is embedded with an offline hashed n-gram embedder (works for
-//! Thai and English without any model download) and stored with its vector.
-//! Retrieval is cosine similarity (dot product — vectors are L2-normalised).
-//! A human-readable `.pigry/memory.md` mirror is regenerated on every change,
-//! grouped by scope, so the file stays git-diff friendly.
+//! Thai and English without any model download). Retrieval is cosine
+//! similarity (dot product — vectors are L2-normalised). If the index cannot be
+//! opened, vectors are simply computed on the fly.
 
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const DIM: usize = 256;
-const STORE_PATH: &str = ".pigry/memory.vector.json";
+const STORE_PATH: &str = ".pigry/memory.json";
+/// Store format before the vectors moved to the SQLite index.
+const LEGACY_VECTOR_PATH: &str = ".pigry/memory.vector.json";
 const MIRROR_PATH: &str = ".pigry/memory.md";
+/// Local, rebuildable data that must never be committed.
+pub const CACHE_DIR: &str = ".pigry/cache";
+const INDEX_FILE: &str = "memory.db";
 const MIRROR_CAP: usize = 500;
 /// Directory that used to hold per-scope stores before they were merged into
 /// the single file — imported once, then ignored.
@@ -30,6 +45,8 @@ const LEGACY_TEAMS_DIR: &str = ".pigry/teams";
 pub struct MemoryEntry {
     pub id: String,
     pub text: String,
+    /// Only read from the legacy file; the vectors now live in the index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vector: Vec<f32>,
     pub created_at: u64,
     /// Owner tag: "" = project, "team/<Team>", "agent/<Team>/<username>".
@@ -88,18 +105,120 @@ fn effective_scope(scope: Option<&str>) -> String {
         .to_string()
 }
 
-fn load_store(path: &Path) -> MemoryStore {
-    match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
-        Err(_) => MemoryStore::default(),
-    }
+fn read_store_file(path: &Path) -> Option<MemoryStore> {
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
-fn save_store(path: &Path, store: &MemoryStore) -> Result<()> {
+/// Loads the store, migrating the legacy `memory.vector.json` (text and vectors
+/// in one committed file) on first use: text to memory.json, vectors to the index.
+fn load_store(repo_path: &Path) -> Result<MemoryStore> {
+    if let Some(store) = read_store_file(&store_path(repo_path)?) {
+        return Ok(store);
+    }
+    let legacy = workdir(repo_path)?.join(LEGACY_VECTOR_PATH);
+    let Some(mut store) = read_store_file(&legacy) else {
+        return Ok(MemoryStore::default());
+    };
+    if let Ok(index) = open_index(repo_path) {
+        for entry in &store.entries {
+            if entry.vector.len() == DIM {
+                let _ = put_vector(&index, entry, &entry.vector);
+            }
+        }
+    }
+    for entry in &mut store.entries {
+        entry.vector.clear();
+    }
+    save_store(repo_path, &store)?;
+    let _ = fs::remove_file(&legacy);
+    Ok(store)
+}
+
+fn save_store(repo_path: &Path, store: &MemoryStore) -> Result<()> {
+    let path = store_path(repo_path)?;
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    fs::write(path, serde_json::to_string_pretty(store).map_err(err)?).map_err(err)
+    let mut text = serde_json::to_string_pretty(store).map_err(err)?;
+    text.push('\n');
+    fs::write(path, text).map_err(err)
+}
+
+/* ---- SQLite vector index (.pigry/cache/memory.db) ---- */
+
+/// Opens (creating if needed) the vector index. The cache folder gets a
+/// `.gitignore` of `*`, so neither the database nor its -wal/-shm/-journal
+/// side files ever show up as changes.
+fn open_index(repo_path: &Path) -> Result<Connection> {
+    let dir = workdir(repo_path)?.join(CACHE_DIR);
+    fs::create_dir_all(&dir).map_err(err)?;
+    let ignore = dir.join(".gitignore");
+    if !ignore.exists() {
+        let _ = fs::write(&ignore, "# Pigry's local caches: rebuilt on demand, never committed.\n*\n");
+    }
+    let conn = Connection::open(dir.join(INDEX_FILE)).map_err(err)?;
+    conn.busy_timeout(std::time::Duration::from_secs(3)).map_err(err)?;
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS vectors (
+             id TEXT PRIMARY KEY,
+             text_hash INTEGER NOT NULL,
+             dim INTEGER NOT NULL,
+             vector BLOB NOT NULL
+         );",
+    )
+    .map_err(err)?;
+    Ok(conn)
+}
+
+fn text_key(entry: &MemoryEntry) -> i64 {
+    i64::from(fnv1a(&entry.text))
+}
+
+fn put_vector(conn: &Connection, entry: &MemoryEntry, vector: &[f32]) -> Result<()> {
+    let blob: Vec<u8> = vector.iter().flat_map(|v| v.to_le_bytes()).collect();
+    conn.execute(
+        "INSERT INTO vectors (id, text_hash, dim, vector) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET text_hash = excluded.text_hash, dim = excluded.dim, vector = excluded.vector",
+        params![entry.id, text_key(entry), vector.len() as i64, blob],
+    )
+    .map_err(err)?;
+    Ok(())
+}
+
+fn get_vector(conn: &Connection, entry: &MemoryEntry) -> Option<Vec<f32>> {
+    let row: Option<(i64, i64, Vec<u8>)> = conn
+        .query_row(
+            "SELECT text_hash, dim, vector FROM vectors WHERE id = ?1",
+            params![entry.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .ok()?;
+    let (hash, dim, blob) = row?;
+    // A memory whose text was edited by hand in memory.json gets re-embedded.
+    if hash != text_key(entry) || dim as usize != DIM || blob.len() != DIM * 4 {
+        return None;
+    }
+    Some(
+        blob.chunks_exact(4)
+            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+            .collect(),
+    )
+}
+
+/// The vector for an entry: from the index when it is current, otherwise
+/// embedded now (and stored when the index is available).
+fn vector_for(index: Option<&Connection>, entry: &MemoryEntry) -> Vec<f32> {
+    if let Some(conn) = index {
+        if let Some(vector) = get_vector(conn, entry) {
+            return vector;
+        }
+        let vector = embed(&entry.text);
+        let _ = put_vector(conn, entry, &vector);
+        return vector;
+    }
+    embed(&entry.text)
 }
 
 fn now_ms() -> u64 {
@@ -214,14 +333,14 @@ fn seed_from_mirror(repo_path: &Path, store: &mut MemoryStore) -> Result<()> {
             store.entries.push(MemoryEntry {
                 id: format!("m-{:x}-{}", fnv1a(bullet), now_ms()),
                 text: bullet.to_string(),
-                vector: embed(bullet),
+                vector: Vec::new(),
                 created_at: now_ms(),
                 scope: String::new(),
             });
         }
     }
     if !store.entries.is_empty() {
-        save_store(&store_path(repo_path)?, store)?;
+        save_store(repo_path, store)?;
     }
     Ok(())
 }
@@ -271,7 +390,7 @@ fn import_legacy_scopes(repo_path: &Path, store: &mut MemoryStore) -> Result<()>
     }
     store.legacy_imported = true;
     if imported > 0 {
-        save_store(&store_path(repo_path)?, store)?;
+        save_store(repo_path, store)?;
     }
     Ok(())
 }
@@ -284,7 +403,7 @@ fn import_store_file(
     path: &Path,
     scope: &str,
 ) -> Result<usize> {
-    let legacy = load_store(path);
+    let legacy = read_store_file(path).unwrap_or_default();
     let mut imported = 0usize;
     for entry in legacy.entries {
         let exists = store
@@ -301,21 +420,21 @@ fn import_store_file(
                 now_ms()
             ),
             text: entry.text,
-            vector: entry.vector,
+            vector: Vec::new(),
             created_at: entry.created_at,
             scope: scope.to_string(),
         });
         imported += 1;
     }
     if imported > 0 {
-        save_store(&store_path(repo_path)?, store)?;
+        save_store(repo_path, store)?;
     }
     Ok(imported)
 }
 
 /// Lists memories for a scope (ordered oldest first, as written).
 pub fn memory_list(repo_path: &Path, scope: Option<&str>) -> Result<Vec<MemoryEntry>> {
-    let mut store = load_store(&store_path(repo_path)?);
+    let mut store = load_store(repo_path)?;
     seed_from_mirror(repo_path, &mut store)?;
     import_legacy_scopes(repo_path, &mut store)?;
     let tag = effective_scope(scope);
@@ -334,8 +453,7 @@ pub fn memory_add(repo_path: &Path, scope: Option<&str>, text: &str) -> Result<M
         return Err("memory text must not be empty".to_string());
     }
     let tag = effective_scope(scope);
-    let path = store_path(repo_path)?;
-    let mut store = load_store(&path);
+    let mut store = load_store(repo_path)?;
     seed_from_mirror(repo_path, &mut store)?;
     import_legacy_scopes(repo_path, &mut store)?;
     if let Some(existing) = store.entries.iter().find(|e| e.scope == tag && e.text == text) {
@@ -343,22 +461,24 @@ pub fn memory_add(repo_path: &Path, scope: Option<&str>, text: &str) -> Result<M
     }
     let entry = MemoryEntry {
         id: format!("m-{:x}-{}", fnv1a(&text), now_ms()),
-        vector: embed(&text),
+        vector: Vec::new(),
         text,
         created_at: now_ms(),
         scope: tag,
     };
     store.entries.push(entry.clone());
-    save_store(&path, &store)?;
+    save_store(repo_path, &store)?;
     write_mirror(repo_path, &store.entries)?;
+    if let Ok(index) = open_index(repo_path) {
+        let _ = put_vector(&index, &entry, &embed(&entry.text));
+    }
     Ok(entry)
 }
 
 /// Removes a memory by id (the id is globally unique across scopes) and
 /// refreshes the markdown mirror.
 pub fn memory_remove(repo_path: &Path, scope: Option<&str>, id: &str) -> Result<()> {
-    let path = store_path(repo_path)?;
-    let mut store = load_store(&path);
+    let mut store = load_store(repo_path)?;
     seed_from_mirror(repo_path, &mut store)?;
     import_legacy_scopes(repo_path, &mut store)?;
     let before = store.entries.len();
@@ -366,8 +486,11 @@ pub fn memory_remove(repo_path: &Path, scope: Option<&str>, id: &str) -> Result<
     if store.entries.len() == before {
         return Err(format!("memory {id} not found"));
     }
-    save_store(&path, &store)?;
+    save_store(repo_path, &store)?;
     write_mirror(repo_path, &store.entries)?;
+    if let Ok(index) = open_index(repo_path) {
+        let _ = index.execute("DELETE FROM vectors WHERE id = ?1", params![id]);
+    }
     Ok(())
 }
 
@@ -380,10 +503,11 @@ pub fn memory_search(
     limit: usize,
 ) -> Result<Vec<MemoryHit>> {
     let tag = effective_scope(scope);
-    let mut store = load_store(&store_path(repo_path)?);
+    let mut store = load_store(repo_path)?;
     seed_from_mirror(repo_path, &mut store)?;
     import_legacy_scopes(repo_path, &mut store)?;
     let qvec = embed(query);
+    let index = open_index(repo_path).ok();
     let mut hits: Vec<MemoryHit> = store
         .entries
         .iter()
@@ -391,7 +515,7 @@ pub fn memory_search(
         .map(|entry| MemoryHit {
             id: entry.id.clone(),
             text: entry.text.clone(),
-            score: cosine(&qvec, &entry.vector),
+            score: cosine(&qvec, &vector_for(index.as_ref(), entry)),
             created_at: entry.created_at,
             scope: entry.scope.clone(),
         })
@@ -454,6 +578,14 @@ mod tests {
 
         // One file, one mirror — grouped by scope.
         assert!(dir.join(STORE_PATH).exists());
+        // The committed file holds text only; the vectors live in the ignored SQLite index.
+        let stored = fs::read_to_string(dir.join(STORE_PATH)).unwrap();
+        assert!(!stored.contains("vector"), "no vectors in memory.json");
+        assert!(dir.join(CACHE_DIR).join(INDEX_FILE).exists());
+        let repo = git2::Repository::open(&dir).unwrap();
+        assert!(repo.status_should_ignore(Path::new(".pigry/cache/memory.db")).unwrap());
+        assert!(repo.status_should_ignore(Path::new(".pigry/cache/memory.db-wal")).unwrap());
+        assert!(!repo.status_should_ignore(Path::new(".pigry/memory.json")).unwrap());
         let mirror = fs::read_to_string(dir.join(MIRROR_PATH)).unwrap();
         assert!(mirror.contains("# Memory"));
         assert!(mirror.contains("## Project memory"));
@@ -474,7 +606,7 @@ mod tests {
         .unwrap();
 
         // All three live in the single store file.
-        let all = load_store(&dir.join(STORE_PATH));
+        let all = load_store(&dir).unwrap();
         assert_eq!(all.entries.len(), 3);
 
         // Each scope only sees its own entries.
@@ -589,6 +721,44 @@ mod tests {
         let again = memory_list(&dir, Some("team/Explorer")).unwrap();
         assert_eq!(again.len(), 1);
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrates_the_legacy_vector_file_into_json_and_the_index() {
+        let dir = scratch("migrate");
+        fs::create_dir_all(dir.join(".pigry")).unwrap();
+        let legacy = MemoryStore {
+            entries: vec![
+                MemoryEntry { id: "m-1".into(), text: "tests must run serially".into(), vector: embed("tests must run serially"), created_at: 1, scope: String::new() },
+                MemoryEntry { id: "m-2".into(), text: "team fact".into(), vector: embed("team fact"), created_at: 2, scope: "team/Explorer".into() },
+            ],
+            legacy_imported: true,
+        };
+        fs::write(dir.join(LEGACY_VECTOR_PATH), serde_json::to_string(&legacy).unwrap()).unwrap();
+
+        let list = memory_list(&dir, None).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "m-1", "ids survive the migration");
+        assert!(!dir.join(LEGACY_VECTOR_PATH).exists(), "legacy file removed");
+        let stored = fs::read_to_string(dir.join(STORE_PATH)).unwrap();
+        assert!(stored.contains("team fact") && !stored.contains("vector"));
+        let index = open_index(&dir).unwrap();
+        assert_eq!(get_vector(&index, &list[0]).unwrap(), embed("tests must run serially"));
+        drop(index);
+
+        // Deleting the cache only costs a rebuild.
+        fs::remove_dir_all(dir.join(CACHE_DIR)).unwrap();
+        let hits = memory_search(&dir, None, "run the tests", 1).unwrap();
+        assert_eq!(hits[0].id, "m-1");
+        assert!(dir.join(CACHE_DIR).join(INDEX_FILE).exists(), "index rebuilt");
+
+        // A memory edited by hand in memory.json is re-embedded, not served a stale vector.
+        let edited = stored.replace("tests must run serially", "deploy with docker");
+        fs::write(dir.join(STORE_PATH), edited).unwrap();
+        let hits = memory_search(&dir, None, "docker deploy", 1).unwrap();
+        assert_eq!(hits[0].text, "deploy with docker");
+        assert!(hits[0].score > 0.3, "fresh vector, got {}", hits[0].score);
         let _ = fs::remove_dir_all(&dir);
     }
 

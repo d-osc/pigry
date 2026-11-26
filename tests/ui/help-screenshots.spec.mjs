@@ -30,6 +30,8 @@ const PREPARE = {
   diagram: async (page) => { await page.evaluate(() => window.__help.run('diagram_open', { name: 'checkout-flow' })); await quiet(page.locator('.dgm__svg').waitFor({ timeout: 4000 })); },
   design: async (page) => { await page.evaluate(() => window.__help.run('design_open', { name: 'login-screen' })); await quiet(page.locator('.dsg__svg, .dsg__stage, svg').first().waitFor({ timeout: 4000 })); await click(page, page.getByRole('button', { name: /fit/i })); },
   videoeditor: async (page) => { await page.evaluate(() => window.__help.run('video_open', { name: 'launch-teaser' })); await quiet(page.locator('canvas[aria-label="Video preview"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(800); await click(page, page.getByRole('button', { name: /^text clip/ }).first()); await quiet(page.getByLabel('Ruler').click({ position: { x: 222, y: 12 }, timeout: 2500 })); await page.waitForTimeout(700); },
+  sheet: async (page) => { await page.evaluate(() => window.__help.run('sheet_open', { name: 'sales-2026', cell: 'F2:F13' })); await quiet(page.locator('canvas[aria-label="Spreadsheet grid"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(900); },
+  docs: async (page) => { await page.evaluate(() => window.__help.run('docs_open', { name: 'launch-proposal' })); await quiet(page.getByTestId('docs-surface').locator('[data-style="title"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(700); await click(page, page.getByTestId('comment-card')); await page.waitForTimeout(400); },
   audioeditor: async (page) => { await page.evaluate(() => window.__help.run('audio_open', { name: 'podcast-episode' })); await quiet(page.locator('[data-testid="timeline"] canvas').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(1500); await quiet(page.locator('.au-lane').first().click({ position: { x: 330, y: 40 }, timeout: 2500 })); await page.waitForTimeout(500); },
   gameengine: async (page) => { await page.evaluate(() => window.__help.run('game_open', { name: 'playground' })); await quiet(page.locator('canvas[aria-label="Scene viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Node Player' }).locator('.gm-row-node')); await page.waitForTimeout(600); },
   model3d: async (page) => { await page.evaluate(() => window.__help.run('model_open', { name: 'workshop-table' })); await quiet(page.locator('canvas[aria-label="3D viewport"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(1200); await click(page, page.getByRole('treeitem', { name: 'Object Mug' }).locator('.m3d-row')); await page.waitForTimeout(500); },
@@ -61,6 +63,10 @@ const PREPARE = {
     await quiet(page.locator('.wiki-skeleton').first().waitFor({ state: 'detached', timeout: 8000 }));
     await page.waitForTimeout(800);
   },
+  'merge-conflicts': async (page) => {
+    await quiet(page.getByRole('region', { name: /^Conflict 1 of/ }).waitFor({ timeout: 4000 }));
+    await click(page, page.getByRole('region', { name: /^Conflict 2 of/ }).getByRole('button', { name: 'Accept incoming' }));
+  },
   'rebase-branch': async (page) => { await click(page, page.getByText('feat: add keyboard-first command palette')); },
 };
 
@@ -91,6 +97,44 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
         return { ...full, commits: full.commits.slice(2) };
       }
       if (cmd === 'get_commit_detail') return { ...(await invoke(cmd, args)), oid: args.oid, isMerge: false };
+      // Merge conflicts: a merge of feature/command-menu that stopped on one file.
+      if (window.__conflictShot) {
+        const file = 'src/app/CommandPalette.tsx';
+        const text = [
+          "import { useState } from 'react';",
+          "import { fuzzyMatch } from '../lib/fuzzy';",
+          '',
+          'export function CommandPalette({ commands }: Props) {',
+          '<<<<<<< HEAD',
+          "  const [query, setQuery] = useState('');",
+          '  const results = commands.filter((c) => c.title.includes(query));',
+          '=======',
+          "  const [query, setQuery] = useState('');",
+          '  const [active, setActive] = useState(0);',
+          '  const results = fuzzyMatch(commands, query).slice(0, 20);',
+          '>>>>>>> feat/command-menu',
+          '  return (',
+          '    <Dialog label="Command palette">',
+          '<<<<<<< HEAD',
+          '      <input placeholder="Search commands" value={query} onChange={(e) => setQuery(e.target.value)} />',
+          '=======',
+          '      <input placeholder="Type a command" value={query} onChange={(e) => setQuery(e.target.value)} />',
+          '>>>>>>> feat/command-menu',
+          '      <ResultList items={results} />',
+          '    </Dialog>',
+          '  );',
+          '}',
+          '',
+        ].join('\n');
+        if (cmd === 'conflict_state') return { operation: 'merge', branch: 'main', currentLabel: 'your branch (main)', incomingLabel: "Merge branch 'feat/command-menu'", incomingCommit: '4f2a9c1 Fuzzy search in the command palette', conflicted: [file, 'src/lib/fuzzy.ts'], step: null };
+        if (cmd === 'conflict_versions') return { base: null, current: null, incoming: null, binary: false };
+        if (cmd === 'read_worktree_file' && (args.path === file || args.path === 'src/lib/fuzzy.ts')) return { path: args.path, content: text, binary: false, tooLarge: false, language: 'typescript' };
+        if (cmd === 'refresh' || cmd === 'get_app_state') {
+          const state = await invoke(cmd, args);
+          const row = (path) => ({ id: `${path}:conflicted`, path, name: path.split('/').pop(), directory: path.slice(0, path.lastIndexOf('/')), status: 'C', additions: 0, deletions: 0, staged: false, untracked: false });
+          return { ...state, repository: { ...state.repository, files: [row(file), row('src/lib/fuzzy.ts')] } };
+        }
+      }
       // A real backend takes a moment; an instant answer would race the wiki screen's own loading flag.
       if (cmd === 'wiki_read') await new Promise((resolve) => setTimeout(resolve, 250));
       if (cmd in mocks) return structuredClone(mocks[cmd]);
@@ -108,7 +152,9 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
     const { GAME_TOOLS } = await import('/src/extensions/gameengine/gameTools.ts');
     const { VIDEO_TOOLS } = await import('/src/extensions/videoeditor/videoTools.ts');
     const { AUDIO_TOOLS } = await import('/src/extensions/audioeditor/audioTools.ts');
-    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS];
+    const { SHEET_TOOLS } = await import('/src/extensions/sheet/sheetTools.ts');
+    const { DOCS_TOOLS } = await import('/src/extensions/docs/docsTools.ts');
+    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS];
     window.__help = { run: (name, input) => all.find((tool) => tool.name === name).run({ agent: 'user', ...input }) };
     await window.__help.run('board_write', {
       name: 'checkout-retro', title: 'Checkout retro',
@@ -189,6 +235,20 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
       ],
     });
     await window.__help.run('video_write', { name: 'launch-teaser', title: 'Launch teaser', template: 'promo' });
+    await window.__help.run('sheet_write', { name: 'sales-2026', title: 'Sales 2026', template: 'sales', ops: [{ op: 'note', cell: 'F2', text: 'Revenue = Units × Price' }, { op: 'set', range: 'H8', value: 'Average order' }, { op: 'set', range: 'I8', formula: '=AVERAGE(F2:F13)' }, { op: 'format', range: 'I8', number: 'currency', bold: true }] });
+    await window.__help.run('docs_write', {
+      name: 'launch-proposal', title: 'Mobile app launch', template: 'proposal',
+      ops: [
+        { op: 'page', size: 'a4' },
+        { op: 'replace', section: 'Summary', markdown: "# Summary\n\nCustomers want to order on their phones: 62% of last quarter's visits came from mobile[^1]. We propose a **native app** for iOS and Android, launched in two phases, to lift repeat orders by 15% within six months.\n\n[^1]: Analytics dashboard, Q3 2026." },
+        { op: 'replace', section: 'Goals', markdown: '# Goals\n\n- [x] Agree the scope with sales and support\n- [ ] Beta with 200 customers by March\n- [ ] Public launch before the summer sale' },
+        { op: 'suggest', find: 'lift repeat orders', replace: 'increase repeat orders' },
+        { op: 'comment', find: 'two phases', text: 'Can we show the phases in the timeline table?' },
+        { op: 'table_cell', table: 'Timeline', row: 2, col: 3, text: 'Jan 12' },
+        { op: 'table_cell', table: 'Timeline', row: 3, col: 3, text: 'Mar 2' },
+        { op: 'table_cell', table: 'Timeline', row: 4, col: 3, text: 'May 18' },
+      ],
+    });
     await window.__help.run('audio_write', {
       name: 'podcast-episode', title: 'Podcast episode', template: 'podcast',
       ops: [
@@ -219,8 +279,12 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
   });
 
   const results = [];
+  const only = process.env.HELP_ONLY ? process.env.HELP_ONLY.split(',') : null;
   for (const { id, label } of workspaceNav) {
+    if (only && !only.includes(id)) continue;
     await page.evaluate((on) => { window.__rebaseShot = on; }, id === 'rebase-branch');
+    const conflictShot = id === 'merge-conflicts';
+    if (await page.evaluate((on) => { const changed = !!window.__conflictShot !== on; window.__conflictShot = on; if (changed) window.testBackend.emit('repo-changed', null); return changed; }, conflictShot)) await page.waitForTimeout(600);
     await page.locator('.nav-item').filter({ has: page.locator('.nav-item__label', { hasText: new RegExp(`^${label}$`, 'i') }) }).click();
     await page.waitForTimeout(900);
     await PREPARE[id]?.(page);
@@ -260,5 +324,5 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
   await quiet(page.locator('.app-settings__content').evaluate((el) => { el.scrollTop = 0; }));
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(OUT, 'extensions-settings.jpg'), type: 'jpeg', quality: 82 });
-  expect(results).toHaveLength(workspaceNav.length);
+  expect(results).toHaveLength(only ? workspaceNav.filter(({ id }) => only.includes(id)).length : workspaceNav.length);
 });

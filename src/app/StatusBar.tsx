@@ -6,10 +6,12 @@ import {
   CircleCheck,
   CircleX,
   CloudDownload,
+  GitBranch,
   Unplug,
   SquareTerminal,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
+import { RefPicker } from './RefPicker';
 import './StatusBar.css';
 
 /** Live info of the focused editor, merged into the single status bar. */
@@ -35,6 +37,7 @@ export function StatusBar({
   const { repository, state, refresh, busy, fetchRemote, pullRemote, pushRemote, notifications, clearNotifications } =
     useRepository();
   const [bellOpen, setBellOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
   const [lastReadId, setLastReadId] = useState(0);
   const unread = notifications.filter((item) => item.id > lastReadId).length;
@@ -58,6 +61,8 @@ export function StatusBar({
   const hasRemote = repository.remotes.length > 0;
   const ssh = state?.sshWorkspace;
   const displayPath = (ssh && state?.activePath) || repository.localPath;
+  const detached = repository.currentBranch === 'HEAD' && repository.headOid;
+  const branchLabel = detached ? `${repository.headOid?.slice(0, 7)} (detached)` : repository.currentBranch || 'main';
 
   return (
     <footer className="status-bar">
@@ -70,10 +75,21 @@ export function StatusBar({
         ) : (
           <span>{ssh ? 'SSH workspace' : 'Local repository'}</span>
         )}
-        <span className="status-bar__branch" title={repository.currentBranch}>
-          {repository.currentBranch ?? 'main'}
+        <button
+          type="button"
+          className="status-bar__branch"
+          aria-label={`Checkout branch or tag (current: ${branchLabel})`}
+          title={`${branchLabel} — click to checkout a branch or tag`}
+          aria-haspopup="dialog"
+          aria-expanded={pickerOpen}
+          disabled={busy}
+          onClick={() => setPickerOpen(true)}
+        >
+          <GitBranch size={11} strokeWidth={1.75} />
+          {branchLabel}
           {editorStatus?.dirty ? ' ✱' : ''}
-        </span>
+        </button>
+        {pickerOpen && <RefPicker onClose={() => setPickerOpen(false)} />}
       </div>
       <span className="status-bar__path" title={displayPath}>{displayPath}</span>
       {ssh && (

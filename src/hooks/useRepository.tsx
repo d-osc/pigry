@@ -67,8 +67,19 @@ export interface RepositoryContextValue {
   revertCommit: (oid: string) => Promise<boolean | void>;
   cherryPick: (oid: string) => Promise<boolean | void>;
   duplicateCommit: (sourceBranch: string, destinationBranch: string, oid: string) => Promise<boolean>;
+  /** Finishes a duplicate that conflicted, with every conflicted file resolved. */
+  duplicateCommitResolved: (
+    sourceBranch: string,
+    destinationBranch: string,
+    oid: string,
+    destinationOid: string,
+    resolutions: client.DuplicateResolution[],
+  ) => Promise<boolean>;
   mergeBranch: (branch: string, strategy?: string) => Promise<boolean>;
   mergeAbort: () => Promise<boolean | void>;
+  /** Finishes or abandons whatever merge, rebase, cherry-pick or revert stopped with conflicts. */
+  conflictContinue: () => Promise<boolean | void>;
+  conflictAbort: () => Promise<boolean | void>;
   stashApply: (index: number) => Promise<boolean | void>;
   stashPop: (index: number) => Promise<boolean | void>;
   stashDrop: (index: number) => Promise<boolean | void>;
@@ -76,6 +87,10 @@ export interface RepositoryContextValue {
   deleteTag: (name: string) => Promise<boolean | void>;
   createBranch: (name: string, checkout: boolean) => Promise<boolean | void>;
   checkoutBranch: (name: string) => Promise<boolean | void>;
+  /** Creates (or switches to) the local branch tracking `remote/name`. */
+  checkoutRemoteBranch: (remote: string, name: string) => Promise<boolean>;
+  /** Checks out a tag as a detached HEAD. */
+  checkoutTag: (name: string) => Promise<boolean>;
   deleteBranch: (name: string) => Promise<boolean | void>;
   fetchRemote: () => Promise<boolean>;
   pullRemote: () => Promise<boolean>;
@@ -276,8 +291,16 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
       cherryPick: (oid) => run(() => client.cherryPick(oid), (p) => p, 'Commit cherry-picked'),
       duplicateCommit: (source, destination, oid) =>
         run(() => client.duplicateCommit(source, destination, oid), (p) => p, `Duplicated ${oid.slice(0, 7)} onto ${destination}`),
+      duplicateCommitResolved: (source, destination, oid, destinationOid, resolutions) =>
+        run(
+          () => client.duplicateCommitResolved(source, destination, oid, destinationOid, resolutions),
+          (p) => p,
+          `Duplicated ${oid.slice(0, 7)} onto ${destination} with ${resolutions.length} resolved file${resolutions.length === 1 ? '' : 's'}`,
+        ),
       mergeBranch: (branch, strategy) => run(() => client.mergeBranch(branch, strategy), (p) => p, `Merged ${branch}`),
       mergeAbort: () => run(() => client.mergeAbort(), (p) => p, 'Merge aborted'),
+      conflictContinue: () => run(() => client.conflictContinue(), (p) => p, 'Conflicts resolved — operation finished'),
+      conflictAbort: () => run(() => client.conflictAbort(), (p) => p, 'Operation aborted'),
       stashApply: (index) => run(() => client.stashApply(index), (p) => p, 'Stash applied'),
       stashPop: (index) => run(() => client.stashPop(index), (p) => p, 'Stash popped'),
       stashDrop: (index) => run(() => client.stashDrop(index), (p) => p, 'Stash dropped'),
@@ -290,6 +313,9 @@ export function RepositoryProvider({ children }: { children: ReactNode }) {
           checkout ? `Switched to new branch "${name}"` : `Branch "${name}" created`,
         ),
       checkoutBranch: (name) => run(() => client.checkoutBranch(name), (p) => p, `Switched to "${name}"`),
+      checkoutRemoteBranch: (remote, name) =>
+        run(() => client.checkoutRemoteBranch(remote, name), (p) => p, `Switched to "${name}" (tracking ${remote}/${name})`),
+      checkoutTag: (name) => run(() => client.checkoutTag(name), (p) => p, `Checked out tag "${name}" (detached HEAD)`),
       deleteBranch: (name) => run(() => client.deleteBranch(name), (p) => p, `Branch "${name}" deleted`),
       fetchRemote: () => runNet(() => client.gitFetch()),
       pullRemote: () => runNet(() => client.gitPull()),

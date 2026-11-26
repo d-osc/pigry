@@ -33,6 +33,8 @@ test('command palette can navigate with the keyboard and close', async ({ page }
 });
 
 test('every workspace menu has a default agent and a mentionable base agent', async ({ page }) => {
+  // Walks every menu (33 and counting, several of them heavy editors): a cold dev server needs more than the default 45 s.
+  test.setTimeout(120_000);
   const overrides = {
     explorer: { name: 'My Explorer', model: 'custom-explorer-model' },
     refactorer: { name: 'My Refactorer' },
@@ -56,6 +58,8 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     gameengine: 'gamedev',
     videoeditor: 'filmmaker',
     audioeditor: 'sound-engineer',
+    sheet: 'analyst',
+    docs: 'writer',
     board: 'board-sa',
     e2e: 'e2e-qa',
     reports: 'report-reviewer',
@@ -64,6 +68,7 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     'push-commits': 'push-checklist',
     'pull-commits': 'incoming-impact',
     'merge-branch': 'merge-conflict-helper',
+    'merge-conflicts': 'conflict-resolver',
     'compare-branch': 'branch-diff-reviewer',
     stashes: 'stash-inspector',
     'cherry-pick': 'pick-reviewer',

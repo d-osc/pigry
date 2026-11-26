@@ -1,6 +1,7 @@
 /** Video files in the workspace (.pigry/videos/<owner>/<name>.video.json) plus the small bits of state shared by
  * the Video editor and the agent's video tools: change events, "flush unsaved edits" and "open this video". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { VIDEOS_DIR, VIDEO_EXT, parseProjectJson, serializeProject, type Project, type NormalizeResult } from './video';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -26,7 +27,7 @@ export async function resolveVideo(name: string, caller?: string): Promise<Resol
 }
 
 export async function loadVideo(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(videoPath(ref));
+  const file = await readDocText(videoPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${videoPath(ref)} is not a readable video file`);
   return { ...parseProjectJson(file.content, ref.slug), ref };
 }
@@ -36,13 +37,13 @@ export function notifyVideoChanged(change: VideoChange): void {
 }
 
 export async function saveVideo(ref: OwnedRef, project: Project, source: VideoChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(videoPath(ref), serializeProject(project));
+  await writeDocText(videoPath(ref), serializeProject(project));
   notifyVideoChanged({ key: refKey(ref), source });
   return videoPath(ref);
 }
 
 export async function removeVideo(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(videoPath(ref));
+  await deleteDoc(videoPath(ref));
   notifyVideoChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

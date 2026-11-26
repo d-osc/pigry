@@ -152,6 +152,94 @@ fn duplicate_commit_handles_a_checked_out_destination_and_conflicts() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn duplicate_commit_conflicts_can_be_resolved_or_abandoned() {
+    use crate::gitcli::run_git;
+    use super::DuplicateResolution;
+    let resolve = |path: &str, content: Option<&str>, side: Option<&str>| DuplicateResolution {
+        path: path.into(),
+        content: content.map(str::to_string),
+        side: side.map(str::to_string),
+    };
+    let (dir, source_tip, destination_tip) = duplicate_commit_fixture("resolve");
+    git_cli(&dir, &["branch", "conflict", &destination_tip]);
+    git_cli(&dir, &["checkout", "conflict"]);
+    fs::write(dir.join("shared.txt"), "destination edit\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Conflicting work"]);
+    let conflict_tip = run_git(&dir, &["rev-parse", "conflict"]).unwrap();
+    git_cli(&dir, &["checkout", "feature/source"]);
+
+    // A clean duplicate has nothing to resolve.
+    let clean = super::duplicate_commit_conflicts(&dir, "feature/source", "destination", &source_tip).unwrap();
+    assert!(clean.files.is_empty());
+
+    // Showing the conflicts writes nothing: the destination, HEAD and working tree stay as they were.
+    let shown = super::duplicate_commit_conflicts(&dir, "feature/source", "conflict", &source_tip).unwrap();
+    assert_eq!(shown.destination_oid, conflict_tip);
+    assert_eq!(shown.commit_oid, source_tip);
+    assert_eq!(shown.commit_summary, "Copy just this commit");
+    assert_eq!(shown.files.len(), 1);
+    let file = &shown.files[0];
+    assert_eq!(file.path, "shared.txt");
+    assert_eq!(file.base.as_deref().map(str::trim), Some("original"));
+    assert_eq!(file.ours.as_deref().map(str::trim), Some("destination edit"));
+    assert_eq!(file.theirs.as_deref().map(str::trim), Some("copy this change"));
+    let merged = file.merged.as_deref().unwrap();
+    assert!(merged.contains("<<<<<<< conflict"), "{merged}");
+    assert!(merged.contains("||||||| base"), "{merged}");
+    assert!(merged.contains(">>>>>>> "), "{merged}");
+    assert!(!file.binary);
+    assert_eq!(run_git(&dir, &["rev-parse", "conflict"]).unwrap(), conflict_tip);
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), source_tip);
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+
+    // Every refusal leaves the destination untouched (aborting is simply not finishing).
+    let missing = super::duplicate_commit_resolved(&dir, "feature/source", "conflict", &source_tip, &conflict_tip, &[]);
+    assert!(missing.unwrap_err().contains("still conflicted"));
+    let marked = super::duplicate_commit_resolved(&dir, "feature/source", "conflict", &source_tip, &conflict_tip,
+        &[resolve("shared.txt", Some(merged), None)]);
+    assert!(marked.unwrap_err().contains("conflict markers"));
+    let stranger = super::duplicate_commit_resolved(&dir, "feature/source", "conflict", &source_tip, &conflict_tip,
+        &[resolve("shared.txt", Some("x\n"), None), resolve("other.txt", Some("x\n"), None)]);
+    assert!(stranger.unwrap_err().contains("not one of the conflicted files"));
+    let stale = super::duplicate_commit_resolved(&dir, "feature/source", "conflict", &source_tip, &destination_tip,
+        &[resolve("shared.txt", Some("x\n"), None)]);
+    assert!(stale.unwrap_err().contains("changed while you were resolving"));
+    assert_eq!(run_git(&dir, &["rev-parse", "conflict"]).unwrap(), conflict_tip);
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+
+    // A hand-edited result lands on the inactive destination as one commit with the original author.
+    let new_oid = super::duplicate_commit_resolved(&dir, "feature/source", "conflict", &source_tip, &conflict_tip,
+        &[resolve("shared.txt", Some("destination edit\ncopy this change\n"), None)]).unwrap();
+    assert_eq!(run_git(&dir, &["rev-parse", "conflict"]).unwrap(), new_oid);
+    assert_eq!(run_git(&dir, &["rev-parse", "conflict^"]).unwrap(), conflict_tip);
+    assert_eq!(run_git(&dir, &["show", "conflict:shared.txt"]).unwrap(), "destination edit\ncopy this change");
+    assert_eq!(run_git(&dir, &["log", "-1", "--format=%an: %s", "conflict"]).unwrap(), "Original Author: Copy just this commit");
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), source_tip);
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+    assert_eq!(run_git(&dir, &["rev-parse", "feature/source"]).unwrap(), source_tip);
+
+    // A checked-out destination where the destination deleted the file: keep the commit's version
+    // and the working tree follows the branch.
+    git_cli(&dir, &["checkout", "-b", "deleted", &destination_tip]);
+    git_cli(&dir, &["rm", "-q", "shared.txt"]);
+    git_cli(&dir, &["commit", "-m", "Delete shared"]);
+    let deleted_tip = run_git(&dir, &["rev-parse", "deleted"]).unwrap();
+    let shown = super::duplicate_commit_conflicts(&dir, "feature/source", "deleted", &source_tip).unwrap();
+    assert_eq!(shown.files.len(), 1);
+    assert_eq!((shown.files[0].ours.as_deref(), shown.files[0].merged.as_deref()), (None, None));
+    assert_eq!(shown.files[0].theirs.as_deref().map(str::trim), Some("copy this change"));
+    let kept_deleted = super::duplicate_commit_resolved(&dir, "feature/source", "deleted", &source_tip, &deleted_tip,
+        &[resolve("shared.txt", None, Some("ours"))]);
+    assert!(kept_deleted.unwrap_err().contains("no changes to apply"));
+    super::duplicate_commit_resolved(&dir, "feature/source", "deleted", &source_tip, &deleted_tip,
+        &[resolve("shared.txt", None, Some("theirs"))]).unwrap();
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD^"]).unwrap(), deleted_tip);
+    assert_eq!(fs::read_to_string(dir.join("shared.txt")).unwrap().trim(), "copy this change");
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 fn edit_commit_fixture(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("pigry-edit-{name}-{}", std::process::id()));
     fs::create_dir(&dir).unwrap();
@@ -1144,4 +1232,185 @@ fn branch_commits_list_one_ref_only() {
     assert!(missing.unwrap_err().contains("unknown ref"));
 
     fs::remove_dir_all(&dir).unwrap();
+}
+
+fn conflict_fixture(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("pigry-conflicts-{name}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    git_cli(&dir, &["config", "core.autocrlf", "false"]);
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = blue\nsize = 10\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "base"]);
+    git_cli(&dir, &["checkout", "-b", "feature"]);
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = green\nsize = 10\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Make it green"]);
+    git_cli(&dir, &["checkout", "main"]);
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = red\nsize = 10\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Make it red"]);
+    dir
+}
+
+#[test]
+fn checkout_refs_lists_local_remote_and_tags_and_checks_out_a_tag_detached() {
+    use crate::gitcli::run_git;
+    let dir = conflict_fixture("refs");
+    git_cli(&dir, &["tag", "v1.0", "main~1"]);
+    git_cli(&dir, &["tag", "-a", "v2.0", "-m", "Release two", "main"]);
+    git_cli(&dir, &["update-ref", "refs/remotes/origin/feature", "feature"]);
+    git_cli(&dir, &["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/feature"]);
+    let main_short = run_git(&dir, &["rev-parse", "--short", "main"]).unwrap();
+
+    let refs = crate::ops::list_checkout_refs(&dir).unwrap();
+    let find = |kind: &str, name: &str| refs.iter().find(|r| r.kind == kind && r.name == name).cloned();
+    let main = find("local", "main").expect("main");
+    assert!(main.is_head);
+    assert_eq!(main.short_oid, main_short);
+    assert_eq!(main.subject, "Make it red");
+    assert!(!find("local", "feature").unwrap().is_head);
+    let remote = find("remote", "origin/feature").expect("remote branch");
+    assert_eq!((remote.remote.as_deref(), remote.branch.as_deref()), (Some("origin"), Some("feature")));
+    assert!(refs.iter().all(|r| !r.name.ends_with("/HEAD")), "origin/HEAD is skipped");
+    // Annotated tags are peeled to their commit.
+    let v2 = find("tag", "v2.0").expect("annotated tag");
+    assert_eq!((v2.short_oid.as_str(), v2.subject.as_str()), (main_short.as_str(), "Make it red"));
+    assert_eq!(find("tag", "v1.0").unwrap().subject, "base");
+
+    assert!(crate::ops::checkout_tag(&dir, "nope").unwrap_err().contains("not found"));
+    assert!(crate::ops::checkout_tag(&dir, "--orphan").is_err());
+    fs::write(dir.join("app.txt"), "dirty\n").unwrap();
+    assert!(crate::ops::checkout_tag(&dir, "v1.0").unwrap_err().contains("commit or stash"));
+    git_cli(&dir, &["checkout", "--", "app.txt"]);
+    crate::ops::checkout_tag(&dir, "v1.0").unwrap();
+    assert_eq!(run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap(), "HEAD");
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD"]).unwrap(), run_git(&dir, &["rev-parse", "v1.0^{commit}"]).unwrap());
+    assert!(crate::ops::list_checkout_refs(&dir).unwrap().iter().all(|r| !r.is_head));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn conflict_resolve_file_writes_takes_a_side_or_deletes_then_the_merge_commits() {
+    use crate::gitcli::run_git;
+    let dir = conflict_fixture("resolve-file");
+    // From a shared commit with notes.txt: "incoming" makes the app green and grows the notes,
+    // main makes the app yellow and deletes the notes.
+    fs::write(dir.join("notes.txt"), "notes\n").unwrap();
+    git_cli(&dir, &["add", "notes.txt"]);
+    git_cli(&dir, &["commit", "-m", "Add notes"]);
+    git_cli(&dir, &["checkout", "-b", "incoming"]);
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = green\nsize = 10\n").unwrap();
+    fs::write(dir.join("notes.txt"), "notes\nmore from incoming\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Green and more notes"]);
+    git_cli(&dir, &["checkout", "main"]);
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = yellow\nsize = 10\n").unwrap();
+    git_cli(&dir, &["rm", "-q", "notes.txt"]);
+    git_cli(&dir, &["commit", "-am", "Yellow, drop notes"]);
+    let main_tip = run_git(&dir, &["rev-parse", "main"]).unwrap();
+
+    let _ = crate::ops::merge_branch(&dir, "incoming", "no-ff");
+    let state = crate::ops::conflict_state(&dir).unwrap();
+    assert_eq!(state.conflicted, vec!["app.txt".to_string(), "notes.txt".to_string()]);
+
+    // Refusals change nothing.
+    assert!(crate::ops::conflict_resolve_file(&dir, "../outside.txt", None, Some("x")).is_err());
+    assert!(crate::ops::conflict_resolve_file(&dir, "title.txt", None, Some("x")).unwrap_err().contains("not conflicted"));
+    let marked = crate::ops::conflict_resolve_file(&dir, "app.txt", None, Some("<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n"));
+    assert!(marked.unwrap_err().contains("conflict markers"));
+    assert!(crate::ops::conflict_resolve_file(&dir, "app.txt", Some("both"), None).is_err());
+    assert_eq!(crate::ops::conflict_state(&dir).unwrap().conflicted.len(), 2);
+
+    // Hand-written text for one file, "keep it deleted" (ours) for the other.
+    crate::ops::conflict_resolve_file(&dir, "app.txt", None, Some("title = Pigry\ncolor = purple\nsize = 10\n")).unwrap();
+    assert_eq!(crate::ops::conflict_state(&dir).unwrap().conflicted, vec!["notes.txt".to_string()]);
+    crate::ops::conflict_resolve_file(&dir, "notes.txt", Some("ours"), None).unwrap();
+    assert!(crate::ops::conflict_state(&dir).unwrap().conflicted.is_empty());
+    assert!(!dir.join("notes.txt").exists());
+    crate::ops::conflict_continue(&dir).unwrap();
+    assert_eq!(run_git(&dir, &["rev-parse", "HEAD^1"]).unwrap(), main_tip);
+    assert_eq!(run_git(&dir, &["show", "HEAD:app.txt"]).unwrap(), "title = Pigry\ncolor = purple\nsize = 10");
+    assert!(run_git(&dir, &["show", "HEAD:notes.txt"]).is_err());
+    assert!(run_git(&dir, &["status", "--porcelain=v1"]).unwrap().is_empty());
+
+    // Taking the incoming side whole restores the file the current branch deleted.
+    git_cli(&dir, &["reset", "-q", "--hard", &main_tip]);
+    let _ = crate::ops::merge_branch(&dir, "incoming", "no-ff");
+    crate::ops::conflict_resolve_file(&dir, "notes.txt", Some("theirs"), None).unwrap();
+    crate::ops::conflict_resolve_file(&dir, "app.txt", Some("theirs"), None).unwrap();
+    crate::ops::conflict_continue(&dir).unwrap();
+    assert_eq!(fs::read_to_string(dir.join("notes.txt")).unwrap(), "notes\nmore from incoming\n");
+    assert!(fs::read_to_string(dir.join("app.txt")).unwrap().contains("color = green"));
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn conflict_state_versions_continue_and_abort_for_a_merge() {
+    let dir = conflict_fixture("merge");
+    let clean = crate::ops::conflict_state(&dir).unwrap();
+    assert_eq!(clean.operation, None);
+    assert!(clean.conflicted.is_empty());
+    assert!(crate::ops::conflict_continue(&dir).is_err(), "nothing to continue");
+    assert!(crate::ops::conflict_abort(&dir).is_err(), "nothing to abort");
+
+    assert!(crate::ops::merge_branch(&dir, "feature", "no-ff").is_err() || crate::ops::merge_status(&dir).unwrap().in_progress);
+    let state = crate::ops::conflict_state(&dir).unwrap();
+    assert_eq!(state.operation.as_deref(), Some("merge"));
+    assert_eq!(state.branch.as_deref(), Some("main"));
+    assert_eq!(state.conflicted, vec!["app.txt".to_string()]);
+    assert!(state.incoming_label.contains("feature"), "{}", state.incoming_label);
+    assert!(state.incoming_commit.as_deref().unwrap_or("").contains("Make it green"));
+
+    let versions = crate::ops::conflict_versions(&dir, "app.txt").unwrap();
+    assert!(versions.base.as_deref().unwrap().contains("color = blue"));
+    assert!(versions.current.as_deref().unwrap().contains("color = red"));
+    assert!(versions.incoming.as_deref().unwrap().contains("color = green"));
+    assert!(!versions.binary);
+    assert!(crate::ops::conflict_versions(&dir, "nope.txt").is_err());
+
+    // still conflicted: continue refuses and says why
+    let refused = crate::ops::conflict_continue(&dir).unwrap_err();
+    assert!(refused.contains("app.txt"), "{refused}");
+
+    // abort puts main back
+    crate::ops::conflict_abort(&dir).unwrap();
+    assert_eq!(crate::ops::conflict_state(&dir).unwrap().operation, None);
+    assert!(fs::read_to_string(dir.join("app.txt")).unwrap().contains("color = red"));
+
+    // conflict again, resolve, stage, continue -> merge commit
+    let _ = crate::ops::merge_branch(&dir, "feature", "no-ff");
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = purple\nsize = 10\n").unwrap();
+    git_cli(&dir, &["add", "app.txt"]);
+    crate::ops::conflict_continue(&dir).unwrap();
+    assert_eq!(crate::ops::conflict_state(&dir).unwrap().operation, None);
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().parent_count(), 2, "a merge commit was made");
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn conflict_state_names_a_cherry_pick_and_finishes_it() {
+    let dir = conflict_fixture("pick");
+    let feature = Repository::open(&dir).unwrap().revparse_single("feature").unwrap().id().to_string();
+    // Pigry's own pick uses --no-commit: no CHERRY_PICK_HEAD, so it reads as plain conflicts to commit.
+    let _ = crate::ops::cherry_pick(&dir, &feature);
+    let plain = crate::ops::conflict_state(&dir).unwrap();
+    assert_eq!(plain.operation, None);
+    assert_eq!(plain.conflicted, vec!["app.txt".to_string()]);
+    assert!(crate::ops::conflict_continue(&dir).unwrap_err().contains("app.txt"));
+    git_cli(&dir, &["reset", "--hard", "HEAD"]);
+    // A pick started from a terminal keeps sequencer state.
+    let out = std::process::Command::new("git").arg("-C").arg(&dir).args(["cherry-pick", &feature]).output().unwrap();
+    assert!(!out.status.success(), "the pick conflicts");
+    let state = crate::ops::conflict_state(&dir).unwrap();
+    assert_eq!(state.operation.as_deref(), Some("cherry-pick"));
+    assert!(state.incoming_commit.as_deref().unwrap_or("").contains("Make it green"));
+    fs::write(dir.join("app.txt"), "title = Pigry\ncolor = green\nsize = 10\n").unwrap();
+    git_cli(&dir, &["add", "app.txt"]);
+    crate::ops::conflict_continue(&dir).unwrap();
+    assert_eq!(crate::ops::conflict_state(&dir).unwrap().operation, None);
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().summary(), Some("Make it green"));
+    fs::remove_dir_all(&dir).ok();
 }

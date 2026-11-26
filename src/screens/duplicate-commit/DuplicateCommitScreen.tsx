@@ -5,9 +5,10 @@ import { ArrowRight, ChevronDown, ChevronRight, Copy, CopyCheck } from 'lucide-r
 import { useRepository } from '../../hooks/useRepository';
 import { useScopedState } from '../../hooks/useScopedState';
 import { relativeTime } from '../../lib/relativeTime';
-import { getBranchCommits, getDuplicateCommitCandidates } from '../../lib/tauriClient';
+import { getBranchCommits, getDuplicateCommitCandidates, getDuplicateCommitConflicts, type DuplicateConflicts } from '../../lib/tauriClient';
 import type { BranchInfo, CommitHistory, RepositoryState } from '../../types/repository';
 import { InlineCommitDetails } from '../commit-preview/InlineCommitDetails';
+import { ConflictResolver } from '../merge-conflicts/ConflictResolver';
 import '../cherry-pick/CherryPickScreen.css';
 import './DuplicateCommitScreen.css';
 
@@ -86,7 +87,7 @@ function BranchSelection({ repository }: { repository: RepositoryState }) {
 }
 
 function SourceCommits({ source, destination }: { source: string; destination?: BranchInfo }) {
-  const { busy, duplicateCommit } = useRepository();
+  const { busy, duplicateCommit, duplicateCommitResolved } = useRepository();
   const destinationName = destination?.name;
   const [history, setHistory] = useState<CommitHistory | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -102,6 +103,9 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
   const { range, setRange, cutoff } = useCommitTimeRange();
   const [visibleCount, setVisibleCount] = useState(COMMIT_PAGE_SIZE);
   const [selectedOid, setSelectedOid] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  /** A duplicate that stopped on conflicts, kept until it is completed or aborted. */
+  const [conflicts, setConflicts] = useState<{ destination: string; shortOid: string; data: DuplicateConflicts } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -146,10 +150,52 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
   const matches = browseCommits(history.commits, sort, query, account, cutoff);
 
   const copy = async () => {
-    if (!canCopy || !selected || !destinationName) return;
+    if (!canCopy || !selected || !destinationName || checking) return;
+    setChecking(true);
+    let found: DuplicateConflicts | null = null;
+    // Replay in memory first: a conflict opens the editor instead of failing. If the check itself fails, the
+    // duplicate below reports the same problem.
+    try { found = await getDuplicateCommitConflicts(source, destinationName, selected.oid); } catch { found = null; }
+    finally { setChecking(false); }
+    if (found && found.files.length > 0) {
+      setConflicts({ destination: destinationName, shortOid: selected.shortOid, data: found });
+      return;
+    }
     const copied = await duplicateCommit(source, destinationName, selected.oid);
     if (!copied || !destination?.oid) setComparisonRevision(revision => revision + 1);
   };
+
+  // The editor belongs to one destination: picking another branch leaves it (nothing was written).
+  const openConflicts = conflicts && conflicts.destination === destinationName ? conflicts : null;
+  if (openConflicts) {
+    return (
+      <ConflictResolver
+        key={openConflicts.data.commitOid}
+        files={openConflicts.data.files}
+        label="Duplicate conflicts"
+        icon={<Copy size={18} />}
+        title={`Duplicating ${openConflicts.shortOid} onto ${openConflicts.destination} needs your help`}
+        description={`${openConflicts.data.commitSummary ? `“${openConflicts.data.commitSummary}”` : 'This commit'} changes the same lines as ${openConflicts.destination}. Nothing has been written yet: choose what to keep in each file, then complete the duplicate. Abort leaves ${openConflicts.destination} as it is.`}
+        sides={{ current: openConflicts.destination, currentRole: 'destination', incoming: openConflicts.shortOid, incomingRole: 'this commit' }}
+        resultTarget={`committed on ${openConflicts.destination}`}
+        completeLabel="Complete duplicate"
+        completeTitle={`Commit the duplicate on ${openConflicts.destination}`}
+        abortName="duplicate"
+        abortWarning={`Abort the duplicate? ${openConflicts.destination} stays as it is and your choices are lost.`}
+        busy={busy}
+        onAbort={() => setConflicts(null)}
+        onComplete={resolutions => {
+          void duplicateCommitResolved(
+            source, openConflicts.destination, openConflicts.data.commitOid, openConflicts.data.destinationOid, resolutions,
+          ).then(done => {
+            if (!done) return;
+            setConflicts(null);
+            setComparisonRevision(revision => revision + 1);
+          });
+        }}
+      />
+    );
+  }
 
   return (
     <section className="cherry__browse" aria-label="Source commits">
@@ -170,10 +216,10 @@ function SourceCommits({ source, destination }: { source: string; destination?: 
         <button
           type="button"
           className="settings__btn settings__btn--primary"
-          disabled={busy || !canCopy}
+          disabled={busy || checking || !canCopy}
           onClick={() => void copy()}
         >
-          <Copy size={13} /> {selected ? `Duplicate ${selected.shortOid}` : 'Duplicate commit'}
+          <Copy size={13} /> {checking ? 'Checking…' : selected ? `Duplicate ${selected.shortOid}` : 'Duplicate commit'}
         </button>
       </div>
       <div className="commit-list-controls">

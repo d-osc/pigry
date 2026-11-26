@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Board' | 'E2E' | 'Agents';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Sheet' | 'Docs' | 'Board' | 'E2E' | 'Agents';
   description: string;
 }
 
@@ -42,6 +42,9 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'git-compare-branches', name: 'compare_branches', group: 'Git', description: 'Compare two branch tips and inspect their per-file changes' },
   { id: 'git-preview-sync', name: 'preview_sync_commits', group: 'Git', description: 'Preview fetched upstream commits or commits waiting to be pushed' },
   { id: 'git-preview-merge', name: 'preview_merge', group: 'Git', description: 'Preview the commits and files a merge into the current branch would bring in' },
+  { id: 'git-conflict-list', name: 'conflict_list', group: 'Git', description: 'List the conflicted files and the merge, rebase, cherry-pick or revert that stopped with conflicts' },
+  { id: 'git-conflict-read', name: 'conflict_read', group: 'Git', description: 'Read the conflict blocks of a file: each side, the common ancestor and nearby lines' },
+  { id: 'git-conflict-resolve', name: 'conflict_resolve', group: 'Git', description: 'Resolve conflict blocks of a file (current, incoming, both or your own text) and optionally stage it' },
   { id: 'git-preview-stash', name: 'preview_stash', group: 'Git', description: 'Inspect a stash entry and its changed files' },
   { id: 'git-check-duplicate', name: 'check_duplicate_commit', group: 'Git', description: 'Check a source commit for duplicate eligibility on a local destination branch' },
   { id: 'repo-insights', name: 'repo_insights', group: 'Git', description: 'Read repository activity, GitHub delivery metrics or traffic' },
@@ -116,6 +119,23 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'audio_analyze', name: 'audio_analyze', group: 'Audio Editor', description: 'Measure peak, true peak, loudness (LUFS), noise floor, clipping, silence and hum' },
   { id: 'audio_export', name: 'audio_export', group: 'Audio Editor', description: 'Export the mix as WAV (16/24/32-bit) or WebM/Opus' },
   { id: 'audio_open', name: 'audio_open', group: 'Audio Editor', description: 'Open an audio project in the Audio Editor' },
+  // Sheet (Google Sheets-style workbooks under .pigry/sheets/<agent>/)
+  { id: 'sheet_list', name: 'sheet_list', group: 'Sheet', description: 'List the spreadsheets saved in the workspace' },
+  { id: 'sheet_read', name: 'sheet_read', group: 'Sheet', description: 'Read a workbook: sheet outline, cells with values and formulas, review warnings' },
+  { id: 'sheet_write', name: 'sheet_write', group: 'Sheet', description: 'Create a spreadsheet (blank, template, data or imported CSV/XLSX) and build it with operations' },
+  { id: 'sheet_edit', name: 'sheet_edit', group: 'Sheet', description: 'Set values and formulas, format, insert/delete rows and columns, validation, conditional formatting, sort, filter, pivot and charts' },
+  { id: 'sheet_query', name: 'sheet_query', group: 'Sheet', description: 'Evaluate formulas, read computed ranges and trace precedents/dependents without changing the file' },
+  { id: 'sheet_preview', name: 'sheet_preview', group: 'Sheet', description: 'Render a picture of a sheet range and its charts you can see on the next turn' },
+  { id: 'sheet_export', name: 'sheet_export', group: 'Sheet', description: 'Export CSV, TSV, XLSX, print-friendly HTML or PNG' },
+  { id: 'sheet_open', name: 'sheet_open', group: 'Sheet', description: 'Open a spreadsheet in the Sheet menu' },
+  // Docs (Google Docs-style documents under .pigry/docs/<agent>/)
+  { id: 'docs_list', name: 'docs_list', group: 'Docs', description: 'List the documents saved in the workspace' },
+  { id: 'docs_read', name: 'docs_read', group: 'Docs', description: 'Read a document: numbered blocks as Markdown, comments, suggestions, footnotes and a writing review' },
+  { id: 'docs_write', name: 'docs_write', group: 'Docs', description: 'Create a document (template, Markdown, HTML, text or an imported .md/.html/.docx file) and edit it with operations' },
+  { id: 'docs_edit', name: 'docs_edit', group: 'Docs', description: 'Insert, replace, move and style blocks, format text, tables, images, footnotes, comments and suggested edits' },
+  { id: 'docs_preview', name: 'docs_preview', group: 'Docs', description: 'Render pictures of document pages you can see on the next turn' },
+  { id: 'docs_export', name: 'docs_export', group: 'Docs', description: 'Export Word (.docx), Markdown, print-friendly HTML or plain text' },
+  { id: 'docs_open', name: 'docs_open', group: 'Docs', description: 'Open a document in the Docs menu' },
   // Video Editor (the Video Editor — CapCut-style projects under .pigry/videos/<agent>/)
   { id: 'video_list', name: 'video_list', group: 'Video Editor', description: 'List the video projects saved in the workspace' },
   { id: 'video_read', name: 'video_read', group: 'Video Editor', description: 'Read a video project: format, media, tracks, clips and review warnings' },
@@ -201,7 +221,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Board', 'E2E', 'Agents'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Board', 'E2E', 'Agents'];
 
 export function selectAgentTools(
   tools: ToolSpec[],

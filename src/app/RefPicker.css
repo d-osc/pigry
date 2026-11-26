@@ -1,0 +1,58 @@
+/* Branch / tag picker — layered on the command palette styles. */
+.ref-picker__overlay {
+  padding-top: 64px;
+}
+
+.ref-picker {
+  width: 640px;
+}
+
+.ref-picker__list {
+  max-height: min(460px, calc(100vh - 220px));
+}
+
+.ref-picker__item {
+  gap: 8px;
+}
+
+.ref-picker__icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.command-palette__item--active .ref-picker__icon {
+  color: var(--accent);
+}
+
+.ref-picker .ref-picker__name {
+  flex: 0 1 auto;
+  max-width: 55%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
+.ref-picker__desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.ref-picker__current {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--green-tint);
+  color: var(--green);
+  font-size: var(--fs-2xs);
+}
+
+.ref-picker__item--head .ref-picker__icon {
+  color: var(--green);
+}

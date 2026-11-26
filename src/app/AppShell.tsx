@@ -23,6 +23,7 @@ import {
   RepositoryProvider,
   type RepositoryContextValue,
 } from '../hooks/useRepository';
+const MergeConflictsScreen = lazy(() => import('../screens/merge-conflicts/MergeConflictsScreen').then((module) => ({ default: module.MergeConflictsScreen })));
 const MergeBranchScreen = lazy(() => import('../screens/merge-branch/MergeBranchScreen').then((module) => ({ default: module.MergeBranchScreen })));
 const CompareBranchScreen = lazy(() => import('../screens/compare-branch/CompareBranchScreen').then((module) => ({ default: module.CompareBranchScreen })));
 const RebaseBranchScreen = lazy(() => import('../screens/rebase-branch/RebaseBranchScreen').then((module) => ({ default: module.RebaseBranchScreen })));
@@ -39,6 +40,8 @@ const AppSettingsScreen = lazy(() => import('../screens/settings/AppSettingsScre
 const CommitGraphScreen = lazy(() => import('../screens/commit-graph/CommitGraphScreen').then((module) => ({ default: module.CommitGraphScreen })));
 const E2eScreen = lazy(() => import('../extensions/e2e/E2eScreen').then((module) => ({ default: module.E2eScreen })));
 const BoardScreen = lazy(() => import('../extensions/board/BoardScreen').then((module) => ({ default: module.BoardScreen })));
+const DocsScreen = lazy(() => import('../extensions/docs/DocsScreen').then((module) => ({ default: module.DocsScreen })));
+const SheetScreen = lazy(() => import('../extensions/sheet/SheetScreen').then((module) => ({ default: module.SheetScreen })));
 const AudioScreen = lazy(() => import('../extensions/audioeditor/AudioScreen').then((module) => ({ default: module.AudioScreen })));
 const VideoScreen = lazy(() => import('../extensions/videoeditor/VideoScreen').then((module) => ({ default: module.VideoScreen })));
 const GameScreen = lazy(() => import('../extensions/gameengine/GameScreen').then((module) => ({ default: module.GameScreen })));
@@ -70,7 +73,7 @@ const MAX_SIDEBAR_WIDTH = 420;
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS = new Set<NavId>(
-  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'drawing' && id !== 'model3d' && id !== 'gameengine' && id !== 'videoeditor' && id !== 'audioeditor' && id !== 'board' && id !== 'e2e'),
+  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'drawing' && id !== 'model3d' && id !== 'gameengine' && id !== 'videoeditor' && id !== 'audioeditor' && id !== 'sheet' && id !== 'docs' && id !== 'board' && id !== 'e2e'),
 );
 
 /** The Tauri webview ignores target="_blank" links — route every external
@@ -224,6 +227,8 @@ function renderScreen(
       return <WorkingChangesScreen />;
     case 'merge-branch':
       return <MergeBranchScreen />;
+    case 'merge-conflicts':
+      return <MergeConflictsScreen />;
     case 'compare-branch':
       return <CompareBranchScreen />;
     case 'rebase-branch':
@@ -281,6 +286,10 @@ function renderScreen(
       return <VideoScreen />;
     case 'audioeditor':
       return <AudioScreen />;
+    case 'sheet':
+      return <SheetScreen />;
+    case 'docs':
+      return <DocsScreen />;
     case 'diagram':
       return <DiagramScreen />;
     case 'ai-agent':
@@ -318,7 +327,7 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
-  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'drawing' || screen === 'model3d' || screen === 'gameengine' || screen === 'videoeditor' || screen === 'audioeditor' || screen === 'board' || screen === 'e2e';
+  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'drawing' || screen === 'model3d' || screen === 'gameengine' || screen === 'videoeditor' || screen === 'audioeditor' || screen === 'sheet' || screen === 'docs' || screen === 'board' || screen === 'e2e';
   // Adjusting state while rendering (not in an effect) keeps visited screens mounted without a cascading render.
   if (keepAgentScreen && !visitedAgentScreens.includes(screen)) setVisitedAgentScreens([...visitedAgentScreens, screen]);
   // Section the settings page should open on (null = default). Set by
@@ -343,6 +352,8 @@ function AppShellInner() {
     const onOpenGame = () => setScreen('gameengine');
     const onOpenVideo = () => setScreen('videoeditor');
     const onOpenAudio = () => setScreen('audioeditor');
+    const onOpenSheet = () => setScreen('sheet');
+    const onOpenDocs = () => setScreen('docs');
     const onOpenBoard = () => setScreen('board');
     const onOpenE2e = () => setScreen('e2e');
     const onGoScreen = (event: Event) => {
@@ -364,6 +375,8 @@ function AppShellInner() {
     window.addEventListener('pigry:open-game', onOpenGame);
     window.addEventListener('pigry:open-video', onOpenVideo);
     window.addEventListener('pigry:open-audio', onOpenAudio);
+    window.addEventListener('pigry:open-sheet', onOpenSheet);
+    window.addEventListener('pigry:open-docs', onOpenDocs);
     window.addEventListener('pigry:open-board', onOpenBoard);
     window.addEventListener('pigry:open-e2e', onOpenE2e);
     return () => {
@@ -374,6 +387,8 @@ function AppShellInner() {
       window.removeEventListener('pigry:open-game', onOpenGame);
       window.removeEventListener('pigry:open-video', onOpenVideo);
       window.removeEventListener('pigry:open-audio', onOpenAudio);
+      window.removeEventListener('pigry:open-sheet', onOpenSheet);
+      window.removeEventListener('pigry:open-docs', onOpenDocs);
       window.removeEventListener('pigry:open-board', onOpenBoard);
       window.removeEventListener('pigry:open-e2e', onOpenE2e);
       window.removeEventListener('pigry:go-screen', onGoScreen);

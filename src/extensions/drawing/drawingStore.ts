@@ -1,6 +1,7 @@
 /** Drawing files in the workspace (.pigry/drawings/<owner>/<name>.drawing.json) plus the small bits of state shared by
  * the Drawing editor and the agent's drawing tools: change events, "flush unsaved strokes" and "open this drawing". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { DRAWINGS_DIR, DRAWING_EXT, parseDrawingJson, serializeDrawing, type Drawing, type NormalizeResult } from './drawing';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -26,7 +27,7 @@ export async function resolveDrawing(name: string, caller?: string): Promise<Res
 }
 
 export async function loadDrawing(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(drawingPath(ref));
+  const file = await readDocText(drawingPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${drawingPath(ref)} is not a readable drawing file`);
   return { ...parseDrawingJson(file.content, ref.slug), ref };
 }
@@ -36,13 +37,13 @@ export function notifyDrawingChanged(change: DrawingChange): void {
 }
 
 export async function saveDrawing(ref: OwnedRef, drawing: Drawing, source: DrawingChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(drawingPath(ref), serializeDrawing(drawing));
+  await writeDocText(drawingPath(ref), serializeDrawing(drawing));
   notifyDrawingChanged({ key: refKey(ref), source });
   return drawingPath(ref);
 }
 
 export async function removeDrawing(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(drawingPath(ref));
+  await deleteDoc(drawingPath(ref));
   notifyDrawingChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

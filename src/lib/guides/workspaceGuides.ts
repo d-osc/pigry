@@ -1,7 +1,7 @@
 import type { MenuGuide } from '../menuGuides.types.ts';
 
 /** Guides for the menus where files, designs and tests are made: Explorer, Diagram, Design, Board, E2E Testing, Reports, Copilot. */
-export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
+export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'sheet' | 'docs' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
   extensions: {
     summary: "The Extension Store: search the packs of agents and skills Pigry offers and install them. What you installed is managed in Settings.",
     overview: [
@@ -385,6 +385,96 @@ export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawi
     ],
     agents: { default: "audioeditor", base: "sound-engineer" },
     shots: [{ file: "audioeditor.jpg", caption: "The Audio Editor: menus and toolbars, tracks with waveform and spectrogram, the selection bar and the AI Agent panel." }],
+  },
+  sheet: {
+    summary: "Spreadsheets the Google Sheets way — formulas with more than 200 functions, cross-sheet references, number formats, dropdowns and checkboxes, conditional formatting, filters, pivot tables, charts, and CSV / Excel import and export.",
+    overview: [
+      "Sheet follows Google Sheets' layout. A spreadsheet (workbook) has several sheets shown as tabs at the bottom; each sheet is a grid of cells that hold a value or a formula plus its format. Everything is saved as one file in the repository (.pigry/sheets/<owner>/<name>.sheet.json), so the history of a sheet lives in Git and the AI agents can read and edit it with their own tools.",
+      "The screen has the title, the menu bar (File, Edit, View, Insert, Format, Data, Tools), the toolbar (undo, print, paint format, zoom, currency, percent, decimals, number formats, font, size, bold, italic, strikethrough, underline, text and fill colour, borders, merge, alignment, wrap, link, note, chart, filter, functions), the formula bar with the name box, the grid, the sheet tabs with a status bar that shows Sum, Average, Count, Min and Max of the selection, and the AI Agent panel on the right. The grid draws only the visible cells, so sheets with thousands of rows scroll smoothly.",
+    ],
+    features: [
+      { title: "Formulas", text: "Type = to start a formula. A1 and $A$1 references, ranges (A1:C9, C:C, 2:2, B2:B), other sheets ('Sales 2026'!B2), named ranges and more than 200 functions: maths, statistics, logic, lookups (VLOOKUP, XLOOKUP, INDEX/MATCH), text and regular expressions, dates, finance (PMT, NPV, IRR…) and arrays (UNIQUE, SORT, FILTER, SEQUENCE) that spill into the cells beside them. Function suggestions and the argument hint appear as you type; click cells to insert references; F4 toggles $; circular references show #CIRCULAR!." },
+      { title: "Editing like Sheets", text: "Click, Shift+click, drag, Ctrl+click and the row/column headers select; Enter or F2 edits, Tab and Enter move on, Ctrl+Arrow jumps to the edge of the data. The fill handle continues numbers, dates, months, weekdays and \"Item 1\" series and copies formulas with relative references; double-click it to fill down to the end of the data. Copy and paste works with other programs as tab-separated text; Ctrl+Shift+V pastes values only." },
+      { title: "Formatting", text: "Number formats (number, percent, currency incl. ฿ and €, scientific, accounting, financial, dates, times, durations and custom patterns), fonts and sizes, bold/italic/underline/strikethrough, text and fill colours, borders, horizontal and vertical alignment, wrap or clip, rotation, merged cells, alternating colours and paint format." },
+      { title: "Rows, columns and sheets", text: "Insert and delete rows and columns (formulas follow), resize by dragging the header edge (double-click fits the column), hide and unhide, freeze rows and columns, add, rename, duplicate, colour, hide, reorder and delete sheets." },
+      { title: "Data tools", text: "Sort a range or the sheet, filters with value lists and conditions, data validation (dropdowns from a list or a range with coloured chips, checkboxes, number, date and text-length rules, custom formulas), conditional formatting (value rules, text rules, duplicates, top/bottom N, averages, custom formulas and colour scales), find and replace, remove duplicates, trim whitespace, split text to columns, named ranges and pivot tables built from live SUMIFS / COUNTIFS formulas." },
+      { title: "Charts", text: "Column, stacked column, bar, stacked bar, line, area, combo, pie, doughnut and scatter (with trendline) charts that float over the grid; drag to move, drag the corner to resize, double-click to edit type, range, titles, legend and colours. They update when the data changes." },
+      { title: "Import, export and print", text: "Import CSV, TSV and Excel (.xlsx, .xls, .ods) as a new spreadsheet, new sheets or into the current sheet. Download Excel (.xlsx), CSV, TSV or a print-friendly web page; File ▸ Print prints the selection or the sheet." },
+      { title: "Agent tools and skills", text: "sheet_list, sheet_read, sheet_write, sheet_edit, sheet_query, sheet_preview, sheet_export and sheet_open, and seven skills: the editor workflow, a formula reference, data cleaning, analysis and pivot summaries, charts and dashboards, financial modelling basics and spreadsheet design best practices." },
+    ],
+    tutorial: [
+      { title: "Create a spreadsheet", text: "Press New spreadsheet, pick Sales tracker (or Blank) and press Create. The tabs at the bottom show the sheets." },
+      { title: "Type data", text: "Click A15 and type 2026-05-02, press Tab, type North, Tab, Widget, Tab, 10, Tab, 19.5 and press Enter. Dates, numbers, 12% and $5 are recognised automatically." },
+      { title: "Write a formula", text: "In F15 type =D15*E15 and press Enter. Select F2:F15 and look at the status bar: it shows the sum, average and count of the selection." },
+      { title: "Copy a formula down", text: "Select F14, drag the small blue square at its corner down one row, or select F14:F15 and press Ctrl+D. The references change to the new row." },
+      { title: "Summarise", text: "In H8 type =SUMIFS(F:F,B:B,\"North\") — the suggestion list helps with the function name and the hint shows its arguments. Or choose Insert ▸ Pivot table to build a whole summary table." },
+      { title: "Format", text: "Select the revenue column and press the $ button, then make the header bold and pick a fill colour. Format ▸ Conditional formatting colours the cells above a value or as a colour scale." },
+      { title: "Filter and sort", text: "Press the filter button on the toolbar, then the small icon in a header cell: sort A → Z, hide values or filter by a condition." },
+      { title: "Chart", text: "Select the region summary and choose Insert ▸ Chart. Pick a type, a title and the legend position; drag the chart where you want it." },
+      { title: "Ask the Data Analyst", text: "In the AI Agent panel type: '@analyst summarise sales by region and month, add a chart and tell me which region grew fastest'. It reads the sheet, writes formulas, checks the numbers and shows you the result." },
+      { title: "Export", text: "File ▸ Download ▸ Microsoft Excel (.xlsx) or CSV. The file is also saved next to the spreadsheet in the repository." },
+    ],
+    tips: [
+      "Keep one table per sheet: one header row, one kind of data per column, no empty rows inside the table and no merged cells in it — sorting, filters, pivots and charts all work better (Broman & Woo, Data organization in spreadsheets, 2018).",
+      "Put assumptions (rates, prices, targets) in their own labelled input cells and refer to them with $ references or a named range instead of typing numbers into formulas; the Review (Tools ▸ Review spreadsheet) flags typed constants.",
+      "Prefer XLOOKUP or INDEX/MATCH with an exact match; VLOOKUP's last argument defaults to TRUE (sorted, approximate), which silently returns a wrong row on unsorted data.",
+      "Use one formula per column (or per row in a time-based model) and fill it down; the Review points out a cell whose formula differs from its neighbours.",
+      "Dates are numbers (days since 1899-12-30, as in Google Sheets), so they can be added, subtracted and sorted; =TEXT(A2,\"yyyy-mm\") turns them into month labels for summaries.",
+    ],
+    cautions: [
+      "This is a spreadsheet inspired by Google Sheets, not Google Sheets: there is no real-time collaboration, sharing, comment threads, protected ranges, Apps Script or macros, and the history is Git's history.",
+      "Not implemented: QUERY, IMPORTRANGE/IMPORTHTML/IMPORTDATA, GOOGLEFINANCE, GOOGLETRANSLATE, IMAGE, SPARKLINE, LAMBDA/LET/MAP, database (D…) and most engineering functions; the interactive pivot editor, slicers, filter views, row/column grouping and Explore are missing. Pivot tables are static layouts of live formulas — run the pivot again when new categories appear.",
+      "Excel export writes values, formulas, number formats, merges, column widths, row heights, notes and names, but not cell colours, borders and fonts, conditional formatting, data validation or charts (SheetJS Community Edition cannot write styles). Excel files are imported the same way.",
+      "Charts: column, bar, stacked, line, area, combo, pie, doughnut and scatter; no maps, gauges, histograms, candlestick or treemaps. Printing goes through a print-friendly HTML page (save it as PDF from the print dialog).",
+      "Locales are fixed: decimals use a dot, dates typed as 1/2/2026 are read month first unless the first number cannot be a month, and NOW/TODAY use the computer's time zone. A grid can have up to 200,000 rows and 18,278 columns; very large sheets recalculate more slowly.",
+    ],
+    agents: { default: "sheet", base: "analyst" },
+    shots: [{ file: "sheet.jpg", caption: "The Sheet menu: menu bar, toolbar, formula bar, a sales table with alternating colours, a SUMIFS summary, a column chart and the status bar with the sum of the selection; the AI Agent panel opens from the right edge." }],
+  },
+  docs: {
+    summary: "Documents the Google Docs way — paper-style pages, styles and headings with an outline, lists and checklists, tables, images, footnotes, equations, comments and suggested edits, and Word, Markdown, HTML and text export.",
+    overview: [
+      "Docs follows Google Docs' layout. A document is a column of paragraphs, tables, lines and page breaks laid out on pages of the size and margins you choose. Everything is saved as one file in the repository (.pigry/docs/<owner>/<name>.doc.json, with large images as side files next to it), so the history of a document lives in Git and the AI agents can read and edit it with their own tools.",
+      "The screen has the title and the Editing / Suggesting switch, the menu bar (File, Edit, View, Insert, Format, Tools), the toolbar (undo, redo, print, paint format, zoom, styles, font, size, bold, italic, underline, strikethrough, text and highlight colour, link, comment, image, table, alignment, line spacing, checklist, bullets, numbering, indent, clear formatting), the outline on the left, the ruler and the pages in the middle, comments and suggestions on the right, a status line with the page and word count, and the AI Agent panel.",
+    ],
+    features: [
+      { title: "Writing like Docs", text: "Type on the page; Enter starts a new paragraph (Normal text after a heading, the next item in a list), Shift+Enter breaks the line. Paste keeps formatting from web pages, Word and Google Docs (Ctrl+Shift+V pastes plain text). Undo and redo remember every change; the document saves itself a moment after you stop typing." },
+      { title: "Styles and formatting", text: "Normal text, Title, Subtitle and Heading 1–6; fonts (including Thai fonts) and sizes; bold, italic, underline, strikethrough, superscript, subscript, code; text and highlight colours; links; alignment, line spacing 1 to 2 and space before or after paragraphs; indents; paint format copies the look of text; clear formatting resets it." },
+      { title: "Lists", text: "Bulleted, numbered (1. a. i. by level) and checklists you tick by clicking the box. Tab and Shift+Tab change the level; Enter on an empty item ends the list; Backspace at the start removes the bullet." },
+      { title: "Pages", text: "Paper-style pages with page size (Letter, A4, Legal, A5, Tabloid, Executive), orientation, margins and page colour (File ▸ Page setup), a ruler whose margin handles can be dragged, page breaks (Ctrl+Enter), headers and footers with page numbers, page count, title and date, and zoom." },
+      { title: "Insert", text: "Images (upload, paste or drop; resize and add alt text from the image bar), tables (pick a size from the grid; add and delete rows and columns, merge cells and shade them from Format ▸ Table or the right-click menu; Tab moves between cells and adds a row at the end), horizontal lines, a table of contents built from the headings, footnotes, equations (TeX-style: x^2, \\frac{a}{b}, \\sqrt{x}, Greek letters), special characters and today's date." },
+      { title: "Comments and suggestions", text: "Select text and add a comment (Ctrl+Alt+M); reply, resolve or delete it in the side panel. Switch to Suggesting (Ctrl+Alt+Shift+X) and what you type or delete becomes a tracked suggestion that can be accepted or rejected one by one, from the right-click menu, or all at once (Tools ▸ Review suggested edits)." },
+      { title: "Navigate and review", text: "The outline lists the headings and jumps to them; find and replace (Ctrl+F / Ctrl+H) with match case, whole words and regular expressions, highlighting every match; word count for the document or the selection (Ctrl+Shift+C) and an optional live count; the system spell checker; and a writing review that flags skipped heading levels, long sentences, repeated words, double spaces, images without alt text and vague link text." },
+      { title: "Import, export and print", text: "Import Markdown, HTML, Word (.docx) and text files as new documents. Download Word (.docx) with styles, lists, tables, images, footnotes, comments and suggestions as Word tracked changes; Markdown (images saved beside it), a print-friendly web page or plain text; File ▸ Print prints or saves a PDF. Every export is also saved next to the document in the repository." },
+      { title: "Agent tools and skills", text: "docs_list, docs_read, docs_write, docs_edit, docs_preview, docs_export and docs_open, and seven skills: the editor workflow, plain language, structure and formatting, common document types, reviewing with suggestions, tables, figures and citations, and accessible documents." },
+    ],
+    tutorial: [
+      { title: "Create a document", text: "Press New document, pick Project proposal and press Create. The outline on the left shows its headings." },
+      { title: "Write", text: "Click under Summary, select the placeholder sentence and type your own. Press Enter at the end of a heading: the next paragraph is Normal text." },
+      { title: "Format", text: "Select a phrase and press Ctrl+B, or pick a colour from the A button. Choose Heading 2 from the styles box (or press Ctrl+Alt+2) to make a new section." },
+      { title: "Make a list", text: "Type three lines, select them and press Ctrl+Shift+8 for bullets or Ctrl+Shift+9 for a checklist; press Tab on an item to indent it." },
+      { title: "Add a table", text: "Press the table button and pick 3 × 4 from the grid. Type in the cells, press Tab to move on, right-click a cell to add rows or merge cells." },
+      { title: "Comment and suggest", text: "Select a sentence, press Ctrl+Alt+M, type a comment and press Comment. Switch the mode to Suggesting and delete a word: it is struck through in red until someone accepts or rejects it in the side panel." },
+      { title: "Page setup", text: "Open File ▸ Page setup, choose A4 and 0.75 inch margins, then Insert ▸ Page numbers. The pages, ruler and footer update." },
+      { title: "Ask the Writer", text: "In the AI Agent panel type: '@writer review this proposal for clarity and suggest edits'. It reads the document, adds suggestions and comments you can accept or reject, and looks at the pages before reporting." },
+      { title: "Export", text: "File ▸ Download ▸ Microsoft Word (.docx) or Markdown. The file is also saved next to the document in the repository." },
+    ],
+    tips: [
+      "Use heading styles rather than big bold text: they build the outline, the table of contents, Word's navigation pane and what screen readers announce.",
+      "Lead with the point: the decision, finding or request in the first paragraph, details after it (Federal Plain Language Guidelines).",
+      "Add space before or after paragraphs (Format ▸ Line & paragraph spacing) instead of empty lines, and page breaks instead of a run of Enters, so the layout survives edits and export.",
+      "When reviewing someone else's document, work in Suggesting mode and leave comments for questions — the author keeps control and Word export keeps your changes as tracked changes.",
+      "Give every image alt text and write link text that says where the link goes; the writing review (Tools ▸ Writing review) points out what is missing.",
+    ],
+    cautions: [
+      "This is an editor inspired by Google Docs, not Google Docs: there is no real-time collaboration, sharing or version-history browser, and the history is Git's history.",
+      "Pages are laid out block by block: a paragraph or table taller than a page runs over the page gap instead of splitting, and footnotes are listed at the end of the document rather than at the bottom of each page.",
+      "Suggesting mode tracks typed and deleted text; splitting or joining paragraphs and formatting changes are applied directly.",
+      "Word export writes equations as plain text and the table of contents as a static list; Markdown loses colours, fonts, alignment and merged cells. Word import reads text, headings, lists, tables, links and images, but not page setup, comments or tracked changes.",
+      "Headers and footers are one line of text with fields; there are no drawings, charts, smart chips, columns or section breaks with different page setups.",
+    ],
+    agents: { default: "docs", base: "writer" },
+    shots: [{ file: "docs.jpg", caption: "The Docs menu: menu bar and toolbar, the outline, the ruler, a project proposal on an A4 page with a footnote, a suggested edit and a checklist, the comment and suggestions in the side panel, and the page and word count; the AI Agent panel opens from the right edge." }],
   },
   board: {
     summary: "Run workshops on a digital whiteboard: sections, sticky notes, votes, connectors, and live embeds of diagrams, designs and code.",

@@ -80,6 +80,7 @@ import {
   type SkillTokenState,
 } from '../../lib/mentions';
 import { useRepository } from '../../hooks/useRepository';
+import { agentMemoryFile } from '../../lib/teamStore';
 import './AgentPanelTabs.css';
 
 /* ---- Tools tab ---- */
@@ -694,7 +695,7 @@ export function AgentDetailsDialog({
             {agent.team && agent.username && (
               <div className="apanel-dlg__row">
                 <span>Memory</span>
-                <code>.pigry/teams/{agent.team}/agents/{agent.username}/memory.vector.json</code>
+                <code>{agentMemoryFile(agent.team, agent.username)}</code>
               </div>
             )}
           </div>

@@ -82,15 +82,21 @@ export function SettingsModal({ onClose, notify }: SettingsModalProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  /** Saves the identity (button or Enter in either field) and closes the dialog once it is stored. */
   const saveIdentity = useCallback(async () => {
+    if (savingIdentity) return;
+    setSavingIdentity(true);
     try {
-      await client.setUserInfo(name, email);
+      await client.setUserInfo(name.trim(), email.trim());
       await refresh();
       notify('Identity updated');
+      onClose();
     } catch (e) {
       notify(String(e), 'error');
+      setSavingIdentity(false);
     }
-  }, [name, email, refresh, notify]);
+  }, [name, email, savingIdentity, refresh, notify, onClose]);
 
   const reloadRemotes = useCallback(async () => {
     try {
@@ -184,7 +190,14 @@ export function SettingsModal({ onClose, notify }: SettingsModalProps) {
         </nav>
 
         {section === 'user' && (
-          <div className="settings__section">
+          <form
+            className="settings__section"
+            aria-label="Identity"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void saveIdentity();
+            }}
+          >
             <p className="settings__hint">
               Stored in this repository's local config. Commits made from pigry use this identity.
             </p>
@@ -194,6 +207,7 @@ export function SettingsModal({ onClose, notify }: SettingsModalProps) {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your display name"
+                autoFocus
               />
             </label>
             <label className="settings__field">
@@ -206,12 +220,12 @@ export function SettingsModal({ onClose, notify }: SettingsModalProps) {
               />
             </label>
             <div className="settings__actions">
-              <button type="button" className="settings__btn settings__btn--primary" onClick={saveIdentity}>
+              <button type="submit" className="settings__btn settings__btn--primary" disabled={savingIdentity}>
                 <Save size={12} />
-                Save identity
+                {savingIdentity ? 'Saving…' : 'Save identity'}
               </button>
             </div>
-          </div>
+          </form>
         )}
 
         {section === 'remotes' && (

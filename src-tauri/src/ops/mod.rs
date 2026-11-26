@@ -8,7 +8,11 @@ use std::sync::mpsc;
 use std::time::Duration;
 use crate::CommandNoWindow;
 
+mod checkout_refs;
 mod commit_edit;
+pub use checkout_refs::{checkout_tag, list_checkout_refs, CheckoutRef};
+mod conflicts;
+pub use conflicts::{conflict_abort, conflict_continue, conflict_resolve_file, conflict_state, conflict_versions, ConflictState, ConflictVersions};
 pub use commit_edit::{commit_edit_state, continue_commit_edit, start_commit_edit, CommitEditState};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -110,21 +114,20 @@ pub fn duplicate_commit_candidates(
     unique_commit_patches(repo_path, tip(source_branch)?, tip(destination_branch)?)
 }
 
-/// Replay one commit on a local destination branch without switching branches.
-pub fn duplicate_commit(
+/// The checks shared by every duplicate step: the commit is on the source branch, not yet on the
+/// destination, and not a merge. Returns the destination tip and the commit.
+fn duplicate_inputs<'r>(
+    repo: &'r git2::Repository,
     repo_path: &Path,
     source_branch: &str,
     destination_branch: &str,
     oid: &str,
-) -> Result<()> {
-    use crate::gitcli::run_git;
-    use git2::{BranchType, Oid, Repository, RepositoryState};
+) -> Result<(git2::Commit<'r>, git2::Commit<'r>)> {
+    use git2::{BranchType, Oid};
 
     if source_branch == destination_branch {
         return Err("Choose different source and destination branches.".into());
     }
-
-    let repo = Repository::discover(repo_path).map_err(err)?;
     let source = repo.find_branch(source_branch, BranchType::Local).map_err(err)?;
     let destination = repo
         .find_branch(destination_branch, BranchType::Local)
@@ -150,15 +153,22 @@ pub fn duplicate_commit(
     {
         return Err(format!("{destination_branch} already contains an equivalent change."));
     }
+    Ok((destination_tip, commit))
+}
 
-    // The cherry-pick index is in memory, so conflicts cannot affect either branch.
-    let mut picked = repo
-        .cherrypick_commit(&commit, &destination_tip, 0, None)
-        .map_err(err)?;
-    if picked.has_conflicts() {
-        return Err(format!("This commit conflicts with changes in {destination_branch}."));
-    }
-    let tree_id = picked.write_tree_to(&repo).map_err(err)?;
+/// Commits `tree_id` on top of the destination tip with the original author and message, then
+/// moves the destination branch (fast-forwarding the working tree when it is checked out).
+fn land_duplicate(
+    repo: &git2::Repository,
+    repo_path: &Path,
+    destination_branch: &str,
+    destination_tip: &git2::Commit,
+    commit: &git2::Commit,
+    tree_id: git2::Oid,
+) -> Result<String> {
+    use crate::gitcli::run_git;
+    use git2::{BranchType, RepositoryState};
+
     if tree_id == destination_tip.tree_id() {
         return Err(format!("This commit has no changes to apply to {destination_branch}."));
     }
@@ -166,7 +176,7 @@ pub fn duplicate_commit(
     let message = commit.message_raw().ok_or("The original commit message is not UTF-8.")?;
     let committer = repo.signature().map_err(err)?;
     let new_oid = repo
-        .commit(None, &commit.author(), &committer, message, &tree, &[&destination_tip])
+        .commit(None, &commit.author(), &committer, message, &tree, &[destination_tip])
         .map_err(err)?
         .to_string();
 
@@ -198,11 +208,226 @@ pub fn duplicate_commit(
         }
         // Compare the old value under Git's ref lock so a concurrent update is preserved.
         run_git(repo_path, &[
-            "update-ref", "-m", &format!("duplicate commit {oid}"),
+            "update-ref", "-m", &format!("duplicate commit {}", commit.id()),
             &destination_ref, &new_oid, &destination_tip.id().to_string(),
         ])?;
     }
+    Ok(new_oid)
+}
+
+/// Replay one commit on a local destination branch without switching branches.
+pub fn duplicate_commit(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+) -> Result<()> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
+    // The cherry-pick index is in memory, so conflicts cannot affect either branch.
+    let mut picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    if picked.has_conflicts() {
+        return Err(format!("This commit conflicts with changes in {destination_branch}."));
+    }
+    let tree_id = picked.write_tree_to(&repo).map_err(err)?;
+    land_duplicate(&repo, repo_path, destination_branch, &destination_tip, &commit, tree_id)?;
     Ok(())
+}
+
+/// One file the duplicated commit conflicts on. "Ours" is the destination branch, "theirs" is the
+/// commit being duplicated and "base" is that commit's parent.
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateConflictFile {
+    pub path: String,
+    pub base: Option<String>,
+    pub ours: Option<String>,
+    pub theirs: Option<String>,
+    /// Both sides merged with diff3-style conflict markers; None when a side deleted the file or
+    /// a version is binary.
+    pub merged: Option<String>,
+    pub binary: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateConflicts {
+    /// The destination tip the conflicts were computed against; resolving checks it is unchanged.
+    pub destination_oid: String,
+    pub commit_oid: String,
+    pub commit_summary: String,
+    /// Empty when the commit applies cleanly.
+    pub files: Vec<DuplicateConflictFile>,
+}
+
+/// How the user resolved one conflicted file: `side` takes a whole version ("ours" or "theirs",
+/// a missing version deletes the file); otherwise `content` is the new text and None deletes it.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateResolution {
+    pub path: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub side: Option<String>,
+}
+
+/// `git2::IndexEntry` is not `Clone`.
+fn copy_entry(entry: &git2::IndexEntry) -> git2::IndexEntry {
+    git2::IndexEntry {
+        ctime: entry.ctime,
+        mtime: entry.mtime,
+        dev: entry.dev,
+        ino: entry.ino,
+        mode: entry.mode,
+        uid: entry.uid,
+        gid: entry.gid,
+        file_size: entry.file_size,
+        id: entry.id,
+        flags: entry.flags,
+        flags_extended: entry.flags_extended,
+        path: entry.path.clone(),
+    }
+}
+
+fn conflict_path(conflict: &git2::IndexConflict) -> Option<String> {
+    [&conflict.our, &conflict.their, &conflict.ancestor]
+        .into_iter()
+        .flatten()
+        .next()
+        .map(|entry| String::from_utf8_lossy(&entry.path).into_owned())
+}
+
+/// Replays the commit in memory and lists the files it conflicts on, with all three versions and a
+/// marked-up merge of each. Nothing is written to either branch or the working tree.
+pub fn duplicate_commit_conflicts(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+) -> Result<DuplicateConflicts> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
+    let picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    let short = commit.as_object().short_id().ok()
+        .and_then(|b| b.as_str().map(str::to_string))
+        .unwrap_or_else(|| commit.id().to_string()[..7].to_string());
+    let summary = commit.summary().unwrap_or("").to_string();
+    let mut files = Vec::new();
+    if picked.has_conflicts() {
+        for conflict in picked.conflicts().map_err(err)?.flatten() {
+            let Some(path) = conflict_path(&conflict) else { continue };
+            let mut binary = false;
+            let mut read = |entry: &Option<git2::IndexEntry>| -> Result<Option<String>> {
+                let Some(entry) = entry else { return Ok(None) };
+                let blob = repo.find_blob(entry.id).map_err(err)?;
+                if blob.is_binary() {
+                    binary = true;
+                    return Ok(None);
+                }
+                Ok(Some(String::from_utf8_lossy(blob.content()).into_owned()))
+            };
+            let base = read(&conflict.ancestor)?;
+            let ours = read(&conflict.our)?;
+            let theirs = read(&conflict.their)?;
+            let merged = match (&conflict.our, &conflict.their) {
+                (Some(our), Some(their)) if !binary => {
+                    // Files added on both sides have no ancestor: merge against an empty file.
+                    let ancestor = match &conflict.ancestor {
+                        Some(entry) => copy_entry(entry),
+                        None => git2::IndexEntry { id: repo.blob(b"").map_err(err)?, ..copy_entry(our) },
+                    };
+                    let mut options = git2::MergeFileOptions::new();
+                    options
+                        .ancestor_label("base")
+                        .our_label(destination_branch)
+                        .their_label(format!("{short} ({summary})"))
+                        .style_diff3(true);
+                    let result = repo
+                        .merge_file_from_index(&ancestor, our, their, Some(&mut options))
+                        .map_err(err)?;
+                    Some(String::from_utf8_lossy(result.content()).into_owned())
+                }
+                _ => None,
+            };
+            files.push(DuplicateConflictFile { path, base, ours, theirs, merged, binary });
+        }
+    }
+    files.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(DuplicateConflicts {
+        destination_oid: destination_tip.id().to_string(),
+        commit_oid: commit.id().to_string(),
+        commit_summary: summary,
+        files,
+    })
+}
+
+/// Finishes a conflicted duplicate with the user's resolutions: replays the commit in memory again,
+/// replaces every conflicted file with its resolution and commits the result on the destination.
+/// Fails without touching anything when the destination moved since the conflicts were shown or a
+/// conflicted file has no resolution.
+pub fn duplicate_commit_resolved(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+    expected_destination: &str,
+    resolutions: &[DuplicateResolution],
+) -> Result<String> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
+    if destination_tip.id().to_string() != expected_destination {
+        return Err(format!("{destination_branch} changed while you were resolving the conflicts. Open the conflicts again to see the new changes."));
+    }
+    let mut picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    let conflicts: Vec<git2::IndexConflict> = picked.conflicts().map_err(err)?.collect::<std::result::Result<_, _>>().map_err(err)?;
+    for resolution in resolutions {
+        if !conflicts.iter().any(|c| conflict_path(c).as_deref() == Some(resolution.path.as_str())) {
+            return Err(format!("{} is not one of the conflicted files.", resolution.path));
+        }
+    }
+    for conflict in &conflicts {
+        let Some(path) = conflict_path(conflict) else { continue };
+        let resolution = resolutions
+            .iter()
+            .find(|r| r.path == path)
+            .ok_or_else(|| format!("{path} is still conflicted. Resolve every file first."))?;
+        let template = conflict.our.as_ref().or(conflict.their.as_ref()).or(conflict.ancestor.as_ref())
+            .map(copy_entry)
+            .ok_or_else(|| format!("{path} has no index entry."))?;
+        let entry = match resolution.side.as_deref() {
+            Some("ours") => conflict.our.as_ref().map(copy_entry),
+            Some("theirs") => conflict.their.as_ref().map(copy_entry),
+            Some(other) => return Err(format!("Unknown side \"{other}\" for {path}.")),
+            None => match &resolution.content {
+                Some(text) => {
+                    if text.lines().any(|line| line.starts_with("<<<<<<<") || line.starts_with(">>>>>>>")) {
+                        return Err(format!("{path} still has conflict markers."));
+                    }
+                    let mode = conflict.our.as_ref().or(conflict.their.as_ref()).map(|e| e.mode).unwrap_or(0o100644);
+                    Some(git2::IndexEntry { id: repo.blob(text.as_bytes()).map_err(err)?, mode, file_size: text.len() as u32, ..template })
+                }
+                None => None,
+            },
+        };
+        picked.conflict_remove(Path::new(&path)).map_err(err)?;
+        if let Some(mut entry) = entry {
+            entry.flags &= !0x3000; // stage bits: a resolved entry is stage 0
+            entry.path = path.clone().into_bytes();
+            picked.add(&entry).map_err(err)?;
+        }
+    }
+    if picked.has_conflicts() {
+        return Err("Some files are still conflicted. Resolve every file first.".into());
+    }
+    let tree_id = picked.write_tree_to(&repo).map_err(err)?;
+    land_duplicate(&repo, repo_path, destination_branch, &destination_tip, &commit, tree_id)
 }
 
 /// Aborts an in-progress cherry-pick, restoring the branch state.

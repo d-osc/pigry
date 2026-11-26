@@ -19,7 +19,8 @@ async function installWorktree(page) {
       }
       if (cmd === 'write_worktree_file') { files.set(args.path, args.content); return null; }
       if (cmd === 'write_worktree_binary') { window.__binary.set(args.path, args.data); return null; }
-      if (cmd === 'delete_worktree_file') { files.delete(args.path); return null; }
+      if (cmd === 'read_binary_file' && window.__binary.has(args.path)) { const data = window.__binary.get(args.path); return { data, mime: 'image/png', size: atob(data).length }; }
+      if (cmd === 'delete_worktree_file') { files.delete(args.path); window.__binary.delete(args.path); return null; }
       return invoke(cmd, args);
     };
   });
@@ -284,8 +285,12 @@ test('the agent tools create, read, edit, preview and open drawings', async ({ p
   expect(edited).toContain('✓ stroke');
   expect(edited).toContain('✓ filter');
   const saved = JSON.parse(await page.evaluate(() => window.__worktree.get('.pigry/drawings/illustrator/sunset.drawing.json')));
-  expect(saved.layers.every((l) => l.png === '' || l.png.startsWith('data:image/png'))).toBe(true);
-  expect(saved.layers[1].png).not.toBe('');
+  // layer pictures are kept as side files next to the drawing, not as base64 inside the JSON
+  expect(saved.layers.every((l) => l.png === '' || l.png.startsWith('data:image/png') || /^pigry-asset:[0-9a-f]+\.png$/.test(l.png))).toBe(true);
+  expect(saved.layers[1].png).toMatch(/^pigry-asset:/);
+  const sideFile = `.pigry/drawings/illustrator/sunset.drawing.assets/${saved.layers[1].png.slice('pigry-asset:'.length)}`;
+  expect(await page.evaluate((path) => window.__binary.has(path), sideFile)).toBe(true);
+  expect(await run('drawing_read', { name: 'sunset' })).not.toContain('pigry-asset:');
 
   // preview and export; one agent cannot create files in another's folder
   expect(await run('drawing_preview', { name: 'sunset', save_as: '.pigry/drawings/illustrator/preview.png' })).toContain('attached to your next turn');

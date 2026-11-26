@@ -1,6 +1,7 @@
 /** 3D models in the workspace (.pigry/models/<owner>/<name>.model.json) plus the small bits of state shared by the
  * 3D Model editor and the agent's model tools: change events, "flush unsaved edits" and "open this model". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { MODELS_DIR, MODEL_EXT, parseModelJson, serializeModel, type Model3D, type NormalizeResult } from './model3d';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -26,7 +27,7 @@ export async function resolveModel(name: string, caller?: string): Promise<Resol
 }
 
 export async function loadModel(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(modelPath(ref));
+  const file = await readDocText(modelPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${modelPath(ref)} is not a readable model file`);
   return { ...parseModelJson(file.content, ref.slug), ref };
 }
@@ -36,13 +37,13 @@ export function notifyModelChanged(change: ModelChange): void {
 }
 
 export async function saveModel(ref: OwnedRef, model: Model3D, source: ModelChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(modelPath(ref), serializeModel(model));
+  await writeDocText(modelPath(ref), serializeModel(model));
   notifyModelChanged({ key: refKey(ref), source });
   return modelPath(ref);
 }
 
 export async function removeModel(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(modelPath(ref));
+  await deleteDoc(modelPath(ref));
   notifyModelChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

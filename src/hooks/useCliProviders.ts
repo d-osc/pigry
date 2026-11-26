@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AiProviderEntry } from '../lib/aiProviders';
+import { CLI_PROVIDERS_ENABLED } from '../lib/featureFlags';
 import { CLI_FOCUS_RESCAN_MIN_MS, isCliScanning, CLI_PROVIDERS_CHANGED, CLI_RESCAN_INTERVAL_MS, isCliCacheFresh, readCliCache, saveCliEffort, saveCliModel, scanCliProviders, withChosenModels } from '../lib/cliProviders';
 
 const cached = (): AiProviderEntry[] => withChosenModels(readCliCache()?.entries ?? []);
 
 /** The "Provider CLI" providers. They come from the cache straight away; a scan only runs when the cache is missing or older than a day
  * (or on `rescan`). Every component using this hook updates when any of them scans or when a CLI model is picked. */
-export function useCliProviders(): { providers: AiProviderEntry[]; scanning: boolean; scannedAt: number | null; rescan: () => Promise<void>; setModel: (id: string, model: string) => void; setEffort: (id: string, modelName: string, effort: string | undefined) => void } {
+type CliProviders = { providers: AiProviderEntry[]; scanning: boolean; scannedAt: number | null; rescan: () => Promise<void>; setModel: (id: string, model: string) => void; setEffort: (id: string, modelName: string, effort: string | undefined) => void };
+
+function useScannedCliProviders(): { providers: AiProviderEntry[]; scanning: boolean; scannedAt: number | null; rescan: () => Promise<void>; setModel: (id: string, model: string) => void; setEffort: (id: string, modelName: string, effort: string | undefined) => void } {
   const [providers, setProviders] = useState<AiProviderEntry[]>(cached);
   const [scannedAt, setScannedAt] = useState<number | null>(() => readCliCache()?.at ?? null);
   const [scanning, setScanning] = useState(isCliScanning);
@@ -40,3 +43,9 @@ export function useCliProviders(): { providers: AiProviderEntry[]; scanning: boo
 
   return { providers, scanning, scannedAt, rescan, setModel: saveCliModel, setEffort: saveCliEffort };
 }
+
+const NO_CLI: CliProviders = { providers: [], scanning: false, scannedAt: null, rescan: async () => undefined, setModel: () => undefined, setEffort: () => undefined };
+const useNoCliProviders = (): CliProviders => NO_CLI;
+
+/** CLI providers, or none at all (and no scanning) while the feature is switched off — see featureFlags.ts. */
+export const useCliProviders: () => CliProviders = CLI_PROVIDERS_ENABLED ? useScannedCliProviders : useNoCliProviders;

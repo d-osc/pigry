@@ -15,6 +15,8 @@ import '../extensions/model3d/Model3DScreen.css';
 import '../extensions/gameengine/GameScreen.css';
 import '../extensions/videoeditor/VideoScreen.css';
 import '../extensions/audioeditor/AudioScreen.css';
+import '../extensions/sheet/SheetScreen.css';
+import '../extensions/docs/DocsScreen.css';
 import '../extensions/diagram/DiagramScreen.css';
 import '../screens/explorer/AgentPanelTabs.css';
 import '../screens/explorer/AiAgentPanel.css';

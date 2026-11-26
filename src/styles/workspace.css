@@ -224,8 +224,7 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); }
 .nav-item--active .nav-item__icon { color: var(--text-primary); }
 .nav-item__badge { padding: 0 6px; border-radius: 999px; background: var(--bg-card); color: var(--text-secondary); }
 .nav-item--active .nav-item__badge { color: var(--text-primary); }
-.nav-sidebar__heading, .nav-section__title { text-transform: none; letter-spacing: 0; font-size: 12px; }
-.repo-health { background: var(--bg-panel); }
+.nav-sidebar__heading { text-transform: none; letter-spacing: 0; font-size: 12px; }
 .title-bar__name { font-weight: 600; }
 .title-bar__repo { color: var(--accent); }
 .explorer-tabs, .commit-history__columns { background: var(--bg-panel); }

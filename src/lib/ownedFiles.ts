@@ -67,5 +67,15 @@ export function resolveRef(refs: OwnedRef[], name: string, caller?: string, exte
   return { error: `"${slug}" exists under several owners (${matches.map(refKey).join(', ')}) — use owner/name` };
 }
 
-export const sortRefs = (refs: OwnedRef[]): OwnedRef[] =>
+/** Agent tools that keep files per owner (.pigry/<kind>/<agent>/…) or attach images for the caller. */
+const OWNED_TOOL_PREFIXES = ['diagram_', 'design_', 'board_', 'e2e_', 'drawing_', 'game_', 'model_', 'sheet_', 'docs_', 'video_', 'audio_'];
+export const isOwnedFileTool = (name: string): boolean => name === 'read_image' || OWNED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix));
+
+/** Tells an owned-file tool which agent is calling, so it writes to that agent's own folder
+ * (without it the tools fall back to a generic "agent" folder). */
+export function withCaller(name: string, input: Record<string, unknown>, agent: string | undefined): Record<string, unknown> {
+  return agent && isOwnedFileTool(name) ? { ...input, agent } : input;
+}
+
+export const sortRefs =(refs: OwnedRef[]): OwnedRef[] =>
   [...refs].sort((a, b) => a.owner.localeCompare(b.owner) || a.slug.localeCompare(b.slug));

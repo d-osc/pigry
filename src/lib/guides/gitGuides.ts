@@ -1,7 +1,7 @@
 import type { MenuGuide } from '../menuGuides.types.ts';
 
 export type GitGuideId =
-  | 'working-changes' | 'push-commits' | 'pull-commits' | 'merge-branch' | 'compare-branch' | 'stashes'
+  | 'working-changes' | 'push-commits' | 'pull-commits' | 'merge-branch' | 'merge-conflicts' | 'compare-branch' | 'stashes'
   | 'cherry-pick' | 'revert-commit' | 'duplicate-commit' | 'edit-commit' | 'rebase-branch';
 
 /** Guides for the menus that work with local git: changes, syncing, merging and rewriting history. */
@@ -111,21 +111,21 @@ export const GIT_GUIDES: Record<GitGuideId, MenuGuide> = {
     summary: "Merge another branch into the one you have checked out, choosing how the history is recorded, and resolve conflicts.",
     overview: [
       "Pick a Source branch and a Strategy. The merge is applied to the branch you have checked out (shown at the top). Pigry previews the commits and files that will come in before you merge.",
-      "When two branches changed the same lines the merge stops with conflicts. The conflicted files are listed; you resolve them, stage each one, and then finish the merge.",
+      "When two branches changed the same lines the merge stops with conflicts and a conflict editor opens right below: pick each file, choose what to keep in every conflict, then press Commit merge.",
     ],
     features: [
       { title: "Fast-forward (ff)", text: "Moves your branch forward without a merge commit. Only works when your branch has no commits of its own." },
       { title: "No fast-forward (no-ff)", text: "Always creates a merge commit, which records that a branch existed." },
       { title: "Squash", text: "Combines all the changes into staged changes that you commit yourself, as one commit." },
-      { title: "Conflict list", text: "Shows conflicted files; open one to compare both versions, edit it, then Stage file." },
-      { title: "Abort merge", text: "Stops the merge and restores the branch to how it was before." },
+      { title: "Conflict editor", text: "Lists the conflicted files; each conflict shows Current (your branch) and Incoming (the branch being merged) with Accept current, Accept incoming, Accept both or Edit. Edit whole file writes the result by hand, and Whole file takes one version (or keeps a deletion)." },
+      { title: "Abort", text: "Stops the merge and restores the branch to how it was before; your choices are discarded." },
     ],
     tutorial: [
       { title: "Check out the target", text: "Make sure the branch that should receive the changes is checked out." },
       { title: "Choose the source", text: "Select the Source branch and look at the commit list." },
       { title: "Choose a strategy", text: "no-ff for a merge commit, ff for a straight line, squash for one tidy commit." },
-      { title: "Merge", text: "Press merge. If conflicts appear, open each file, fix the markers and press Stage file." },
-      { title: "Finish", text: "When every file is resolved Pigry shows 'Conflicts resolved'; complete the merge as it prompts, or commit it in Working changes." },
+      { title: "Merge", text: "Press merge. If conflicts appear, resolve every file in the conflict editor — the progress bar shows how many are left." },
+      { title: "Finish", text: "Press Commit merge: Pigry writes and stages every resolved file and creates the merge commit." },
     ],
     tips: [
       "Ask @merge-conflict-helper to explain a conflict and propose a resolution.",
@@ -138,6 +138,46 @@ export const GIT_GUIDES: Record<GitGuideId, MenuGuide> = {
     ],
     agents: { default: "merge-branch", base: "merge-conflict-helper" },
     shots: [{ file: "merge-branch.jpg", caption: "The source branch and strategy selectors, the incoming commits and the diff of the selected file." }],
+  },
+
+  "merge-conflicts": {
+    summary: "Resolve conflict markers one conflict at a time — pick a side, keep both or write the result — then finish or abort the merge, rebase, cherry-pick or revert.",
+    overview: [
+      "When git cannot combine two changes to the same lines it writes both into the file between <<<<<<<, ======= and >>>>>>> markers and stops. Merge conflicts lists every conflicted file and shows each conflict as a card: the Current change on one side, the Incoming change on the other, with the lines that differ highlighted and the code around it.",
+      "A banner says what stopped (a merge, a rebase, a cherry-pick, a revert, or conflicts from a stash) and what Current and Incoming mean for it — during a rebase they are reversed: Current is the new base and Incoming is your own commit. When every file is resolved, Continue (or Commit merge) finishes the operation and Abort puts the branch back as it was.",
+    ],
+    features: [
+      { title: "Conflict cards", text: "Each conflict shows both sides side by side with line numbers, the nearby lines and, when the file has it, the common ancestor (the version before either change)." },
+      { title: "One-click choices", text: "Accept current, Accept incoming, Accept both (current first or incoming first), keep the ancestor, or Edit to write the combined result yourself. Change undoes a choice." },
+      { title: "Safe suggestions", text: "When both sides made the same change, differ only in whitespace, or only one side changed the lines, the card suggests the answer; Apply safe suggestions takes them all at once." },
+      { title: "Preview and save", text: "Preview result shows the whole file with any markers left in red. Save writes the choices so far; Save & mark resolved writes and stages the file." },
+      { title: "Whole-file choices", text: "Keep the current or the incoming version of the whole file, for generated files such as lock files." },
+      { title: "Finish or abort", text: "Continue rebase, Continue cherry-pick, Continue revert or Commit merge once no file is left; Abort asks first, then restores the branch." },
+      { title: "Side bar badge", text: "The menu shows how many files are conflicted, so you notice conflicts from any menu." },
+      { title: "Agents", text: "@merge-conflicts explains a conflict in plain words; @conflict-resolver reads both sides and their history, resolves the blocks with conflict_resolve and tells you which ones need your decision." },
+    ],
+    tutorial: [
+      { title: "Get a conflict", text: "Merge, rebase, cherry-pick or pull a branch that changed the same lines as yours. The Merge conflicts menu shows a count in the side bar." },
+      { title: "Open the menu", text: "The banner says what stopped and how many files are left. Read How it works on the right the first time." },
+      { title: "Pick a file", text: "Choose a file on the left. Each conflict is a card; N and P move between them." },
+      { title: "Decide each conflict", text: "Compare the two sides and press Accept current, Accept incoming or Accept both — or Edit to combine them. Use a suggestion when the card offers one." },
+      { title: "Check the result", text: "Press Preview result to read the whole file, then Save & mark resolved." },
+      { title: "Finish", text: "When no file is left press Continue (or Commit merge). For conflicts from a stash or a Pigry cherry-pick, commit the files in Working changes." },
+    ],
+    tips: [
+      "Read what each side meant before choosing: a conflict is two valid changes, not a right and a wrong one.",
+      "Accept both is right for independent additions (two imports, two list items); Edit is right when the same code was changed in two ways.",
+      "For lock files take one side, then run the package manager again instead of merging by hand.",
+      "Run the tests after resolving — a file without markers can still be wrong.",
+    ],
+    cautions: [
+      "During a rebase Current and Incoming are reversed: Current is the branch you rebase onto, Incoming is your own commit.",
+      "Abort throws away every resolution made since the operation started.",
+      "Binary files cannot be merged line by line: keep one whole version, or resolve them outside Pigry and mark them resolved.",
+      "Save & mark resolved stages the file as it is — check the preview first.",
+    ],
+    agents: { default: "merge-conflicts", base: "conflict-resolver" },
+    shots: [{ file: "merge-conflicts.jpg", caption: "A merge stopped with conflicts: the conflicted files, a conflict card with the current and incoming sides and the actions, and the How it works panel." }],
   },
 
   "compare-branch": {

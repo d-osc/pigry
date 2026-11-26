@@ -1,6 +1,8 @@
 import {
   Activity,
   AudioLines,
+  Sheet,
+  FileText,
   Bot,
   Box,
   Gamepad2,
@@ -19,6 +21,7 @@ import {
   Zap,
   type LucideIcon,
   GitMerge,
+  FileWarning,
   GitCompare,
   History,
   ArrowUpCircle,
@@ -45,12 +48,15 @@ export type NavId =
   | 'gameengine'
   | 'videoeditor'
   | 'audioeditor'
+  | 'sheet'
+  | 'docs'
   | 'board'
   | 'e2e'
   | 'reports'
   | 'commit-graph'
   | 'working-changes'
   | 'merge-branch'
+  | 'merge-conflicts'
   | 'compare-branch'
   | 'rebase-branch'
   | 'push-commits'
@@ -104,6 +110,8 @@ export const workspaceNav: NavItem[] = [
   { id: 'gameengine', label: 'Game Engine', icon: Gamepad2, group: 'extension' },
   { id: 'videoeditor', label: 'Video Editor', icon: Film, group: 'extension' },
   { id: 'audioeditor', label: 'Audio Editor', icon: AudioLines, group: 'extension' },
+  { id: 'sheet', label: 'Sheet', icon: Sheet, group: 'extension' },
+  { id: 'docs', label: 'Docs', icon: FileText, group: 'extension' },
   { id: 'board', label: 'Board', icon: StickyNote, group: 'extension' },
   { id: 'e2e', label: 'E2E Testing', icon: FlaskConical, group: 'extension' },
   { id: 'reports', label: 'Reports', icon: ClipboardList, group: 'extension' },
@@ -112,6 +120,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'push-commits', label: 'Push Commits', icon: ArrowUpCircle },
   { id: 'pull-commits', label: 'Pull commit', icon: ArrowDownCircle },
   { id: 'merge-branch', label: 'Merge branch', icon: GitMerge },
+  { id: 'merge-conflicts', label: 'Merge conflicts', icon: FileWarning },
   { id: 'compare-branch', label: 'Compare branch', icon: GitCompare },
   { id: 'stashes', label: 'Stashes Code', icon: Archive },
   { id: 'cherry-pick', label: 'Cherry Pick', icon: Cherry },

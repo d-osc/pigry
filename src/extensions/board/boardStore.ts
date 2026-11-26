@@ -2,7 +2,8 @@
  * folder per agent — "user" for the editor) plus the small bits of shared state
  * between the Board editor screen and the agent's board tools: change events,
  * "flush unsaved edits" and "open this board". */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../lib/tauriClient';
+import { getFileTree } from '../../lib/tauriClient';
+import { deleteDoc, readDocText, writeDocText } from '../../lib/docFile';
 import { BOARDS_DIR, BOARD_EXT, parseBoardJson, serializeBoard, type Board, type NormalizeResult } from './board';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../lib/ownedFiles';
 
@@ -29,7 +30,7 @@ export async function resolveBoard(name: string, caller?: string): Promise<Resol
 }
 
 export async function loadBoard(ref: OwnedRef): Promise<NormalizeResult & { ref: OwnedRef }> {
-  const file = await readWorktreeFile(boardPath(ref));
+  const file = await readDocText(boardPath(ref));
   if (file.binary || file.tooLarge) throw new Error(`${boardPath(ref)} is not a readable board file`);
   return { ...parseBoardJson(file.content, ref.slug), ref };
 }
@@ -39,13 +40,13 @@ export function notifyBoardChanged(change: BoardChange): void {
 }
 
 export async function saveBoard(ref: OwnedRef, board: Board, source: BoardChange['source'] = 'editor'): Promise<string> {
-  await writeWorktreeFile(boardPath(ref), serializeBoard(board));
+  await writeDocText(boardPath(ref), serializeBoard(board));
   notifyBoardChanged({ key: refKey(ref), source });
   return boardPath(ref);
 }
 
 export async function removeBoard(ref: OwnedRef): Promise<void> {
-  await deleteWorktreeFile(boardPath(ref));
+  await deleteDoc(boardPath(ref));
   notifyBoardChanged({ key: refKey(ref), source: 'editor', deleted: true });
 }
 

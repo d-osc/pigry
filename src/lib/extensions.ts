@@ -103,6 +103,11 @@ export function requestOpenExtension(id: string): void {
   window.dispatchEvent(new CustomEvent(EXTENSION_OPEN, { detail: id }));
 }
 
+/** Reads the waiting request without consuming it — safe in a state initializer, which React may run and throw away (Suspense, StrictMode). */
+export function peekPendingOpenExtension(): string | null {
+  return pendingOpen;
+}
+
 export function takePendingOpenExtension(): string | null {
   const id = pendingOpen;
   pendingOpen = null;
