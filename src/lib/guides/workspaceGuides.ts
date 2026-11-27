@@ -656,6 +656,7 @@ export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawi
       { title: "Specs, Runs and Settings", text: "The side list has three tabs: Specs (your test files), Runs (history of results, flaky and slow tests) and Settings (base URL, timeouts, evidence options)." },
       { title: "Spec editor", text: "Edit JavaScript or TypeScript specs with Cypress commands. Type errors in .ts specs are shown as warnings." },
       { title: "Run spec, Run all, Watch", text: "Run the open spec, every spec, or the it() under the cursor. Watch mode re-runs when the file changes, whoever saved it." },
+      { title: "Browser picker", text: "Choose which installed browser the specs run in (Edge, Chrome, Chrome Beta/Dev/Canary, Brave, Chromium, Vivaldi, or Firefox, Firefox Beta, Developer Edition and Nightly) from the Browser menu at the top, like Cypress. Auto uses Edge, then Chrome. Chromium browsers are driven over the Chrome DevTools Protocol and Firefox over WebDriver BiDi. The Playwright group lists Playwright's own Chromium, Firefox and WebKit (close to Safari) builds when they are installed (npx playwright install); Playwright drives them, so it needs Node.js and Playwright in the repository (npm i -D @playwright/test). Specs can check Cypress.browser.family or Cypress.isBrowser('webkit'). The choice is kept on this computer, and each run shows which browser it used." },
       { title: "Live runner", text: "See suites, tests and every command as they run. Pause and run one command at a time to step through." },
       { title: "Time travel and evidence", text: "Hover a command to see the page as it was. Failed tests keep a screenshot, a code frame, the browser console and optional network JSON; you can also record a video." },
       { title: "Reports and CI", text: "Save a Markdown report with linked screenshots, and export JUnit XML for your CI system." },
@@ -672,6 +673,7 @@ export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawi
     tips: [
       "Use data-testid attributes for selectors so tests survive layout changes.",
       "Turn on Watch while you write a spec: it re-runs on every save.",
+      "Run a spec in a second browser from the Browser menu (for example Firefox after Chrome) to catch browser-specific bugs. Pick Playwright WebKit to catch Safari-only bugs on Windows. Video works in every browser except Firefox over WebDriver BiDi (that run skips it with a note; Playwright Firefox records one). Turning off web security fully works only in Chromium: Firefox only lifts CORS checks and WebKit keeps it on.",
       "Look at the Runs tab for tests that fail most often or are flaky (passed only after a retry); fix those first.",
     ],
     cautions: [

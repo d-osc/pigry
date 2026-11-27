@@ -2320,6 +2320,15 @@ pub async fn browser_devtools(
             crate::devtools::set_web_security(js.as_deref() != Some("off"));
             Ok("web security setting applies to the next browser launch".to_string())
         }
+        // Which installed browser the test window uses (an id from e2e_browsers; "" = Auto).
+        // A change closes the open window so the next "open" launches the new one.
+        "browser" => {
+            let id = js.unwrap_or_default();
+            if crate::devtools::set_browser(&id) {
+                crate::devtools::devtools_close().await?;
+            }
+            Ok(if id.trim().is_empty() { "test browser: Auto".to_string() } else { format!("test browser: {}", id.trim()) })
+        }
         // CSS / responsive testing. `js` carries "width,height[,mobile]" (width 0
         // clears) for viewport, or "light" / "dark" / "" for color_scheme.
         "viewport" => {

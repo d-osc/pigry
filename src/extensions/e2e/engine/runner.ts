@@ -13,6 +13,7 @@
  * browser console, and the whole spec can be videoed. */
 import CY_PAGE from './cyPage.js?raw';
 import { loadModuleGraph, makeRequire, type ModuleHost } from './modules';
+import { cypressBrowserOf, isBrowser, type CypressBrowser } from './browsers';
 import {
   AssertionError, JQ, VIEWPORT_PRESETS, assertDom, assertFn, deepEqual, expectFn, fmt, isDomSnap, makeStub, runAssertion,
   type DomSnap,
@@ -78,6 +79,8 @@ export interface Driver {
   clearCookies?(name?: string): Promise<void>;
   setHeaders?(headers: Record<string, string>): Promise<void>;
   setWebSecurity?(enabled: boolean): Promise<void>;
+  /** Picks which installed browser the test window launches with ("" = Auto); a change restarts the window. */
+  setBrowser?(id: string): Promise<void>;
   viewport(width: number, height: number, mobile?: boolean): Promise<void>;
   recordStart(saveAs: string): Promise<void>;
   recordStop(): Promise<void>;
@@ -152,6 +155,10 @@ export interface SpecResult {
   video?: string;
   error?: string;
   config: E2eConfig;
+  /** The browser the spec ran in, e.g. "Chrome 120". */
+  browser?: string;
+  /** Things the run could not do in this browser (e.g. no video in Firefox). */
+  notes?: string[];
 }
 
 export type RunEvent =
@@ -196,6 +203,10 @@ export interface RunOptions {
   /** The spec is TypeScript: `transpile` turns it into JavaScript first. */
   typescript?: boolean;
   onPause?: (info: { spec: string; test: string; command: string; line?: number }) => Promise<'resume' | 'step' | 'stop'>;
+  /** What `Cypress.browser` reports (the browser picked in E2E Testing). */
+  browser?: CypressBrowser;
+  /** How that browser is driven: "cdp", "bidi" (no video) or "playwright". */
+  engine?: string;
 }
 
 /* -------------------------------------------------------------- subjects */
@@ -1388,6 +1399,9 @@ export async function runSpec(opts: RunOptions): Promise<SpecResult> {
   const startedAt = Date.now();
   const engine = new Engine(opts);
   const cfg = opts.config;
+  const browserName = opts.browser ? [opts.browser.displayName, opts.browser.majorVersion].filter((v) => v !== '').join(' ') : undefined;
+  const cypressBrowser = opts.browser ?? cypressBrowserOf(undefined);
+  const notes: string[] = [];
   const results: TestResult[] = [];
   const rootSuite: SuiteNode = { title: '', parent: null, tests: [], suites: [], skip: false, only: false, before: [], beforeEach: [], after: [], afterEach: [], order: [] };
   let currentSuite = rootSuite;
@@ -1448,7 +1462,7 @@ export async function runSpec(opts: RunOptions): Promise<SpecResult> {
         customs.set(name, { fn: (...a: unknown[]) => fn(orig, ...a), type: 'parent' });
       },
     },
-    _: LODASH_LITE, browser: { name: 'chromium', family: 'chromium', isHeaded: true, isHeadless: false, displayName: 'Test browser' }, platform: 'win32', version: 'pigry',
+    _: LODASH_LITE, browser: cypressBrowser, isBrowser: (matcher: Parameters<typeof isBrowser>[1]) => isBrowser(cypressBrowser, matcher), platform: 'win32', version: 'pigry',
     spec: { name: opts.spec, relative: opts.spec }, isCy: (v: unknown) => !!chainableOf(v),
     get currentTest() { return { title: engine.currentTestTitle.split(' -- ').pop(), titlePath: engine.currentTestTitle.split(' -- ') }; },
     sinon: { stub: (o?: Record<string, unknown>, m?: string) => (o && m ? engine.defs.stub as never : makeStub()), spy: makeStub },
@@ -1462,7 +1476,7 @@ export async function runSpec(opts: RunOptions): Promise<SpecResult> {
 
   /* ---- evaluate the spec to build the suite tree ---- */
   const evalError = (e: unknown): SpecResult => ({
-    spec: opts.spec, status: 'error', startedAt, ms: Date.now() - startedAt, tests: [], passed: 0, failed: 0, pending: 0, config: cfg,
+    spec: opts.spec, status: 'error', startedAt, ms: Date.now() - startedAt, tests: [], passed: 0, failed: 0, pending: 0, config: cfg, browser: browserName,
     error: `The spec could not be loaded: ${e instanceof Error ? e.message : String(e)}`,
   });
   const globals: Record<string, unknown> = {
@@ -1538,7 +1552,9 @@ export async function runSpec(opts: RunOptions): Promise<SpecResult> {
   opts.onEvent?.({ type: 'spec:start', spec: opts.spec, tests: planned.map(({ t, skipped }) => ({ key: t.key, title: t.title, status: (skipped ? 'pending' : 'skipped') as TestStatus })).map((x) => ({ ...x, status: 'pending' as TestStatus })) });
 
   let videoPath: string | undefined;
-  if (cfg.video) {
+  if (cfg.video && opts.engine === 'bidi') {
+    notes.push(`No video: recording needs a Chromium or Playwright browser — ${cypressBrowser.displayName} (WebDriver BiDi) has no screencast.`);
+  } else if (cfg.video) {
     try { await engineEnsure(engine); videoPath = `${opts.evidenceDir}/${opts.spec.replace(/[^\w.-]+/g, '-')}.webm`; await opts.driver.recordStart(videoPath); } catch { videoPath = undefined; }
   }
 
@@ -1619,7 +1635,7 @@ export async function runSpec(opts: RunOptions): Promise<SpecResult> {
 
   if (videoPath) { try { await opts.driver.recordStop(); } catch { videoPath = undefined; } }
   const passed = results.filter((r) => r.status === 'passed').length, failed = results.filter((r) => r.status === 'failed').length, pending = results.filter((r) => r.status === 'pending' || r.status === 'skipped').length;
-  const spec: SpecResult = { spec: opts.spec, status: failed > 0 ? 'failed' : 'passed', startedAt, ms: Date.now() - startedAt, tests: results, passed, failed, pending, video: videoPath, config: cfg };
+  const spec: SpecResult = { spec: opts.spec, status: failed > 0 ? 'failed' : 'passed', startedAt, ms: Date.now() - startedAt, tests: results, passed, failed, pending, video: videoPath, config: cfg, browser: browserName, ...(notes.length ? { notes } : {}) };
   opts.onEvent?.({ type: 'spec:end', result: spec });
   return spec;
 }

@@ -191,9 +191,11 @@ export async function installE2eEnvironment(page, seed = {}) {
           case 'clear_cookies': await b.clearCookies(args.js || undefined); return 'ok';
           case 'headers': await b.setHeaders(JSON.parse(args.js || '{}')); return 'ok';
           case 'websecurity': return 'ok';
+          case 'browser': (window.__browserChoices ??= []).push(args.js ?? ''); return 'ok';
           default: return 'ok';
         }
       }
+      if (cmd === 'e2e_browsers') return window.__installedBrowsers ?? [];
       if (cmd === 'get_file_tree') { const base = await invoke(cmd, args); return { ...base, entries: [...base.entries, ...files.keys()] }; }
       if (cmd === 'read_worktree_file') {
         if (!files.has(args.path)) throw new Error(`no such file: ${args.path}`);

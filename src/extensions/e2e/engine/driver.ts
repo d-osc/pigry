@@ -1,5 +1,7 @@
-/** The E2E runner's browser: the external Edge/Chrome test window that
- * src-tauri/src/devtools.rs drives over the Chrome DevTools Protocol. */
+/** The E2E runner's browser: the external test window picked in E2E Testing.
+ * src-tauri/src/devtools.rs drives Edge, Chrome and the other Chromium browsers
+ * over the Chrome DevTools Protocol, and Firefox over WebDriver BiDi (bidi.rs) —
+ * the same actions either way, except video recording (Chromium only). */
 import { agentShellRun, browserDevtools, readWorktreeFile, writeWorktreeFile } from '../../../lib/tauriClient';
 import type { Driver } from './runner';
 
@@ -18,6 +20,7 @@ export function tauriDriver(): Driver {
     clearCookies: async (name) => { await browserDevtools('clear_cookies', { js: name }); },
     setHeaders: async (headers) => { await browserDevtools('headers', { js: JSON.stringify(headers) }); },
     setWebSecurity: async (enabled) => { await browserDevtools('websecurity', { js: enabled ? 'on' : 'off' }); },
+    setBrowser: async (id) => { await browserDevtools('browser', { js: id }); },
     viewport: async (width, height, mobile) => { await browserDevtools('viewport', { js: `${width},${height},${mobile === true}` }); },
     recordStart: async (saveAs) => { await browserDevtools('record_start', { url: saveAs }); },
     recordStop: async () => { await browserDevtools('record_stop'); },

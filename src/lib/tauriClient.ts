@@ -1186,7 +1186,24 @@ export async function browserPage(url: string, waitMs?: number): Promise<Browser
 export type DevtoolsAction =
   | 'open' | 'eval' | 'console' | 'screenshot' | 'dom' | 'network' | 'close'
   | 'network_export' | 'record_start' | 'record_stop' | 'viewport' | 'color_scheme' | 'init_script'
-  | 'input' | 'cookies' | 'set_cookie' | 'clear_cookies' | 'headers' | 'websecurity';
+  | 'input' | 'cookies' | 'set_cookie' | 'clear_cookies' | 'headers' | 'websecurity' | 'browser';
+
+/** A browser installed on this machine that the E2E runner can drive: `family` "chromium", "firefox" or "webkit";
+ * `engine` "cdp" (Chromium browsers), "bidi" (Firefox over WebDriver BiDi) or "playwright" (Playwright's own builds). */
+export interface InstalledBrowser {
+  id: string;
+  name: string;
+  family: string;
+  channel: string;
+  displayName: string;
+  version: string;
+  path: string;
+  engine?: 'cdp' | 'bidi' | 'playwright';
+}
+
+export async function listInstalledBrowsers(): Promise<InstalledBrowser[]> {
+  return invoke('e2e_browsers');
+}
 
 export async function openInBrowser(url: string): Promise<string> {
   return invoke('browser', { url });

@@ -78,6 +78,7 @@
 .e2e-field small, .e2e-check small { color: var(--text-muted); font-size: 10px; line-height: 1.4; }
 .e2e-check { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; font-size: var(--fs-xs); color: var(--text-primary); }
 .e2e-check small { grid-column: 2; }
+.e2e-check .e2e-check__note { color: var(--warning, #d29922); }
 
 /* ---- main ---- */
 .e2e__main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg-panel); }
@@ -172,3 +173,12 @@
 .e2e-ts { font-size: 9px; padding: 0 4px; border-radius: 3px; background: var(--bg-card); color: var(--accent); }
 .e2e-link { margin: 2px 10px 4px 38px; padding: 0; border: none; background: none; color: var(--accent); font-size: 10.5px; cursor: pointer; text-align: left; }
 .e2e-link:hover { text-decoration: underline; }
+
+/* browser picker (header) */
+.e2e-browser { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 4px 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-secondary); font-size: var(--fs-xs); }
+.e2e-browser:hover { border-color: var(--border-strong); }
+.e2e-browser select { height: 24px; max-width: 190px; border: none; background: transparent; color: var(--text-primary); font-size: var(--fs-xs); outline: none; cursor: pointer; }
+.e2e-browser select:disabled { opacity: 0.55; cursor: default; }
+.e2e-browser select option { background: var(--bg-elevated, var(--bg-card)); color: var(--text-primary); }
+.e2e-run__note { color: var(--warning, #d29922); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+.e2e-browser--missing { border-color: color-mix(in srgb, var(--danger, #e5534b) 55%, var(--border)); }

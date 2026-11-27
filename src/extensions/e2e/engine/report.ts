@@ -43,7 +43,7 @@ const secs = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 /** Compact text for the agent: counts, each failing test with its error and code frame, and where the evidence is. */
 export function resultSummary(r: SpecResult, maxChars = 6000): string {
   if (r.status === 'error') return `ERROR ${r.spec}: ${r.error}`;
-  const lines: string[] = [`${r.status === 'passed' ? 'PASS' : 'FAIL'} ${r.spec} — ${r.passed} passed, ${r.failed} failed, ${r.pending} pending in ${secs(r.ms)}`];
+  const lines: string[] = [`${r.status === 'passed' ? 'PASS' : 'FAIL'} ${r.spec} — ${r.passed} passed, ${r.failed} failed, ${r.pending} pending in ${secs(r.ms)}${r.browser ? ` (${r.browser})` : ''}`];
   for (const t of r.tests) {
     const mark = t.status === 'passed' ? '✓' : t.status === 'failed' ? '✗' : '-';
     lines.push(`${mark} ${t.title.join(' › ')} (${secs(t.ms)}${t.attempts > 1 ? `, ${t.attempts} attempts` : ''})`);
@@ -58,6 +58,7 @@ export function resultSummary(r: SpecResult, maxChars = 6000): string {
     if (t.networkFile) lines.push(`    network: ${t.networkFile}`);
   }
   if (r.video) lines.push(`video: ${r.video}`);
+  for (const note of r.notes ?? []) lines.push(`note: ${note}`);
   const text = lines.join('\n');
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n… (truncated — read ${'.pigry/e2e/results/'}${r.spec}.json for everything)` : text;
 }
@@ -72,8 +73,9 @@ export function relativeFrom(fromDir: string, target: string): string {
 
 export function resultToMarkdown(r: SpecResult, reportDir?: string): string {
   const link = (p: string) => (reportDir ? relativeFrom(reportDir, p) : p);
-  const out: string[] = [`# E2E report — ${r.spec}`, '', `- Result: **${r.status.toUpperCase()}** — ${r.passed} passed, ${r.failed} failed, ${r.pending} pending`, `- Duration: ${secs(r.ms)}`, `- Base URL: ${r.config.baseUrl || '(none)'} · viewport ${r.config.viewportWidth}×${r.config.viewportHeight}`, `- Run: ${new Date(r.startedAt).toISOString()}`];
+  const out: string[] = [`# E2E report — ${r.spec}`, '', `- Result: **${r.status.toUpperCase()}** — ${r.passed} passed, ${r.failed} failed, ${r.pending} pending`, `- Duration: ${secs(r.ms)}`, ...(r.browser ? [`- Browser: ${r.browser}`] : []), `- Base URL: ${r.config.baseUrl || '(none)'} · viewport ${r.config.viewportWidth}×${r.config.viewportHeight}`, `- Run: ${new Date(r.startedAt).toISOString()}`];
   if (r.video) out.push(`- Video: [${r.video.split('/').pop()}](${link(r.video)})`);
+  for (const note of r.notes ?? []) out.push(`- Note: ${note}`);
   out.push('', '## Tests', '');
   for (const t of r.tests) {
     out.push(`### ${t.status === 'passed' ? '✅' : t.status === 'failed' ? '❌' : '⏭️'} ${t.title.join(' › ')}`, '', `Status: ${t.status} · ${secs(t.ms)}${t.attempts > 1 ? ` · ${t.attempts} attempts` : ''}`, '');

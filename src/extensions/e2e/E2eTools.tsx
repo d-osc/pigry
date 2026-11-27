@@ -3,6 +3,7 @@ import { Check, Circle, Copy, Crosshair, ExternalLink, Eye, EyeOff, Plus, Square
 import { pageCall, tauriDriver } from './engine/driver';
 import { VIEWPORT_PRESETS } from './engine/assert';
 import type { E2eConfig } from './engine/runner';
+import { browserSettingNote } from './engine/browsers';
 
 const driver = tauriDriver();
 
@@ -216,7 +217,8 @@ const TOGGLES: Array<{ key: keyof E2eConfig; label: string; hint: string }> = [
   { key: 'testIsolation', label: 'Test isolation', hint: 'Clean cookies, storage and page before every test' },
 ];
 
-export function E2eSettings({ config, onChange }: { config: E2eConfig; onChange: (next: E2eConfig) => void }) {
+/** `browser` is the kind of browser picked at the top: Chromium-only settings say so when it is Firefox or WebKit. */
+export function E2eSettings({ config, onChange, browser }: { config: E2eConfig; onChange: (next: E2eConfig) => void; browser?: { family: string; engine: string } }) {
   const set = (patch: Partial<E2eConfig>) => onChange({ ...config, ...patch });
   const preset = Object.entries(VIEWPORT_PRESETS).find(([, [w, h]]) => w === config.viewportWidth && h === config.viewportHeight)?.[0] ?? '';
   return (
@@ -244,7 +246,7 @@ export function E2eSettings({ config, onChange }: { config: E2eConfig; onChange:
       </label>
       <label className="e2e-field"><span>Base URL</span>
         <input className="e2e-input" aria-label="Base URL" placeholder="http://localhost:3000" defaultValue={config.baseUrl} key={config.baseUrl} onBlur={(e) => { if (e.target.value.trim().replace(/\/+$/, '') !== config.baseUrl) set({ baseUrl: e.target.value.trim().replace(/\/+$/, '') }); }} />
-        <small>cy.visit('/path') is resolved against it; tests run in an external Edge/Chrome window.</small>
+        <small>cy.visit('/path') is resolved against it; tests run in an external window of the browser picked at the top.</small>
       </label>
       <div className="e2e-field"><span>Viewport</span>
         <div className="e2e-row">
@@ -265,7 +267,9 @@ export function E2eSettings({ config, onChange }: { config: E2eConfig; onChange:
         </label>
       ))}
       {TOGGLES.map((t) => (
-        <label key={t.key} className="e2e-check"><input type="checkbox" aria-label={t.label} checked={config[t.key] === true} onChange={(e) => set({ [t.key]: e.target.checked } as Partial<E2eConfig>)} /><span>{t.label}</span><small>{t.hint}</small></label>
+        <label key={t.key} className="e2e-check"><input type="checkbox" aria-label={t.label} checked={config[t.key] === true} onChange={(e) => set({ [t.key]: e.target.checked } as Partial<E2eConfig>)} /><span>{t.label}</span><small>{t.hint}</small>
+          {(t.key === 'chromeWebSecurity' || t.key === 'video') && browserSettingNote(t.key, browser) && <small className="e2e-check__note" role="note">{browserSettingNote(t.key, browser)}</small>}
+        </label>
       ))}
       <EnvEditor key={JSON.stringify(config.env)} env={config.env} onChange={(env) => set({ env })} />
     </div>

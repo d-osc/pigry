@@ -39,6 +39,9 @@ pub use command_no_window::CommandNoWindow;
 mod agent_import;
 mod ai;
 mod browser;
+mod browser_detect;
+mod bidi;
+mod pw_engine;
 mod busybox;
 mod gh;
 mod gh_cache;
@@ -351,6 +354,7 @@ pub fn run() {
             http_client::http_cancel,
             http_client::api_yaml_to_json,
             commands::browser_devtools,
+            browser_detect::e2e_browsers,
             commands::browser,
             commands::read_pdf_text,
             commands::browser_page,

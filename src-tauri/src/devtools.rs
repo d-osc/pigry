@@ -2,6 +2,9 @@
 //! external Edge/Chrome window driven over the Chrome DevTools Protocol
 //! (chromiumoxide). The agent can open a URL, run JavaScript, read console
 //! output, take screenshots and extract page text without re-launching.
+//! When Firefox is picked in E2E Testing every action goes to the WebDriver
+//! BiDi session in bidi.rs instead, and for a Playwright browser to the Node
+//! bridge in pw_engine.rs; the CDP path below is unchanged.
 
 use chromiumoxide::browser::BrowserConfig;
 use chromiumoxide::page::ScreenshotParams;
@@ -84,7 +87,7 @@ fn redact_value(value: &mut serde_json::Value) {
 
 /// Redacts a body: JSON is parsed and secret fields masked; anything else is
 /// only truncated. Always capped so evidence files stay small.
-fn redact_body(raw: &str) -> String {
+pub(crate) fn redact_body(raw: &str) -> String {
     let text = match serde_json::from_str::<serde_json::Value>(raw) {
         Ok(mut json) => {
             redact_value(&mut json);
@@ -100,7 +103,7 @@ fn redact_body(raw: &str) -> String {
     }
 }
 
-fn redact_headers(headers: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn redact_headers(headers: &serde_json::Value) -> serde_json::Value {
     let mut copy = headers.clone();
     redact_value(&mut copy);
     copy
@@ -133,12 +136,53 @@ pub fn set_web_security(enabled: bool) {
     NO_WEB_SECURITY.store(!enabled, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// The browser picked in E2E Testing ("" = Auto: Edge, then Chrome).
+static BROWSER_CHOICE: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Picks the browser the next launch uses; returns true when the choice changed.
+pub fn set_browser(id: &str) -> bool {
+    let mut choice = BROWSER_CHOICE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let id = id.trim().to_string();
+    let changed = *choice != id;
+    *choice = id;
+    changed
+}
+
+fn browser_choice() -> String {
+    BROWSER_CHOICE.lock().map(|choice| choice.clone()).unwrap_or_default()
+}
+
+/// The Firefox or Playwright browser to launch when the picked browser is one
+/// (Auto falls back to them only when no Edge/Chrome is installed); `None`
+/// means the CDP path.
+fn picked_other_engine() -> Option<crate::browser_detect::InstalledBrowser> {
+    let choice = browser_choice();
+    let installed = crate::browser_detect::detect_browsers();
+    if choice.is_empty() {
+        if browser_candidates().iter().any(|path| Path::new(path).is_file()) || installed.iter().any(|b| b.engine == "cdp") {
+            return None;
+        }
+        let firefox = installed.iter().position(|b| b.engine == "bidi");
+        return firefox.or(if installed.is_empty() { None } else { Some(0) }).map(|i| installed[i].clone());
+    }
+    installed.into_iter().find(|b| b.id == choice && b.engine != "cdp")
+}
+
 async fn launch_browser() -> Result<(Browser, chromiumoxide::Handler, tempfile::TempDir)> {
-    let mut candidates: Vec<_> = browser_candidates()
-        .into_iter()
-        .filter(|path| Path::new(path).is_file())
-        .map(Some)
-        .collect();
+    let choice = browser_choice();
+    let mut candidates: Vec<Option<String>> = if choice.is_empty() {
+        browser_candidates()
+            .into_iter()
+            .filter(|path| Path::new(path).is_file())
+            .map(|path| Some(path.to_string()))
+            .collect()
+    } else {
+        let picked = crate::browser_detect::detect_browsers()
+            .into_iter()
+            .find(|browser| browser.id == choice)
+            .ok_or_else(|| format!("The browser \"{choice}\" is not installed on this computer — pick another one in E2E Testing"))?;
+        vec![Some(picked.path)]
+    };
     if candidates.is_empty() {
         candidates.push(None);
     }
@@ -332,6 +376,12 @@ pub async fn devtools_open(repo_path: &Path, url: &str, wait_ms: u64) -> Result<
     }
     let _ = std::fs::create_dir_all(repo_path.join(".pigry").join("devtools"));
 
+    if let Some(result) = crate::bidi::reuse(&url, wait_ms).await {
+        return result;
+    }
+    if let Some(result) = crate::pw_engine::reuse(&url, wait_ms).await {
+        return result;
+    }
     // Reuse the open test window when it is still alive: navigating the same
     // page keeps cookies / logins and skips a whole browser relaunch.
     let existing = DEV.lock().await.as_ref().map(|session| session.page.clone());
@@ -353,6 +403,13 @@ pub async fn devtools_open(repo_path: &Path, url: &str, wait_ms: u64) -> Result<
     // session lock — eval/console calls during the launch fail fast ("no
     // devtools session") instead of blocking for the whole startup.
     devtools_close().await?;
+    if let Some(other) = picked_other_engine() {
+        let web_security_off = NO_WEB_SECURITY.load(std::sync::atomic::Ordering::SeqCst);
+        if other.engine == "playwright" {
+            return crate::pw_engine::open(repo_path, &other.name, &url, wait_ms, web_security_off).await;
+        }
+        return crate::bidi::open(&other.path, &url, wait_ms, web_security_off).await;
+    }
     let (browser, mut handler, profile) = launch_browser().await?;
     // Drive the CDP event stream (console events, lifecycle) in the background.
     tokio::spawn(async move {
@@ -411,6 +468,12 @@ async fn navigate_and_summarize(page: &chromiumoxide::Page, url: &str, wait_ms: 
 /// description, e.g. "ReferenceError: x is not defined") instead of a raw
 /// debug dump.
 pub async fn devtools_eval(js: &str) -> Result<String> {
+    if crate::bidi::active().await {
+        return crate::bidi::eval(js).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("eval", None, Some(js)).await;
+    }
     let page = session_page().await?;
     let eval = match page.evaluate_expression(js).await {
         Ok(eval) => eval,
@@ -434,6 +497,12 @@ pub async fn devtools_eval(js: &str) -> Result<String> {
 
 /// Returns the console output collected so far (oldest first).
 pub async fn devtools_console(limit: usize) -> Result<Vec<String>> {
+    if crate::bidi::active().await {
+        return crate::bidi::console(limit).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::console(limit).await;
+    }
     let page = session_page().await?;
     let _ = page;
     // Reach the console store through the session: lock the tokio mutex.
@@ -448,6 +517,15 @@ pub async fn devtools_console(limit: usize) -> Result<Vec<String>> {
 
 /// Returns the Network-panel rows collected so far (JSON, oldest first).
 pub async fn devtools_network(limit: usize) -> Result<String> {
+    let other = match crate::bidi::network_store().await {
+        Some(network) => Some(network),
+        None => crate::pw_engine::network_store().await,
+    };
+    if let Some(network) = other {
+        let network = network.lock().await;
+        let start = network.len().saturating_sub(limit);
+        return Ok(serde_json::to_string(&network[start..]).unwrap_or_else(|_| "[]".to_string()));
+    }
     let mut guard = DEV.lock().await;
     let session = guard.as_ref().ok_or_else(|| {
         "no devtools session — call browser_devtools with action \"open\" first".to_string()
@@ -487,12 +565,18 @@ static NET_MARK: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize
 pub async fn devtools_network_export(repo_path: &Path, save_as: &str, api_only: bool) -> Result<String> {
     use std::sync::atomic::Ordering;
     let path = evidence_path(repo_path, save_as, "json")?;
-    let page = session_page().await?;
-    let network = {
-        let guard = DEV.lock().await;
-        guard.as_ref().map(|session| session.network.clone()).ok_or_else(|| {
-            "no devtools session — call browser_e2e goto first".to_string()
-        })?
+    let other = match crate::bidi::network_store().await {
+        Some(network) => Some(network),
+        None => crate::pw_engine::network_store().await,
+    };
+    let network = match other {
+        Some(network) => network,
+        None => {
+            let guard = DEV.lock().await;
+            guard.as_ref().map(|session| session.network.clone()).ok_or_else(|| {
+                "no devtools session — call browser_e2e goto first".to_string()
+            })?
+        }
     };
     // Give in-flight API calls up to ~3s to get their response (and body)
     // recorded, so the evidence isn't exported half-filled.
@@ -510,11 +594,10 @@ pub async fn devtools_network_export(repo_path: &Path, save_as: &str, api_only: 
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     // The main document's response event is not always delivered; take its
     // status from the browser's own navigation timing instead.
-    let nav_status = page
-        .evaluate_expression("(performance.getEntriesByType('navigation')[0] || {}).responseStatus || 0")
+    let nav_status = devtools_eval("(performance.getEntriesByType('navigation')[0] || {}).responseStatus || 0")
         .await
         .ok()
-        .and_then(|result| result.into_value::<i64>().ok())
+        .and_then(|value| value.trim().parse::<i64>().ok())
         .unwrap_or(0);
     if nav_status > 0 {
         if let Some(entry) = network
@@ -632,6 +715,12 @@ pub async fn devtools_record_start(repo_path: &Path, save_as: &str) -> Result<St
         EventScreencastFrame, ScreencastFrameAckParams, StartScreencastFormat, StartScreencastParams,
     };
     let dest = evidence_path(repo_path, save_as, "webm")?;
+    if crate::bidi::active().await {
+        return Err(crate::bidi::NO_VIDEO.to_string());
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("record_start", Some(&dest.to_string_lossy()), Some(save_as.trim())).await;
+    }
     let mut rec_guard = REC.lock().await;
     if rec_guard.is_some() {
         return Err("a recording is already running — call record_stop first".to_string());
@@ -709,6 +798,9 @@ pub async fn devtools_record_start(repo_path: &Path, save_as: &str) -> Result<St
 pub async fn devtools_record_stop() -> Result<String> {
     use chromiumoxide::cdp::browser_protocol::page::StopScreencastParams;
     use base64::Engine;
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("record_stop", None, None).await;
+    }
     let mut recorder = REC
         .lock()
         .await
@@ -764,6 +856,12 @@ pub async fn devtools_screenshot(repo_path: &Path, save_as: Option<&str>, opts: 
             dir.join(format!("shot-{}.png", now_ms()))
         }
     };
+    if crate::bidi::active().await {
+        return crate::bidi::screenshot(&path, opts).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("screenshot", Some(&path.to_string_lossy()), opts).await;
+    }
     let page = session_page().await?;
     // opts: {"fullPage": true} or {"clip": {"x":..,"y":..,"w":..,"h":..}} (page coordinates, CSS px)
     let mut builder = ScreenshotParams::builder();
@@ -793,26 +891,27 @@ pub async fn devtools_screenshot(repo_path: &Path, save_as: Option<&str>, opts: 
     Ok(path.to_string_lossy().to_string())
 }
 
+/// One trusted input event from the E2E runner (the same JSON for CDP and BiDi).
 #[derive(serde::Deserialize, Default)]
-struct InputEv {
-    t: String,
+pub(crate) struct InputEv {
+    pub(crate) t: String,
     #[serde(default)]
-    x: f64,
+    pub(crate) x: f64,
     #[serde(default)]
-    y: f64,
-    button: Option<String>,
-    clicks: Option<i64>,
-    mods: Option<i64>,
-    key: Option<String>,
-    code: Option<String>,
-    text: Option<String>,
-    vk: Option<i64>,
+    pub(crate) y: f64,
+    pub(crate) button: Option<String>,
+    pub(crate) clicks: Option<i64>,
+    pub(crate) mods: Option<i64>,
+    pub(crate) key: Option<String>,
+    pub(crate) code: Option<String>,
+    pub(crate) text: Option<String>,
+    pub(crate) vk: Option<i64>,
     #[serde(default)]
-    dx: f64,
+    pub(crate) dx: f64,
     #[serde(default)]
-    dy: f64,
+    pub(crate) dy: f64,
     #[serde(default)]
-    delay: u64,
+    pub(crate) delay: u64,
 }
 
 /// Dispatches trusted input (mouse, wheel, keyboard, text) through the Input domain — real hover, :hover
@@ -825,6 +924,12 @@ pub async fn devtools_input(events_json: &str) -> Result<String> {
     let events: Vec<InputEv> = serde_json::from_str(events_json).map_err(|e| format!("bad input events: {e}"))?;
     if events.len() > 4000 {
         return Err("too many input events in one call (max 4000)".to_string());
+    }
+    if crate::bidi::active().await {
+        return crate::bidi::input(&events).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("input", None, Some(events_json)).await;
     }
     let page = session_page().await?;
     for ev in &events {
@@ -896,6 +1001,12 @@ pub async fn devtools_input(events_json: &str) -> Result<String> {
 
 /// All cookies of the page (httpOnly ones included), as JSON.
 pub async fn devtools_cookies() -> Result<String> {
+    if crate::bidi::active().await {
+        return crate::bidi::cookies().await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("cookies", None, None).await;
+    }
     let page = session_page().await?;
     let cookies = page.get_cookies().await.map_err(err)?;
     let out: Vec<serde_json::Value> = cookies
@@ -917,6 +1028,12 @@ pub async fn devtools_set_cookie(json: &str) -> Result<String> {
     let v: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("bad cookie: {e}"))?;
     let name = v.get("name").and_then(|x| x.as_str()).ok_or("cookie needs a name")?;
     let value = v.get("value").and_then(|x| x.as_str()).unwrap_or("");
+    if crate::bidi::active().await {
+        return crate::bidi::set_cookie(json).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("set_cookie", None, Some(json)).await;
+    }
     let page = session_page().await?;
     let mut cookie = CookieParam::new(name.to_string(), value.to_string());
     cookie.path = Some(v.get("path").and_then(|x| x.as_str()).unwrap_or("/").to_string());
@@ -934,6 +1051,12 @@ pub async fn devtools_set_cookie(json: &str) -> Result<String> {
 /// Deletes the cookie called `name`, or every cookie of the browser when `name` is empty.
 pub async fn devtools_clear_cookies(name: Option<&str>) -> Result<String> {
     use chromiumoxide::cdp::browser_protocol::network::{ClearBrowserCookiesParams, DeleteCookiesParams};
+    if crate::bidi::active().await {
+        return crate::bidi::clear_cookies(name).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("clear_cookies", None, Some(name.unwrap_or(""))).await;
+    }
     let page = session_page().await?;
     match name.map(str::trim).filter(|n| !n.is_empty()) {
         None => {
@@ -959,6 +1082,12 @@ pub async fn devtools_clear_cookies(name: Option<&str>) -> Result<String> {
 pub async fn devtools_headers(json: &str) -> Result<String> {
     use chromiumoxide::cdp::browser_protocol::network::{Headers, SetExtraHttpHeadersParams};
     let v: serde_json::Value = serde_json::from_str(if json.trim().is_empty() { "{}" } else { json }).map_err(|e| format!("bad headers: {e}"))?;
+    if crate::bidi::active().await {
+        return crate::bidi::headers(json).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("headers", None, Some(json)).await;
+    }
     let page = session_page().await?;
     page.execute(SetExtraHttpHeadersParams::new(Headers::new(v))).await.map_err(err)?;
     Ok("headers set".to_string())
@@ -970,6 +1099,12 @@ pub async fn devtools_viewport(width: i64, height: i64, mobile: bool) -> Result<
     use chromiumoxide::cdp::browser_protocol::emulation::{
         ClearDeviceMetricsOverrideParams, SetDeviceMetricsOverrideParams,
     };
+    if crate::bidi::active().await {
+        return crate::bidi::viewport(width, height, mobile).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("viewport", None, Some(&format!("{width},{height},{mobile}"))).await;
+    }
     let page = session_page().await?;
     if width <= 0 {
         page.execute(ClearDeviceMetricsOverrideParams::default()).await.map_err(err)?;
@@ -988,6 +1123,12 @@ pub async fn devtools_viewport(width: i64, height: i64, mobile: bool) -> Result<
 /// anything else clears the override.
 pub async fn devtools_color_scheme(scheme: &str) -> Result<String> {
     use chromiumoxide::cdp::browser_protocol::emulation::{MediaFeature, SetEmulatedMediaParams};
+    if crate::bidi::active().await {
+        return Err("prefers-color-scheme emulation needs a Chromium or Playwright browser — Firefox over WebDriver BiDi cannot switch it".to_string());
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("color_scheme", None, Some(scheme)).await;
+    }
     let page = session_page().await?;
     let scheme = scheme.trim().to_ascii_lowercase();
     let value = if scheme == "light" || scheme == "dark" { scheme.as_str() } else { "" };
@@ -1006,6 +1147,12 @@ pub async fn devtools_color_scheme(scheme: &str) -> Result<String> {
 
 /// Full HTML of the open page (capped).
 pub async fn devtools_dom(limit: usize) -> Result<String> {
+    if crate::bidi::active().await {
+        return crate::bidi::dom(limit).await;
+    }
+    if crate::pw_engine::active().await {
+        return Ok(crate::pw_engine::call("dom", None, None).await?.chars().take(limit).collect());
+    }
     let page = session_page().await?;
     let html = page.content().await.map_err(|e| format!("dom failed: {e}"))?;
     Ok(html.chars().take(limit).collect())
@@ -1020,6 +1167,12 @@ static INIT_SCRIPT: Mutex<Option<chromiumoxide::cdp::browser_protocol::page::Scr
 /// the first request of every navigation.
 pub async fn devtools_init_script(js: &str) -> Result<String> {
     use chromiumoxide::cdp::browser_protocol::page::RemoveScriptToEvaluateOnNewDocumentParams;
+    if crate::bidi::active().await {
+        return crate::bidi::init_script(js).await;
+    }
+    if crate::pw_engine::active().await {
+        return crate::pw_engine::call("init_script", None, Some(js)).await;
+    }
     let page = session_page().await?;
     let mut slot = INIT_SCRIPT.lock().await;
     if let Some(id) = slot.take() {
@@ -1041,6 +1194,7 @@ pub async fn devtools_close() -> Result<String> {
         recorder.task.abort();
     }
     NET_MARK.store(0, std::sync::atomic::Ordering::SeqCst);
+    let firefox_closed = crate::bidi::close().await | crate::pw_engine::close().await;
     let mut guard = DEV.lock().await;
     match guard.take() {
         Some(mut session) => {
@@ -1048,6 +1202,7 @@ pub async fn devtools_close() -> Result<String> {
             let _ = session.browser.wait().await;
             Ok("devtools session closed".to_string())
         }
+        None if firefox_closed => Ok("devtools session closed".to_string()),
         None => Ok("no devtools session was open".to_string()),
     }
 }

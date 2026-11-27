@@ -7,7 +7,8 @@
  *   .pigry/e2e/results/<owner>/<name>.json     the latest result of each spec (commands, errors, evidence)
  *   .pigry/e2e/results/history.json            the last runs
  *   .pigry/e2e/evidence/<owner>/<name>/        screenshots, network JSON and videos of the latest run */
-import { deleteWorktreeFile, getFileTree, readWorktreeFile, writeWorktreeFile } from '../../../lib/tauriClient';
+import { deleteWorktreeFile, getFileTree, listInstalledBrowsers, readWorktreeFile, writeWorktreeFile, type InstalledBrowser } from '../../../lib/tauriClient';
+import { cypressBrowserOf, engineOf, getSelectedBrowser, resolveBrowser } from './browsers';
 import { pathOf, refFromPath, refKey, resolveRef, sortRefs, type OwnedRef, type Resolved } from '../../../lib/ownedFiles';
 import { globToRegex, runSpec, type E2eConfig, type RunEvent, type RunOptions, type Snapshot, type SpecResult, type Driver } from './runner';
 import { tauriDriver } from './driver';
@@ -179,6 +180,8 @@ export interface RunRefOptions {
   configOverride?: Partial<E2eConfig>;
   onPause?: RunOptions['onPause'];
   step?: boolean;
+  /** Installed browser id to run in ("" = Auto); default: the one picked in E2E Testing. */
+  browser?: string;
 }
 
 let lastWebSecurity = true;
@@ -201,6 +204,17 @@ export async function runSpecRef(ref: OwnedRef, o: RunRefOptions = {}): Promise<
     }
     const cypressFile = await loadCypressFile().catch(() => null);
     const driver = o.driver ?? tauriDriver();
+    let browser: RunOptions['browser'];
+    let engine: string | undefined;
+    if (driver.setBrowser) {
+      // the test window launches with the picked browser; the backend restarts it when the choice changes
+      const id = o.browser ?? getSelectedBrowser();
+      const installed = await listInstalledBrowsers().catch((): InstalledBrowser[] => []);
+      await driver.setBrowser(id);
+      const resolved = resolveBrowser(installed, id);
+      browser = cypressBrowserOf(resolved);
+      engine = resolved ? engineOf(resolved) : undefined;
+    }
     if (driver.setWebSecurity) {
       // the switch is a launch flag: restart the test browser when it changes
       if (lastWebSecurity !== merged.chromeWebSecurity) await driver.close().catch(() => undefined);
@@ -211,7 +225,7 @@ export async function runSpecRef(ref: OwnedRef, o: RunRefOptions = {}): Promise<
     const result = await runSpec({
       driver, config: merged, spec: refKey(ref), source, evidenceDir: evidenceDir(ref), support, supportPath, plugins, pluginsPath, specPath: specPath(ref), setupNodeEvents: cypressFile?.setupNodeEvents,
       typescript: (ref as SpecRef).ext === SPEC_EXT_TS, transpile: transpileTs,
-      onEvent: o.onEvent, shouldStop: () => state.stop, grep: o.grep, snapshotSink: sink, onPause: o.onPause, step: o.step,
+      onEvent: o.onEvent, shouldStop: () => state.stop, grep: o.grep, snapshotSink: sink, onPause: o.onPause, step: o.step, browser, engine,
     });
     await saveResult(ref, result, sink);
     return result;
@@ -411,7 +425,7 @@ declare const Cypress: {
   on(event: 'uncaught:exception' | 'window:alert' | 'window:confirm' | 'test:before:run' | 'test:after:run' | 'fail', fn: (...args: any[]) => any): void;
   tasks(handlers: Record<string, (arg: any) => any>): void; Keyboard: { Keys: Record<string, string>; defaults(o: object): void }; Screenshot: { defaults(o: object): void };
   Commands: { addQuery(name: string, fn: (...args: any[]) => any): void; overwriteQuery(name: string, fn: (...args: any[]) => any): void; add(name: string, fn: (...args: any[]) => any): void; add(name: string, options: { prevSubject?: boolean | string }, fn: (...args: any[]) => any): void; overwrite(name: string, fn: (...args: any[]) => any): void };
-  _: any; browser: any; platform: string; spec: { name: string }; currentTest: { title: string; titlePath: string[] };
+  _: any; browser: { name: string; family: string; channel: string; version: string; majorVersion: number | string; displayName: string; path: string; isHeaded: boolean; isHeadless: boolean }; isBrowser(matcher: string | object | Array<string | object>): boolean; platform: string; spec: { name: string }; currentTest: { title: string; titlePath: string[] };
 };
 declare function describe(title: string, fn: () => void): void; declare namespace describe { function only(title: string, fn: () => void): void; function skip(title: string, fn: () => void): void }
 declare function context(title: string, fn: () => void): void;

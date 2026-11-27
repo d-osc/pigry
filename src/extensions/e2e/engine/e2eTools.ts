@@ -4,7 +4,8 @@
  * runs live. */
 import type { ToolSpec } from '../../../lib/agentTools';
 import { ownerSlug, parseRefName, refKey, type OwnedRef } from '../../../lib/ownedFiles';
-import { writeWorktreeFile } from '../../../lib/tauriClient';
+import { listInstalledBrowsers, writeWorktreeFile } from '../../../lib/tauriClient';
+import { matchBrowser } from './browsers';
 import { analyticsOf, loadStats, resultPath, SPEC_EXT_TS, type SpecRef, loadResult, listFixtures, listSpecRefs, loadConfig, loadHistory, loadSpecSource, mergeConfig, notifyE2eChanged, resolveSpec, resultSummary, resultToMarkdown, runSpecRef, saveConfig, saveSpecSource, specPath, checkSpecSource, E2E_OPEN, FIXTURES_DIR, SPEC_EXT, SPEC_TEMPLATES, currentRun } from './spec';
 import { pageCall, tauriDriver } from './driver';
 
@@ -157,6 +158,7 @@ export const E2E_TOOLS: ToolSpec[] = [
         video: { type: 'boolean', description: 'Record a video of the run' },
         retries: { type: 'number', description: 'Retry failed tests this many times (0-5)' },
         report: { type: 'boolean', description: 'Also save a Markdown report under .pigry/reports/<you>/' },
+        browser: { type: 'string', description: 'Installed browser for this run: an id or name such as "chrome", "edge", "chrome-beta", "brave", "firefox", "firefox-dev", Playwright builds "pw-chromium", "pw-firefox", "pw-webkit" (or "webkit"), or "auto". Default: the browser picked in E2E Testing. Firefox (not Playwright Firefox) runs record no video' },
       },
     },
     run: async (input) => {
@@ -172,11 +174,17 @@ export const E2E_TOOLS: ToolSpec[] = [
         refs.push(resolved.ref);
       }
       if (!refs.length) return fail('no specs to run — create one with e2e_write');
+      let browser: string | undefined;
+      if (typeof input.browser === 'string') {
+        const picked = matchBrowser(await listInstalledBrowsers().catch(() => []), input.browser);
+        if ('error' in picked) return fail(picked.error);
+        browser = picked.id;
+      }
       const override = mergeConfig({ ...(await loadConfig()), ...(typeof input.base_url === 'string' && input.base_url ? { baseUrl: input.base_url } : {}), ...(typeof input.video === 'boolean' ? { video: input.video } : {}), ...(typeof input.retries === 'number' ? { retries: input.retries } : {}) });
       const out: string[] = []; let failed = 0;
       for (const ref of refs.slice(0, 20)) {
         try {
-          const result = await runSpecRef(ref, { grep: typeof input.grep === 'string' ? input.grep : undefined, configOverride: override });
+          const result = await runSpecRef(ref, { grep: typeof input.grep === 'string' ? input.grep : undefined, configOverride: override, browser });
           if (result.status !== 'passed') failed += 1;
           out.push(resultSummary(result, refs.length > 1 ? 2500 : 7000));
           out.push(`junit: ${resultPath(ref).replace(/\.json$/, '.junit.xml')}`);

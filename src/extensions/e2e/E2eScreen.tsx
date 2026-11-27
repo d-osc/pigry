@@ -18,6 +18,7 @@ import { getOpenE2e, registerE2eFlush, setOpenE2e, takePendingOpenE2e, type E2eO
 import { DEFAULT_CONFIG, type E2eConfig, type RunEvent, type Snapshot, type SpecResult, type TestResult } from './engine/runner';
 import { E2eRunnerView, type TestView } from './E2eRunnerView';
 import { E2eSettings, SelectorPlayground, StudioRecorder } from './E2eTools';
+import { E2eBrowserPicker } from './E2eBrowserPicker';
 import './E2eScreen.css';
 
 type SideTab = 'specs' | 'runs' | 'settings';
@@ -35,6 +36,10 @@ interface Live {
   durationMs?: number;
   video?: string;
   stored: boolean;
+  /** The browser the run used, e.g. "Chrome 120". */
+  browser?: string;
+  /** What the run could not do in that browser (e.g. no video in Firefox). */
+  notes?: string[];
 }
 
 const emptyLive = (spec: string, stored = false): Live => ({ spec, startedAt: Date.now(), tests: new Map(), order: [], snapshots: [], running: false, stored });
@@ -79,6 +84,10 @@ export function E2eScreen() {
   const rerunTimer = useRef<number | null>(null);
   const editorRef = useRef<{ editor: import('monaco-editor').editor.IStandaloneCodeEditor; monaco: typeof import('monaco-editor') } | null>(null);
   const configRef = useRef(config);
+  const browserLabelRef = useRef('');
+  const onBrowserLabel = useCallback((label: string) => { browserLabelRef.current = label; }, []);
+  const [browserKind, setBrowserKind] = useState({ family: 'chromium', engine: 'cdp' });
+  const onBrowserKind = useCallback((family: string, engine: string) => { setBrowserKind((k) => (k.family === family && k.engine === engine ? k : { family, engine })); }, []);
 
   useEffect(() => { currentRef.current = current; }, [current]);
   useEffect(() => { sourceRef.current = source; }, [source]);
@@ -228,7 +237,7 @@ export function E2eScreen() {
     else if (e.type === 'test:start') { const t = l.tests.get(e.key); if (t) { t.status = 'running'; t.attempt = e.attempt; t.log = []; t.error = undefined; } }
     else if (e.type === 'log') { const t = l.tests.get(e.entry.testKey); if (t) t.log = [...t.log, e.entry]; }
     else if (e.type === 'test:end') { l.tests.set(e.result.key, { ...toView(e.result) }); }
-    else if (e.type === 'spec:end') { l.running = false; l.durationMs = e.result.ms; l.video = e.result.video; }
+    else if (e.type === 'spec:end') { l.running = false; l.durationMs = e.result.ms; l.video = e.result.video; l.notes = e.result.notes; }
     bump();
   }, [bump]);
 
@@ -241,14 +250,14 @@ export function E2eScreen() {
     const check = checkSpecSource(sourceRef.current, { typescript: isTs() });
     if (check.errors.length) { setLint(check); notify(check.errors[0], 'error'); return; }
     const snapshots: Snapshot[] = [];
-    const l: Live = { ...emptyLive(key), snapshots, running: true };
+    const l: Live = { ...emptyLive(key), snapshots, running: true, browser: browserLabelRef.current || undefined };
     liveRef.current = l; setLive(l); setPane('runner');
     try {
       const result = await runSpecRef(ref, {
         grep, snapshotSink: snapshots, onEvent: apply, step: runOpts?.step,
         onPause: (info) => new Promise((resolve) => { setPaused({ command: info.command, line: info.line }); pauseResolve.current = (choice) => { pauseResolve.current = null; setPaused(null); resolve(choice); }; if (info.line) window.setTimeout(() => revealLine(info.line!), 50); }),
       });
-      l.running = false; l.durationMs = result.ms; l.video = result.video;
+      l.running = false; l.durationMs = result.ms; l.video = result.video; l.browser = result.browser ?? l.browser; l.notes = result.notes;
       if (result.status === 'error') notify(result.error ?? 'The spec could not be loaded', 'error');
       markErrors([...l.tests.values()]);
     } catch (error) {
@@ -310,7 +319,7 @@ export function E2eScreen() {
       view.log = view.log.map((e) => ({ ...e, before: map[e.id]?.before, after: map[e.id]?.after }));
       l.tests.set(t.key, view); l.order.push(t.key);
     });
-    l.startedAt = result.startedAt; l.durationMs = result.ms; l.video = result.video;
+    l.startedAt = result.startedAt; l.durationMs = result.ms; l.video = result.video; l.browser = result.browser; l.notes = result.notes;
     liveRef.current = l; setLive(l); setPane('runner');
     if (currentRef.current !== key) await openSpec(key);
     setPane('runner');
@@ -382,6 +391,7 @@ export function E2eScreen() {
         <h1 className="screen-header__title">E2E Testing</h1>
         <span className="screen-header__meta">Cypress-style specs, a live command log with time travel, network stubs and evidence — the QA agent writes and runs them too</span>
         {current && <span className={`e2e-save e2e-save--${saving ? 'saving' : dirty ? 'dirty' : 'saved'}`} role="status">{saving ? 'Saving…' : dirty ? 'Unsaved' : 'Saved'}</span>}
+        <E2eBrowserPicker disabled={running} onLabel={onBrowserLabel} onKind={onBrowserKind} />
         <button type="button" className="e2e-btn" onClick={() => void runAll()} disabled={running || refs.length === 0}><Play size={12} /> Run all</button>
         <button type="button" className="primary-button" onClick={() => { setTab('specs'); setCreating((c) => !c); }}><Plus size={12} strokeWidth={1.5} /> New spec</button>
       </header>
@@ -477,7 +487,7 @@ export function E2eScreen() {
             </div>
           )}
 
-          {tab === 'settings' && <div className="e2e__section"><E2eSettings config={config} onChange={(next) => void updateConfig(next)} /></div>}
+          {tab === 'settings' && <div className="e2e__section"><E2eSettings config={config} onChange={(next) => void updateConfig(next)} browser={browserKind} /></div>}
         </aside>
 
         <main className="e2e__main" aria-label="Spec editor and runner">
@@ -545,7 +555,7 @@ export function E2eScreen() {
                   )}
                   {pane === 'runner' && live && (
                     <E2eRunnerView
-                      spec={live.spec} tests={liveTests} snapshots={live.snapshots} running={running} stored={live.stored} startedAt={live.startedAt} durationMs={live.durationMs} video={live.video} config={config}
+                      spec={live.spec} tests={liveTests} snapshots={live.snapshots} running={running} stored={live.stored} startedAt={live.startedAt} durationMs={live.durationMs} video={live.video} browser={live.browser} notes={live.notes} config={config}
                       paused={paused} onResume={() => pauseResolve.current?.('resume')} onNext={() => pauseResolve.current?.('step')} onExportReport={() => void exportReport()}
                       junitPath={refOf(live.spec) ? resultPath(refOf(live.spec)!).replace(/\.json$/, '.junit.xml') : undefined}
                       onStop={() => { pauseResolve.current?.('stop'); stopRun(); }} onRerun={() => { if (live.stored && currentRef.current !== live.spec) void openSpec(live.spec).then(() => run()); else void run(); }}

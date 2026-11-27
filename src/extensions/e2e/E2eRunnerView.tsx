@@ -29,6 +29,10 @@ interface Props {
   startedAt: number;
   durationMs?: number;
   video?: string;
+  /** The browser the run used, e.g. "Chrome 120". */
+  browser?: string;
+  /** What the run could not do in that browser (e.g. no video in Firefox). */
+  notes?: string[];
   config: E2eConfig;
   onStop: () => void;
   onRerun: () => void;
@@ -93,7 +97,7 @@ function SnapshotFrame({ snap }: { snap: Snapshot | null }) {
   );
 }
 
-export function E2eRunnerView({ spec, tests, snapshots, running, stored, startedAt, durationMs, video, config, onStop, onRerun, onOpenLine, onOpenFile, paused, onResume, onNext, onExportReport, junitPath }: Props) {
+export function E2eRunnerView({ spec, tests, snapshots, running, stored, startedAt, durationMs, video, browser, notes, config, onStop, onRerun, onOpenLine, onOpenFile, paused, onResume, onNext, onExportReport, junitPath }: Props) {
   const [override, setOverride] = useState<Record<string, boolean>>({});
   const [pinned, setPinned] = useState<{ test: string; id: number } | null>(null);
   const [hover, setHover] = useState<{ test: string; id: number } | null>(null);
@@ -146,6 +150,8 @@ export function E2eRunnerView({ spec, tests, snapshots, running, stored, started
         <span className="e2e-stat e2e-stat--skip" title="Pending / skipped"><Circle size={10} /> {pending}</span>
         <span className="e2e-run__time">{fmtMs(elapsed)}</span>
         <span className="e2e-run__spec">{spec}</span>
+        {browser && <span className="e2e-chip" aria-label="Browser" title="The browser this run used">{browser}</span>}
+        {notes?.map((note) => <span key={note} className="e2e-run__note" role="note" title={note}>{note}</span>)}
         {snap && <span className="e2e-run__url" title={snap.url}>{snap.url}</span>}
         <span className="e2e-run__grow" />
         {paused && (
