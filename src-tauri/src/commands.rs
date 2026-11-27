@@ -2156,6 +2156,62 @@ pub async fn compare_branches(
         .map_err(|error| error.to_string())?
 }
 
+/// Commits, per-file patches (from the merge base) and the PR template for an
+/// AI-written pull request description.
+#[tauri::command]
+pub async fn pr_draft_context(
+    state: State<'_, Mutex<AppState>>,
+    base_ref: String,
+    compare_ref: String,
+) -> Result<ops::PrDraftContext, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || ops::pr_draft_context(&repo_path, &base_ref, &compare_ref))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Merges the base into the compare branch in memory and lists the conflicted files. Writes nothing.
+#[tauri::command]
+pub async fn pr_merge_conflicts(
+    state: State<'_, Mutex<AppState>>,
+    base_ref: String,
+    compare_branch: String,
+) -> Result<ops::PrMergeConflicts, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || ops::pr_merge_conflicts(&repo_path, &base_ref, &compare_branch))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+/// Commits the base merged into the compare branch with the user's resolutions.
+#[tauri::command]
+pub async fn pr_merge_resolved(
+    state: State<'_, Mutex<AppState>>,
+    base_ref: String,
+    compare_branch: String,
+    base_oid: String,
+    compare_oid: String,
+    resolutions: Vec<ops::DuplicateResolution>,
+) -> Result<AppStatePayload, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        ops::pr_merge_resolved(&repo_path, &base_ref, &compare_branch, &base_oid, &compare_oid, &resolutions)
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    let state = state.lock().map_err(|e| e.to_string())?;
+    Ok(build_payload(&state))
+}
+
 #[tauri::command]
 pub async fn push_preview(
     state: State<'_, Mutex<AppState>>,

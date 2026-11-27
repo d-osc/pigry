@@ -12,6 +12,10 @@ mod checkout_refs;
 mod commit_edit;
 pub use checkout_refs::{checkout_tag, list_checkout_refs, CheckoutRef};
 mod conflicts;
+mod pr_draft;
+pub use pr_draft::{pr_draft_context, PrDraftContext};
+mod pr_merge;
+pub use pr_merge::{pr_merge_conflicts, pr_merge_resolved, PrMergeConflicts};
 pub use conflicts::{conflict_abort, conflict_continue, conflict_resolve_file, conflict_state, conflict_versions, ConflictState, ConflictVersions};
 pub use commit_edit::{commit_edit_state, continue_commit_edit, start_commit_edit, CommitEditState};
 
@@ -300,93 +304,64 @@ fn conflict_path(conflict: &git2::IndexConflict) -> Option<String> {
         .map(|entry| String::from_utf8_lossy(&entry.path).into_owned())
 }
 
-/// Replays the commit in memory and lists the files it conflicts on, with all three versions and a
-/// marked-up merge of each. Nothing is written to either branch or the working tree.
-pub fn duplicate_commit_conflicts(
-    repo_path: &Path,
-    source_branch: &str,
-    destination_branch: &str,
-    oid: &str,
-) -> Result<DuplicateConflicts> {
-    let repo = git2::Repository::discover(repo_path).map_err(err)?;
-    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
-    let picked = repo
-        .cherrypick_commit(&commit, &destination_tip, 0, None)
-        .map_err(err)?;
-    let short = commit.as_object().short_id().ok()
-        .and_then(|b| b.as_str().map(str::to_string))
-        .unwrap_or_else(|| commit.id().to_string()[..7].to_string());
-    let summary = commit.summary().unwrap_or("").to_string();
+/// Every conflicted file of an in-memory merge index, with all three versions and a diff3-style
+/// marked-up merge labelled with the two sides.
+fn read_conflicts(
+    repo: &git2::Repository,
+    index: &git2::Index,
+    our_label: &str,
+    their_label: &str,
+) -> Result<Vec<DuplicateConflictFile>> {
     let mut files = Vec::new();
-    if picked.has_conflicts() {
-        for conflict in picked.conflicts().map_err(err)?.flatten() {
-            let Some(path) = conflict_path(&conflict) else { continue };
-            let mut binary = false;
-            let mut read = |entry: &Option<git2::IndexEntry>| -> Result<Option<String>> {
-                let Some(entry) = entry else { return Ok(None) };
-                let blob = repo.find_blob(entry.id).map_err(err)?;
-                if blob.is_binary() {
-                    binary = true;
-                    return Ok(None);
-                }
-                Ok(Some(String::from_utf8_lossy(blob.content()).into_owned()))
-            };
-            let base = read(&conflict.ancestor)?;
-            let ours = read(&conflict.our)?;
-            let theirs = read(&conflict.their)?;
-            let merged = match (&conflict.our, &conflict.their) {
-                (Some(our), Some(their)) if !binary => {
-                    // Files added on both sides have no ancestor: merge against an empty file.
-                    let ancestor = match &conflict.ancestor {
-                        Some(entry) => copy_entry(entry),
-                        None => git2::IndexEntry { id: repo.blob(b"").map_err(err)?, ..copy_entry(our) },
-                    };
-                    let mut options = git2::MergeFileOptions::new();
-                    options
-                        .ancestor_label("base")
-                        .our_label(destination_branch)
-                        .their_label(format!("{short} ({summary})"))
-                        .style_diff3(true);
-                    let result = repo
-                        .merge_file_from_index(&ancestor, our, their, Some(&mut options))
-                        .map_err(err)?;
-                    Some(String::from_utf8_lossy(result.content()).into_owned())
-                }
-                _ => None,
-            };
-            files.push(DuplicateConflictFile { path, base, ours, theirs, merged, binary });
-        }
+    for conflict in index.conflicts().map_err(err)?.flatten() {
+        let Some(path) = conflict_path(&conflict) else { continue };
+        let mut binary = false;
+        let mut read = |entry: &Option<git2::IndexEntry>| -> Result<Option<String>> {
+            let Some(entry) = entry else { return Ok(None) };
+            let blob = repo.find_blob(entry.id).map_err(err)?;
+            if blob.is_binary() {
+                binary = true;
+                return Ok(None);
+            }
+            Ok(Some(String::from_utf8_lossy(blob.content()).into_owned()))
+        };
+        let base = read(&conflict.ancestor)?;
+        let ours = read(&conflict.our)?;
+        let theirs = read(&conflict.their)?;
+        let merged = match (&conflict.our, &conflict.their) {
+            (Some(our), Some(their)) if !binary => {
+                // Files added on both sides have no ancestor: merge against an empty file.
+                let ancestor = match &conflict.ancestor {
+                    Some(entry) => copy_entry(entry),
+                    None => git2::IndexEntry { id: repo.blob(b"").map_err(err)?, ..copy_entry(our) },
+                };
+                let mut options = git2::MergeFileOptions::new();
+                options
+                    .ancestor_label("base")
+                    .our_label(our_label)
+                    .their_label(their_label)
+                    .style_diff3(true);
+                let result = repo
+                    .merge_file_from_index(&ancestor, our, their, Some(&mut options))
+                    .map_err(err)?;
+                Some(String::from_utf8_lossy(result.content()).into_owned())
+            }
+            _ => None,
+        };
+        files.push(DuplicateConflictFile { path, base, ours, theirs, merged, binary });
     }
     files.sort_by(|a, b| a.path.cmp(&b.path));
-    Ok(DuplicateConflicts {
-        destination_oid: destination_tip.id().to_string(),
-        commit_oid: commit.id().to_string(),
-        commit_summary: summary,
-        files,
-    })
+    Ok(files)
 }
 
-/// Finishes a conflicted duplicate with the user's resolutions: replays the commit in memory again,
-/// replaces every conflicted file with its resolution and commits the result on the destination.
-/// Fails without touching anything when the destination moved since the conflicts were shown or a
-/// conflicted file has no resolution.
-pub fn duplicate_commit_resolved(
-    repo_path: &Path,
-    source_branch: &str,
-    destination_branch: &str,
-    oid: &str,
-    expected_destination: &str,
+/// Replaces every conflicted file of an in-memory merge index with the user's resolution. Fails when a
+/// resolution names a file that is not conflicted or a conflicted file has none.
+fn apply_resolutions(
+    repo: &git2::Repository,
+    index: &mut git2::Index,
     resolutions: &[DuplicateResolution],
-) -> Result<String> {
-    let repo = git2::Repository::discover(repo_path).map_err(err)?;
-    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
-    if destination_tip.id().to_string() != expected_destination {
-        return Err(format!("{destination_branch} changed while you were resolving the conflicts. Open the conflicts again to see the new changes."));
-    }
-    let mut picked = repo
-        .cherrypick_commit(&commit, &destination_tip, 0, None)
-        .map_err(err)?;
-    let conflicts: Vec<git2::IndexConflict> = picked.conflicts().map_err(err)?.collect::<std::result::Result<_, _>>().map_err(err)?;
+) -> Result<()> {
+    let conflicts: Vec<git2::IndexConflict> = index.conflicts().map_err(err)?.collect::<std::result::Result<_, _>>().map_err(err)?;
     for resolution in resolutions {
         if !conflicts.iter().any(|c| conflict_path(c).as_deref() == Some(resolution.path.as_str())) {
             return Err(format!("{} is not one of the conflicted files.", resolution.path));
@@ -416,13 +391,67 @@ pub fn duplicate_commit_resolved(
                 None => None,
             },
         };
-        picked.conflict_remove(Path::new(&path)).map_err(err)?;
+        index.conflict_remove(Path::new(&path)).map_err(err)?;
         if let Some(mut entry) = entry {
             entry.flags &= !0x3000; // stage bits: a resolved entry is stage 0
             entry.path = path.clone().into_bytes();
-            picked.add(&entry).map_err(err)?;
+            index.add(&entry).map_err(err)?;
         }
     }
+    Ok(())
+}
+
+/// Replays the commit in memory and lists the files it conflicts on, with all three versions and a
+/// marked-up merge of each. Nothing is written to either branch or the working tree.
+pub fn duplicate_commit_conflicts(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+) -> Result<DuplicateConflicts> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
+    let picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    let short = commit.as_object().short_id().ok()
+        .and_then(|b| b.as_str().map(str::to_string))
+        .unwrap_or_else(|| commit.id().to_string()[..7].to_string());
+    let summary = commit.summary().unwrap_or("").to_string();
+    let files = if picked.has_conflicts() {
+        read_conflicts(&repo, &picked, destination_branch, &format!("{short} ({summary})"))?
+    } else {
+        Vec::new()
+    };
+    Ok(DuplicateConflicts {
+        destination_oid: destination_tip.id().to_string(),
+        commit_oid: commit.id().to_string(),
+        commit_summary: summary,
+        files,
+    })
+}
+
+/// Finishes a conflicted duplicate with the user's resolutions: replays the commit in memory again,
+/// replaces every conflicted file with its resolution and commits the result on the destination.
+/// Fails without touching anything when the destination moved since the conflicts were shown or a
+/// conflicted file has no resolution.
+pub fn duplicate_commit_resolved(
+    repo_path: &Path,
+    source_branch: &str,
+    destination_branch: &str,
+    oid: &str,
+    expected_destination: &str,
+    resolutions: &[DuplicateResolution],
+) -> Result<String> {
+    let repo = git2::Repository::discover(repo_path).map_err(err)?;
+    let (destination_tip, commit) = duplicate_inputs(&repo, repo_path, source_branch, destination_branch, oid)?;
+    if destination_tip.id().to_string() != expected_destination {
+        return Err(format!("{destination_branch} changed while you were resolving the conflicts. Open the conflicts again to see the new changes."));
+    }
+    let mut picked = repo
+        .cherrypick_commit(&commit, &destination_tip, 0, None)
+        .map_err(err)?;
+    apply_resolutions(&repo, &mut picked, resolutions)?;
     if picked.has_conflicts() {
         return Err("Some files are still conflicted. Resolve every file first.".into());
     }

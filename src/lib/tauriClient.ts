@@ -1,6 +1,7 @@
 /** Typed wrappers around the Tauri commands defined in src-tauri/src/commands.rs. */
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { memoryScope } from './teamStore';
+import type { PrDraftContext } from './prDescription';
 import type {
   AppStatePayload,
   CodeSearchHit,
@@ -1306,6 +1307,31 @@ export async function duplicateCommitResolved(
   return invoke('duplicate_commit_resolved', { sourceBranch, destinationBranch, oid, destinationOid, resolutions });
 }
 
+/** A pull request's conflicts: the base merged into the compare branch in memory. "Ours" is the
+ * compare branch, "theirs" the base. Empty `files` = it merges cleanly. */
+export interface PrMergeConflicts {
+  baseOid: string;
+  compareOid: string;
+  files: DuplicateConflictFile[];
+}
+
+/** Merges `baseRef` into the local `compareBranch` in memory and lists the conflicted files. Writes nothing. */
+export async function prMergeConflicts(baseRef: string, compareBranch: string): Promise<PrMergeConflicts> {
+  return invoke('pr_merge_conflicts', { baseRef, compareBranch });
+}
+
+/** Commits the merge of the base into the compare branch with every conflicted file resolved. Fails without
+ * changing anything when either branch moved past the oids the conflicts were computed against. */
+export async function prMergeResolved(
+  baseRef: string,
+  compareBranch: string,
+  baseOid: string,
+  compareOid: string,
+  resolutions: ConflictFileResolution[],
+): Promise<AppStatePayload> {
+  return invoke('pr_merge_resolved', { baseRef, compareBranch, baseOid, compareOid, resolutions });
+}
+
 export async function mergeBranch(
   branch: string,
   strategy?: string,
@@ -1339,6 +1365,11 @@ export interface BranchComparison {
 
 export async function compareBranches(baseRef: string, compareRef: string): Promise<BranchComparison> {
   return invoke('compare_branches', { baseRef, compareRef });
+}
+
+/** Commits, per-file patches from the merge base and the PR template for an AI-written pull request description. */
+export async function prDraftContext(baseRef: string, compareRef: string): Promise<PrDraftContext> {
+  return invoke('pr_draft_context', { baseRef, compareRef });
 }
 
 export interface MergePreviewFileCommit {

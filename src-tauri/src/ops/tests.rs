@@ -53,6 +53,156 @@ fn compare_branches_reports_divergence_and_tip_to_tip_file_changes() {
     fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn pr_draft_context_reads_commits_patches_from_the_merge_base_and_the_template() {
+    let dir = std::env::temp_dir().join(format!("pigry-ops-pr-draft-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".github")).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    fs::write(dir.join("common.txt"), "one
+two
+").unwrap();
+    fs::write(dir.join(".github/PULL_REQUEST_TEMPLATE.md"), "## What
+
+## Why
+").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Common history"]);
+    git_cli(&dir, &["branch", "feature/work"]);
+    // A later change on main is not part of the pull request.
+    fs::write(dir.join("base-only.txt"), "base
+").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Base change"]);
+    git_cli(&dir, &["checkout", "feature/work"]);
+    fs::write(dir.join("common.txt"), "one
+TWO
+three
+").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "fix: shout the second line", "-m", "Body explains why."]);
+    fs::write(dir.join("logo.bin"), [0u8, 159, 146, 150, 0, 1]).unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "feat: add a logo"]);
+
+    let context = super::pr_draft_context(&dir, "refs/heads/main", "refs/heads/feature/work").unwrap();
+    let messages: Vec<_> = context.commits.iter().map(|commit| commit.message.as_str()).collect();
+    assert_eq!(messages, ["fix: shout the second line
+
+Body explains why.", "feat: add a logo"]);
+    let paths: Vec<_> = context.files.iter().map(|file| (file.path.as_str(), file.status.as_str())).collect();
+    assert_eq!(paths, [("common.txt", "M"), ("logo.bin", "A")]);
+    let text = &context.files[0];
+    assert_eq!((text.additions, text.deletions, text.binary, text.truncated), (2, 1, false, false));
+    assert!(text.patch.contains("+TWO
+") && text.patch.contains("-two
+"), "{}", text.patch);
+    assert!(context.files[1].binary && context.files[1].patch.is_empty());
+    let template = context.template.expect("template found");
+    assert_eq!(template.path, ".github/PULL_REQUEST_TEMPLATE.md");
+    assert!(template.content.starts_with("## What"));
+    assert!(super::pr_draft_context(&dir, "HEAD", "refs/heads/main").is_err());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn pr_merge_conflicts_are_resolved_by_merging_the_base_into_the_compare_branch() {
+    let dir = std::env::temp_dir().join(format!("pigry-ops-pr-merge-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    fs::write(dir.join("shared.txt"), "one\ntwo\nthree\n").unwrap();
+    fs::write(dir.join("other.txt"), "other\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Common history"]);
+    git_cli(&dir, &["branch", "feature/work"]);
+    fs::write(dir.join("shared.txt"), "one\nTWO from main\nthree\n").unwrap();
+    fs::write(dir.join("main-only.txt"), "main\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Main change"]);
+    git_cli(&dir, &["checkout", "feature/work"]);
+    fs::write(dir.join("shared.txt"), "one\ntwo from feature\nthree\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Feature change"]);
+    // main is checked out: the compare branch is moved with update-ref, the working tree is untouched.
+    git_cli(&dir, &["checkout", "main"]);
+
+    let shown = super::pr_merge_conflicts(&dir, "refs/heads/main", "feature/work").unwrap();
+    assert_eq!(shown.files.len(), 1);
+    let file = &shown.files[0];
+    assert_eq!(file.path, "shared.txt");
+    assert_eq!(file.ours.as_deref(), Some("one\ntwo from feature\nthree\n"));
+    assert_eq!(file.theirs.as_deref(), Some("one\nTWO from main\nthree\n"));
+    let merged = file.merged.clone().unwrap();
+    assert!(merged.contains("<<<<<<< feature/work") && merged.contains(">>>>>>> main"), "{merged}");
+
+    let resolution = |content: &str| vec![super::DuplicateResolution { path: "shared.txt".into(), content: Some(content.into()), side: None }];
+    let stale = super::pr_merge_resolved(&dir, "refs/heads/main", "feature/work", &shown.compare_oid, &shown.compare_oid, &resolution("x\n"));
+    assert!(stale.unwrap_err().contains("changed while you were resolving"));
+    let marked = super::pr_merge_resolved(&dir, "refs/heads/main", "feature/work", &shown.base_oid, &shown.compare_oid, &resolution(&merged));
+    assert!(marked.unwrap_err().contains("conflict markers"));
+
+    let merge = super::pr_merge_resolved(
+        &dir, "refs/heads/main", "feature/work", &shown.base_oid, &shown.compare_oid,
+        &resolution("one\nTWO from both\nthree\n"),
+    ).unwrap();
+    let repo = Repository::open(&dir).unwrap();
+    let tip = repo.find_branch("feature/work", git2::BranchType::Local).unwrap().get().peel_to_commit().unwrap();
+    assert_eq!(tip.id().to_string(), merge);
+    assert_eq!(tip.parent_count(), 2);
+    assert_eq!(tip.parent_id(0).unwrap().to_string(), shown.compare_oid);
+    assert_eq!(tip.parent_id(1).unwrap().to_string(), shown.base_oid);
+    assert_eq!(tip.summary(), Some("Merge branch 'main' into feature/work"));
+    let tree = tip.tree().unwrap();
+    let blob = |path: &str| {
+        let object = tree.get_path(std::path::Path::new(path)).unwrap().to_object(&repo).unwrap();
+        String::from_utf8(object.peel_to_blob().unwrap().content().to_vec()).unwrap()
+    };
+    assert_eq!(blob("shared.txt"), "one\nTWO from both\nthree\n");
+    assert_eq!(blob("main-only.txt"), "main\n");
+    // Now the base merges cleanly, and the working tree on main was not touched.
+    assert!(super::pr_merge_conflicts(&dir, "refs/heads/main", "feature/work").unwrap().files.is_empty());
+    assert_eq!(fs::read_to_string(dir.join("shared.txt")).unwrap().replace("\r\n", "\n"), "one\nTWO from main\nthree\n");
+    fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn pr_merge_resolved_fast_forwards_the_checked_out_compare_branch() {
+    let dir = std::env::temp_dir().join(format!("pigry-ops-pr-merge-head-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    git_cli(&dir, &["init", "-b", "main"]);
+    git_cli(&dir, &["config", "user.name", "Test User"]);
+    git_cli(&dir, &["config", "user.email", "test@pigry.dev"]);
+    fs::write(dir.join("a.txt"), "base\n").unwrap();
+    git_cli(&dir, &["add", "."]);
+    git_cli(&dir, &["commit", "-m", "Common"]);
+    git_cli(&dir, &["checkout", "-b", "fix/x"]);
+    fs::write(dir.join("a.txt"), "fix\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Fix"]);
+    git_cli(&dir, &["checkout", "main"]);
+    fs::write(dir.join("a.txt"), "main\n").unwrap();
+    git_cli(&dir, &["commit", "-am", "Main"]);
+    git_cli(&dir, &["checkout", "fix/x"]);
+    fs::write(dir.join("untracked.txt"), "keep me\n").unwrap();
+
+    let shown = super::pr_merge_conflicts(&dir, "refs/heads/main", "fix/x").unwrap();
+    let pick = vec![super::DuplicateResolution { path: "a.txt".into(), content: None, side: Some("theirs".into()) }];
+    super::pr_merge_resolved(&dir, "refs/heads/main", "fix/x", &shown.base_oid, &shown.compare_oid, &pick).unwrap();
+    assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap().replace("\r\n", "\n"), "main\n");
+    assert_eq!(fs::read_to_string(dir.join("untracked.txt")).unwrap(), "keep me\n");
+    let repo = Repository::open(&dir).unwrap();
+    assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().parent_count(), 2);
+    let mut options = git2::StatusOptions::new();
+    options.include_untracked(false);
+    assert!(repo.statuses(Some(&mut options)).unwrap().is_empty());
+    fs::remove_dir_all(&dir).unwrap();
+}
+
 fn duplicate_commit_fixture(name: &str) -> (PathBuf, String, String) {
     let dir = std::env::temp_dir().join(format!("pigry-duplicate-{name}-{}", std::process::id()));
     fs::create_dir(&dir).unwrap();
