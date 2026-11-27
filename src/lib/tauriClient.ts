@@ -1152,6 +1152,27 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
   return invoke('web_search', { query });
 }
 
+/** ---- RESTful API menu: HTTP requests sent from the backend (no CORS), cancellable by id ---- */
+export interface HttpSendRequest {
+  id: string; method: string; url: string; headers: Array<{ key: string; value: string }>;
+  body?: string; bodyBase64?: string; timeoutMs?: number; followRedirects?: boolean; verifyTls?: boolean;
+}
+export interface HttpSendResponse {
+  status: number; statusText: string; httpVersion: string; headers: Array<{ key: string; value: string }>;
+  body: string; encoding: 'utf8' | 'base64'; timeMs: number;
+  timings: { dnsMs: number; connectMs: number; tlsMs: number; firstByteMs: number; totalMs: number };
+  bodySize: number; headersSize: number; url: string; redirects: number; truncated: boolean;
+}
+export async function httpSend(request: HttpSendRequest): Promise<HttpSendResponse> {
+  return invoke('http_send', { request });
+}
+export async function httpCancel(id: string): Promise<boolean> {
+  return invoke('http_cancel', { id });
+}
+export async function yamlToJson(text: string): Promise<unknown> {
+  return invoke('api_yaml_to_json', { text });
+}
+
 export interface BrowserPage {
   url: string;
   title: string;

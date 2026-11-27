@@ -68,7 +68,7 @@ export function resolveRef(refs: OwnedRef[], name: string, caller?: string, exte
 }
 
 /** Agent tools that keep files per owner (.pigry/<kind>/<agent>/…) or attach images for the caller. */
-const OWNED_TOOL_PREFIXES = ['diagram_', 'design_', 'board_', 'e2e_', 'drawing_', 'game_', 'model_', 'sheet_', 'docs_', 'slides_', 'notes_', 'video_', 'audio_'];
+const OWNED_TOOL_PREFIXES = ['diagram_', 'design_', 'board_', 'e2e_', 'drawing_', 'game_', 'model_', 'sheet_', 'docs_', 'slides_', 'notes_', 'api_', 'video_', 'audio_'];
 export const isOwnedFileTool = (name: string): boolean => name === 'read_image' || OWNED_TOOL_PREFIXES.some((prefix) => name.startsWith(prefix));
 
 /** Tells an owned-file tool which agent is calling, so it writes to that agent's own folder

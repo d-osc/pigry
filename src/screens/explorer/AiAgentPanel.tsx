@@ -22,6 +22,8 @@ import { SLIDES_TOOLS } from '../../extensions/slides/slidesTools';
 import { getOpenDoc, getOpenDocSelection } from '../../extensions/docs/docsStore';
 import { getOpenDeck, getOpenDeckSelection } from '../../extensions/slides/slidesStore';
 import { NOTES_TOOLS } from '../../extensions/notes/notesTools';
+import { API_TOOLS } from '../../extensions/api/apiTools';
+import { getOpenApi } from '../../extensions/api/apiStore';
 import { getOpenBook, getOpenNote } from '../../extensions/notes/notesStore';
 import { getOpenAudio } from '../../extensions/audioeditor/audioStore';
 import { getOpenVideo } from '../../extensions/videoeditor/videoStore';
@@ -1359,7 +1361,7 @@ const BROWSER_EXTRAS: ToolSpec[] = [
 
 const RUNTIME_AGENT_TOOLS = [
   ...FILE_TOOLS, ...WORKSPACE_AGENT_TOOLS, READ_IMAGE_TOOL, ...DOC_TOOLS, ...WEB_TOOLS,
-  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
+  ...DEVTOOLS_TOOLS, ...E2E_TOOLS, ...BROWSER_EXTRAS, ...DIAGRAM_TOOLS, ...DESIGN_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS, ...API_TOOLS, ...BOARD_TOOLS, ...E2E_RUNNER_TOOLS, AGENT_CONTACTS_TOOL, AGENT_LOOKUP_TOOL,
 ];
 
 /** Short label shown as a tool-activity chip in the chat bubble. */
@@ -1798,6 +1800,17 @@ async function buildMessageContext({text, team, target, repositoryPath, activeSe
           'Use notes_list / notes_read / notes_search / notes_write / notes_edit / notes_open — do not hand-edit the JSON with write_file. ' +
           'notes_edit without a name adds to your own "notes" notebook; pass user/notes to change the user\'s notes. Address notes by the ids notes_read shows; prefer archive over trash, and never empty the trash or delete forever unless asked.' +
           (openBook ? `\nThe user currently has the notebook "${openBook}" open${note ? ` and is editing note ${note}` : ''} (read it with notes_read before changing it).` : '');
+      }
+    }
+    {
+      const openApi = getOpenApi();
+      if (team === 'RESTful API' || openApi.collection) {
+        context +=
+          '\n\n[RESTful API]\n' +
+          'API collections live in .pigry/apis/<agent>/<name>.api.json (one folder per agent; the user\'s own are under user/), environments in .pigry/apis/<owner>/<name>.env.json and the global variables in user/globals.env.json; values marked secret, the history and cookies stay in .pigry/cache (git-ignored). The RESTful API menu is a Postman-style client: collections with folders and requests, request tabs, params, auth (inherited from folder or collection), headers, bodies, pre-request and test scripts with the pm API, environments, a response viewer and a collection runner. ' +
+          'Use api_list / api_read / api_write / api_edit / api_env / api_send / api_run / api_export / api_open — do not hand-edit the JSON with write_file. ' +
+          'Put base URLs and credentials in environment variables ({{baseUrl}}, {{token}}) and mark credentials secret; never paste real secrets into collections or chat. Requests are sent for real: ask before sending anything that changes data (POST, PUT, PATCH, DELETE) on a server that is not local or a test server.' +
+          (openApi.collection ? `\nThe user currently has the collection "${openApi.collection}" open${openApi.request ? ` with request ${openApi.request}` : ''} (read it with api_read before changing it).` : '');
       }
     }
     // Project instructions (.pigry/instructions.md) — always ride along.

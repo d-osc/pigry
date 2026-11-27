@@ -320,6 +320,9 @@ const DOCS_TOOL_NAMES = ['docs_list', 'docs_read', 'docs_write', 'docs_edit', 'd
 /** The Slides tools (src/extensions/slides/slidesTools.ts). */
 const SLIDES_TOOL_NAMES = ['slides_list', 'slides_read', 'slides_write', 'slides_edit', 'slides_preview', 'slides_export', 'slides_open'];
 
+/** The RESTful API tools (src/extensions/api/apiTools.ts). */
+const API_TOOL_NAMES = ['api_list', 'api_read', 'api_write', 'api_edit', 'api_env', 'api_send', 'api_run', 'api_export', 'api_open'];
+
 /** The Notes tools (src/extensions/notes/notesTools.ts). */
 const NOTES_TOOL_NAMES = ['notes_list', 'notes_read', 'notes_search', 'notes_write', 'notes_edit', 'notes_open'];
 
@@ -421,6 +424,14 @@ const WORKSPACE_AGENT_SPECS: Record<WorkspaceNavId, Omit<BuiltinSpec, 'name' | '
     emoji: '💡',
     tools: [...NOTES_TOOL_NAMES, 'read_file', 'list_files', 'read_image', 'agent_lookup', 'agent_contacts'],
     skills: ['notes-editor', 'notes-organizing'],
+  },
+  api: {
+    username: 'api',
+    role: 'API client assistant',
+    description: 'Works with HTTP APIs in the RESTful API menu — builds collections of requests with folders, params, headers, auth and bodies, sets up environments and variables, imports Postman, OpenAPI and cURL, sends requests and reads the responses, writes pm.test scripts and runs collections.',
+    emoji: '🔌',
+    tools: [...API_TOOL_NAMES, 'read_file', 'list_files', 'agent_lookup', 'agent_contacts'],
+    skills: ['api-client', 'api-testing-scripts'],
   },
   videoeditor: {
     username: 'videoeditor',
@@ -781,6 +792,15 @@ const WORKSPACE_BASE_AGENT_SPECS: Record<WorkspaceNavId, [WorkspaceBaseAgentSpec
     emoji: '🗂️',
     tools: ['list_files', 'read_file', 'read_image', 'web_search', ...NOTES_TOOL_NAMES],
     skills: ['notes-editor', 'notes-capture-and-lists', 'notes-organizing', 'notes-reminders-and-planning', 'notes-weekly-review'],
+  }],
+  api: [{
+    username: 'api-tester',
+    name: 'API Tester',
+    role: 'API developer and tester',
+    description: 'Works with APIs the way a careful Postman user does: reads the API description first, keeps one collection per API with folders per resource, puts the base URL and credentials in environment variables (secrets marked secret, never in git), sets auth once on the collection and lets requests inherit it, sends each request and reads the status, headers and body, writes pm.test checks for status, shape and timing, chains values like tokens through variables, then runs the whole collection and reports what passed and failed.',
+    emoji: '🧪',
+    tools: ['list_files', 'read_file', 'web_search', ...API_TOOL_NAMES],
+    skills: ['api-client', 'api-testing-scripts', 'api-auth-and-variables', 'api-import-and-export', 'api-design-review'],
   }],
   docs: [{
     username: 'writer',

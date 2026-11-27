@@ -32,6 +32,24 @@ const PREPARE = {
   videoeditor: async (page) => { await page.evaluate(() => window.__help.run('video_open', { name: 'launch-teaser' })); await quiet(page.locator('canvas[aria-label="Video preview"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(800); await click(page, page.getByRole('button', { name: /^text clip/ }).first()); await quiet(page.getByLabel('Ruler').click({ position: { x: 222, y: 12 }, timeout: 2500 })); await page.waitForTimeout(700); },
   sheet: async (page) => { await page.evaluate(() => window.__help.run('sheet_open', { name: 'sales-2026', cell: 'F2:F13' })); await quiet(page.locator('canvas[aria-label="Spreadsheet grid"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(900); },
   docs: async (page) => { await page.evaluate(() => window.__help.run('docs_open', { name: 'launch-proposal' })); await quiet(page.getByTestId('docs-surface').locator('[data-style="title"]').waitFor({ timeout: 4000 })); await page.waitForTimeout(700); await click(page, page.getByTestId('comment-card')); await page.waitForTimeout(400); },
+  api: async (page) => {
+    await page.evaluate(() => {
+      const bridge = window.__TAURI_INTERNALS__;
+      const invoke = bridge.invoke;
+      const body = JSON.stringify({ data: [{ id: 101, name: 'Mochi', species: 'cat', age: 3, vaccinated: true, owner: { id: 7, email: 'ann@example.com' } }, { id: 102, name: 'Biscuit', species: 'dog', age: 5, vaccinated: false, owner: null }], page: 1, total: 2 });
+      bridge.invoke = async (cmd, args = {}) => {
+        if (cmd === 'http_send') return { status: 200, statusText: 'OK', httpVersion: '1.1', headers: [{ key: 'Content-Type', value: 'application/json; charset=utf-8' }, { key: 'X-RateLimit-Remaining', value: '58' }, { key: 'Set-Cookie', value: 'session=s-1; Path=/; HttpOnly' }], body, encoding: 'utf8', timeMs: 86, timings: { dnsMs: 4, connectMs: 18, tlsMs: 41, firstByteMs: 80, totalMs: 86 }, bodySize: body.length, headersSize: 180, url: args.request.url, redirects: 0, truncated: false };
+        return invoke(cmd, args);
+      };
+    });
+    await page.evaluate(() => window.__help.run('api_env', { action: 'select', name: 'user/staging' }));
+    await page.evaluate(() => window.__help.run('api_open', { name: 'user/petstore', request: 'Pets / List pets' }));
+    await quiet(page.getByRole('textbox', { name: 'Request URL' }).waitFor({ timeout: 4000 }));
+    await page.waitForTimeout(500);
+    await click(page, page.getByRole('button', { name: 'Send', exact: true }));
+    await quiet(page.getByRole('status', { name: 'Response status' }).waitFor({ timeout: 4000 }));
+    await page.waitForTimeout(500);
+  },
   notes: async (page) => { await page.evaluate(() => window.__help.run('notes_open', { name: 'user/notes' })); await quiet(page.getByTestId('note-card').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(600); await quiet(page.getByTestId('note-card').filter({ hasText: 'Groceries' }).hover({ timeout: 2500 })); await page.waitForTimeout(300); },
   slides: async (page) => { await page.evaluate(() => window.__help.run('slides_open', { name: 'launch-pitch', slide: '7' })); await quiet(page.getByTestId('slide-canvas').waitFor({ timeout: 4000 })); await page.waitForTimeout(700); await quiet(page.getByTestId('slide-canvas').click({ position: { x: 300, y: 260 }, timeout: 2500 })); await click(page, page.getByRole('button', { name: 'Animate' })); await page.waitForTimeout(500); },
   audioeditor: async (page) => { await page.evaluate(() => window.__help.run('audio_open', { name: 'podcast-episode' })); await quiet(page.locator('[data-testid="timeline"] canvas').first().waitFor({ timeout: 4000 })); await page.waitForTimeout(1500); await quiet(page.locator('.au-lane').first().click({ position: { x: 330, y: 40 }, timeout: 2500 })); await page.waitForTimeout(500); },
@@ -158,7 +176,8 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
     const { DOCS_TOOLS } = await import('/src/extensions/docs/docsTools.ts');
     const { SLIDES_TOOLS } = await import('/src/extensions/slides/slidesTools.ts');
     const { NOTES_TOOLS } = await import('/src/extensions/notes/notesTools.ts');
-    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS];
+    const { API_TOOLS } = await import('/src/extensions/api/apiTools.ts');
+    const all = [...BOARD_TOOLS, ...DESIGN_TOOLS, ...DIAGRAM_TOOLS, ...DRAWING_TOOLS, ...MODEL_TOOLS, ...GAME_TOOLS, ...VIDEO_TOOLS, ...AUDIO_TOOLS, ...SHEET_TOOLS, ...DOCS_TOOLS, ...SLIDES_TOOLS, ...NOTES_TOOLS, ...API_TOOLS];
     window.__help = { run: (name, input) => all.find((tool) => tool.name === name).run({ agent: 'user', ...input }) };
     await window.__help.run('board_write', {
       name: 'checkout-retro', title: 'Checkout retro',
@@ -276,6 +295,22 @@ test('capture one screenshot per workspace menu', async ({ page }) => {
         { op: 'add', title: 'Groceries', items: ['Oat milk', 'Eggs', 'Spinach', 'Coffee beans', '[x] Bread', '[x] Lemons'], color: 'mint', background: 'groceries', labels: ['Home'], pinned: true },
         { op: 'add', title: 'Wi-Fi at the office', body: 'Network: Pigry-Guest\nAsk reception for the code', color: 'default', labels: ['Work'] },
         { op: 'add', title: 'Call the dentist', body: 'Move the check-up to the week of the 8th.', color: 'coral', pinned: true, reminder: { at: 'today 17:30' } },
+      ],
+    });
+    await window.__help.run('api_env', { action: 'create', name: 'staging', values: { baseUrl: 'https://petstore.example.com/v1', token: 'demo-token' }, secret: ['token'] });
+    await window.__help.run('api_write', {
+      name: 'petstore', title: 'Petstore API',
+      ops: [
+        { op: 'set_auth', auth: { type: 'bearer', token: '{{token}}' } },
+        { op: 'add_folder', name: 'Pets' }, { op: 'add_folder', name: 'Owners' }, { op: 'add_folder', name: 'Auth' },
+        { op: 'add_request', parent: 'Auth', name: 'Log in', method: 'POST', url: '{{baseUrl}}/login', auth: { type: 'none' }, body: { json: { email: 'ann@example.com', password: '{{password}}' } } },
+        { op: 'add_request', parent: 'Pets', name: 'List pets', url: '{{baseUrl}}/pets?species=cat&limit=20&page=1', headers: { Accept: 'application/json' },
+          tests: 'pm.test("Status code is 200", () => pm.response.to.have.status(200));\npm.test("Returns a list of pets", () => pm.expect(pm.response.json().data).to.be.an("array"));\npm.test("Response time is below 500 ms", () => pm.expect(pm.response.responseTime).to.be.below(500));' },
+        { op: 'add_request', parent: 'Pets', name: 'Get pet', url: '{{baseUrl}}/pets/:petId', path_vars: { petId: '101' } },
+        { op: 'add_request', parent: 'Pets', name: 'Create pet', method: 'POST', url: '{{baseUrl}}/pets', body: { json: { name: 'Mochi', species: 'cat' } } },
+        { op: 'add_request', parent: 'Pets', name: 'Update pet', method: 'PATCH', url: '{{baseUrl}}/pets/:petId', path_vars: { petId: '101' }, body: { json: { age: 4 } } },
+        { op: 'add_request', parent: 'Pets', name: 'Delete pet', method: 'DELETE', url: '{{baseUrl}}/pets/:petId', path_vars: { petId: '101' } },
+        { op: 'add_request', parent: 'Owners', name: 'List owners', url: '{{baseUrl}}/owners' },
       ],
     });
     await window.__help.run('audio_write', {

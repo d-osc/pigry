@@ -43,6 +43,7 @@ const BoardScreen = lazy(() => import('../extensions/board/BoardScreen').then((m
 const DocsScreen = lazy(() => import('../extensions/docs/DocsScreen').then((module) => ({ default: module.DocsScreen })));
 const SlidesScreen = lazy(() => import('../extensions/slides/SlidesScreen').then((module) => ({ default: module.SlidesScreen })));
 const NotesScreen = lazy(() => import('../extensions/notes/NotesScreen').then((module) => ({ default: module.NotesScreen })));
+const ApiScreen = lazy(() => import('../extensions/api/ApiScreen').then((module) => ({ default: module.ApiScreen })));
 const SheetScreen = lazy(() => import('../extensions/sheet/SheetScreen').then((module) => ({ default: module.SheetScreen })));
 const AudioScreen = lazy(() => import('../extensions/audioeditor/AudioScreen').then((module) => ({ default: module.AudioScreen })));
 const VideoScreen = lazy(() => import('../extensions/videoeditor/VideoScreen').then((module) => ({ default: module.VideoScreen })));
@@ -75,7 +76,7 @@ const MAX_SIDEBAR_WIDTH = 420;
  * the agent — explorer/commit-graph embed their own panel, 'ai-agent' (the
  * Copilot team) is a full-screen one, the rest share this rail. */
 const AI_RAIL_SCREENS = new Set<NavId>(
-  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'drawing' && id !== 'model3d' && id !== 'gameengine' && id !== 'videoeditor' && id !== 'audioeditor' && id !== 'sheet' && id !== 'docs' && id !== 'slides' && id !== 'notes' && id !== 'board' && id !== 'e2e'),
+  workspaceNav.map(({ id }) => id).filter(id => id !== 'explorer' && id !== 'commit-graph' && id !== 'ai-agent' && id !== 'diagram' && id !== 'design' && id !== 'drawing' && id !== 'model3d' && id !== 'gameengine' && id !== 'videoeditor' && id !== 'audioeditor' && id !== 'sheet' && id !== 'docs' && id !== 'slides' && id !== 'notes' && id !== 'api' && id !== 'board' && id !== 'e2e'),
 );
 
 /** The Tauri webview ignores target="_blank" links — route every external
@@ -296,6 +297,8 @@ function renderScreen(
       return <SlidesScreen />;
     case 'notes':
       return <NotesScreen />;
+    case 'api':
+      return <ApiScreen />;
     case 'diagram':
       return <DiagramScreen />;
     case 'ai-agent':
@@ -333,7 +336,7 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [visitedAgentScreens, setVisitedAgentScreens] = useState<NavId[]>([]);
-  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'drawing' || screen === 'model3d' || screen === 'gameengine' || screen === 'videoeditor' || screen === 'audioeditor' || screen === 'sheet' || screen === 'docs' || screen === 'slides' || screen === 'notes' || screen === 'board' || screen === 'e2e';
+  const keepAgentScreen = screen === 'explorer' || screen === 'ai-agent' || screen === 'commit-graph' || screen === 'diagram' || screen === 'design' || screen === 'drawing' || screen === 'model3d' || screen === 'gameengine' || screen === 'videoeditor' || screen === 'audioeditor' || screen === 'sheet' || screen === 'docs' || screen === 'slides' || screen === 'notes' || screen === 'api' || screen === 'board' || screen === 'e2e';
   // Adjusting state while rendering (not in an effect) keeps visited screens mounted without a cascading render.
   if (keepAgentScreen && !visitedAgentScreens.includes(screen)) setVisitedAgentScreens([...visitedAgentScreens, screen]);
   // Section the settings page should open on (null = default). Set by
@@ -362,6 +365,7 @@ function AppShellInner() {
     const onOpenDocs = () => setScreen('docs');
     const onOpenSlides = () => setScreen('slides');
     const onOpenNotes = () => setScreen('notes');
+    const onOpenApi = () => setScreen('api');
     const onOpenBoard = () => setScreen('board');
     const onOpenE2e = () => setScreen('e2e');
     const onGoScreen = (event: Event) => {
@@ -387,6 +391,7 @@ function AppShellInner() {
     window.addEventListener('pigry:open-docs', onOpenDocs);
     window.addEventListener('pigry:open-slides', onOpenSlides);
     window.addEventListener('pigry:open-notes', onOpenNotes);
+    window.addEventListener('pigry:open-api', onOpenApi);
     window.addEventListener('pigry:open-board', onOpenBoard);
     window.addEventListener('pigry:open-e2e', onOpenE2e);
     return () => {
@@ -401,6 +406,7 @@ function AppShellInner() {
       window.removeEventListener('pigry:open-docs', onOpenDocs);
       window.removeEventListener('pigry:open-slides', onOpenSlides);
       window.removeEventListener('pigry:open-notes', onOpenNotes);
+      window.removeEventListener('pigry:open-api', onOpenApi);
       window.removeEventListener('pigry:open-board', onOpenBoard);
       window.removeEventListener('pigry:open-e2e', onOpenE2e);
       window.removeEventListener('pigry:go-screen', onGoScreen);

@@ -1,7 +1,7 @@
 import type { MenuGuide } from '../menuGuides.types.ts';
 
 /** Guides for the menus where files, designs and tests are made: Explorer, Diagram, Design, Board, E2E Testing, Reports, Copilot. */
-export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'sheet' | 'docs' | 'slides' | 'notes' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
+export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawing' | 'model3d' | 'gameengine' | 'videoeditor' | 'audioeditor' | 'sheet' | 'docs' | 'slides' | 'notes' | 'api' | 'board' | 'e2e' | 'reports' | 'ai-agent' | 'extensions', MenuGuide> = {
   extensions: {
     summary: "The Extension Store: search the packs of agents and skills Pigry offers and install them. What you installed is managed in Settings.",
     overview: [
@@ -563,6 +563,52 @@ export const WORKSPACE_GUIDES: Record<'explorer' | 'diagram' | 'design' | 'drawi
     ],
     agents: { default: "notes", base: "organizer" },
     shots: [{ file: "notes.jpg", caption: "The Notes menu: the search box with filters, the side menu with labels, the Take a note box, pinned and other notes as coloured cards with checklists, labels, a picture and reminder chips; the AI Agent panel opens from the right edge." }],
+  },
+  api: {
+    summary: "Send HTTP requests and test APIs the Postman way — collections, request tabs, environments and {{variables}}, auth, bodies, scripts with pm.test, a response viewer and a collection runner, saved in the repository.",
+    overview: [
+      "RESTful API is an HTTP API client inspired by Postman. A collection is one file in the repository (.pigry/apis/<owner>/<name>.api.json) with folders and saved requests; environments are .env.json files next to it and the global variables are user/globals.env.json. So the API's requests and tests are reviewed and versioned with the code. Secret values, the history of sent requests and the cookie jar stay on this computer in .pigry/cache, which git ignores.",
+      "Requests are sent from Pigry's backend, not from the page, so CORS never blocks them. The screen has the side bar (Collections, Environments, History) on the left, the open request tabs with the URL bar, the request sections and the response in the middle, the environment picker at the top right and the AI Agent panel on the right edge.",
+    ],
+    features: [
+      { title: "Collections, folders and requests", text: "Create collections and folders, add requests, rename, duplicate and delete from the ⋯ menus, and drag items to reorder them or move them into another folder or collection. Filter the tree by name, URL or method." },
+      { title: "Request tabs", text: "Open several requests at once. Each tab has the method, the URL bar and Send, and sections for Params, Authorization, Headers, Body, Pre-request Script, Tests and Settings. Changes stay in the tab (marked with a dot) until you Save (Ctrl+S); a new request is saved into a collection and folder you choose." },
+      { title: "Params and path variables", text: "The Params table and the URL's query string stay in step as you type in either. :name segments in the path get their own Path Variables table." },
+      { title: "Authorization", text: "No Auth, Bearer Token, Basic Auth or API Key (in a header or the query). Folders and requests can inherit from their parent; the request shows which auth it ends up using." },
+      { title: "Bodies", text: "none, raw (JSON with Beautify and a syntax check, Text, XML, HTML, JavaScript), form-data with text and file fields, x-www-form-urlencoded and a binary file. The right Content-Type is added unless you set one." },
+      { title: "Environments and variables", text: "Pick the active environment at the top. Use {{name}} in the URL, params, headers, auth and body: defined variables are green, undefined ones red with a warning under the URL bar. Collection variables, environments and globals are edited in tables; tick Secret to keep a value out of git. Dynamic values such as {{$guid}} and {{$timestamp}} are fresh on every send." },
+      { title: "Scripts and tests", text: "Pre-request and test scripts use a Postman-like pm API — pm.environment.set, pm.variables, pm.request.headers.add, pm.test, pm.expect and pm.response.json() — with a list of snippets. Collection and folder scripts run around every request in them. Scripts run in a sandbox without network or file access." },
+      { title: "Response viewer", text: "Status, time (hover for DNS, connect, TLS and first byte) and size; the body as Pretty (formatted, coloured JSON and XML with line numbers), Raw or Preview (HTML in a sandboxed frame, images), with search and copy; response headers, cookies, test results with filters, and a Console with what was sent and what scripts logged." },
+      { title: "Cookies and history", text: "Cookies from responses are kept in a jar and sent back to matching URLs (clear it from the Cookies tab). Every send is listed in History by day; click one to open it again." },
+      { title: "Runner", text: "Run a collection or a folder: the requests are sent in order with the active environment, variables chain from one to the next and pm.setNextRequest can jump or stop. The dialog shows the status, time and tests of each request." },
+      { title: "Import and export", text: "Import Postman Collection v2.1 and environments, OpenAPI 3 and Swagger 2 (JSON or YAML) and cURL commands — paste or choose a file, or paste a cURL command into the URL bar. Export a collection or environment as Postman JSON, and a request as cURL, JavaScript fetch or Python requests code." },
+      { title: "Agent tools and skills", text: "api_list, api_read, api_write, api_edit, api_env, api_send, api_run, api_export and api_open, and five skills: the client workflow, test and pre-request scripts, auth, environments and secrets, import and export, and an API design review checklist." },
+    ],
+    tutorial: [
+      { title: "Make an environment", text: "Open Environments in the side bar, press + and name it Development. Add baseUrl = https://jsonplaceholder.typicode.com and pick Development in the environment picker at the top." },
+      { title: "Send a request", text: "Press New request, type {{baseUrl}}/posts/1 in the URL bar (baseUrl turns green) and press Send. The response shows 200 OK, the time and the size, and the JSON body formatted in Pretty." },
+      { title: "Add a test", text: "Open Tests and click the snippet Status code is 200, then Send again. Test Results shows 1/1 passed." },
+      { title: "Save it", text: "Press Save (Ctrl+S), name it Get post, and create the collection Blog to save it into. It appears in Collections." },
+      { title: "Post some JSON", text: "Duplicate Get post from its ⋯ menu, rename it Create post, set the method to POST and the URL to {{baseUrl}}/posts, and in Body choose raw › JSON with {\"title\": \"Hello\"}. Send: the answer is 201 Created." },
+      { title: "Run the collection", text: "From the Blog ⋯ menu choose Run collection and press Run. Both requests are sent and their tests listed." },
+      { title: "Ask the API Tester", text: "In the AI Agent panel type: '@api-tester import the OpenAPI file docs/openapi.yaml, set up a local environment and run the health checks'. It imports the collection, sends the requests and reports what passed and failed." },
+    ],
+    tips: [
+      "Keep one collection per API with a folder per resource, and set auth once on the collection.",
+      "Put base URLs and credentials in environments, never in the requests; mark tokens Secret.",
+      "Save values from one response for the next request with pm.environment.set in the Tests script.",
+      "Paste a cURL command straight into the URL bar and press Send to turn it into a request.",
+      "Keyboard: Ctrl+Enter send, Ctrl+S save, Alt+T new tab, Alt+W close the tab, Ctrl+/ shortcuts.",
+    ],
+    cautions: [
+      "This is an app inspired by Postman, not Postman: there are no workspaces in the cloud, mock servers, monitors, GraphQL, WebSocket or gRPC requests, and OAuth 2 sign-in flows are not run (paste an access token).",
+      "Requests are real: POST, PUT, PATCH and DELETE change data on the server you send them to.",
+      "Scripts cannot make network calls (pm.sendRequest) or load libraries (require).",
+      "Files attached to form-data or binary bodies are stored inside the collection file, so large files make the repository bigger.",
+      "Values not marked Secret are committed with the collection or environment.",
+    ],
+    agents: { default: "api", base: "api-tester" },
+    shots: [{ file: "api.jpg", caption: "The RESTful API menu: collections with folders and requests in the side bar, request tabs, the URL bar with {{variables}}, the Params table, and the response with status, time, size, pretty JSON and test results; the environment picker is at the top right." }],
   },
   board: {
     summary: "Run workshops on a digital whiteboard: sections, sticky notes, votes, connectors, and live embeds of diagrams, designs and code.",

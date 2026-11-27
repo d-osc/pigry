@@ -19,6 +19,7 @@ import '../extensions/sheet/SheetScreen.css';
 import '../extensions/docs/DocsScreen.css';
 import '../extensions/slides/SlidesScreen.css';
 import '../extensions/notes/NotesScreen.css';
+import '../extensions/api/ApiScreen.css';
 import '../extensions/diagram/DiagramScreen.css';
 import '../screens/explorer/AgentPanelTabs.css';
 import '../screens/explorer/AiAgentPanel.css';

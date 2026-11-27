@@ -5,6 +5,7 @@ import {
   FileText,
   Presentation,
   Lightbulb,
+  Webhook,
   Bot,
   Box,
   Gamepad2,
@@ -54,6 +55,7 @@ export type NavId =
   | 'docs'
   | 'slides'
   | 'notes'
+  | 'api'
   | 'board'
   | 'e2e'
   | 'reports'
@@ -118,6 +120,7 @@ export const workspaceNav: NavItem[] = [
   { id: 'docs', label: 'Docs', icon: FileText, group: 'extension' },
   { id: 'slides', label: 'Slides', icon: Presentation, group: 'extension' },
   { id: 'notes', label: 'Notes', icon: Lightbulb, group: 'extension' },
+  { id: 'api', label: 'RESTful API', icon: Webhook, group: 'extension' },
   { id: 'board', label: 'Board', icon: StickyNote, group: 'extension' },
   { id: 'e2e', label: 'E2E Testing', icon: FlaskConical, group: 'extension' },
   { id: 'reports', label: 'Reports', icon: ClipboardList, group: 'extension' },

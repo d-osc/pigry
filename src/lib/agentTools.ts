@@ -7,7 +7,7 @@
 export interface AgentTool {
   id: string;
   name: string;
-  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Sheet' | 'Docs' | 'Slides' | 'Notes' | 'Board' | 'E2E' | 'Agents';
+  group: 'Files' | 'Search' | 'Terminal' | 'Git' | 'GitHub' | 'Web' | 'Diagram' | 'Design' | 'Drawing' | '3D Model' | 'Game Engine' | 'Video Editor' | 'Audio Editor' | 'Sheet' | 'Docs' | 'Slides' | 'Notes' | 'RESTful API' | 'Board' | 'E2E' | 'Agents';
   description: string;
 }
 
@@ -151,6 +151,16 @@ export const AGENT_TOOLS: AgentTool[] = [
   { id: 'notes_write', name: 'notes_write', group: 'Notes', description: 'Create a notebook, optionally with notes' },
   { id: 'notes_edit', name: 'notes_edit', group: 'Notes', description: 'Add, change, check, label, pin, archive, trash, copy and reorder notes and list items' },
   { id: 'notes_open', name: 'notes_open', group: 'Notes', description: 'Open a notebook or a note in the Notes menu' },
+  // RESTful API (Postman-style collections under .pigry/apis/<agent>/)
+  { id: 'api_list', name: 'api_list', group: 'RESTful API', description: 'List the API collections and environments' },
+  { id: 'api_read', name: 'api_read', group: 'RESTful API', description: 'Read a collection or one request: URL, params, headers, auth, body and scripts' },
+  { id: 'api_write', name: 'api_write', group: 'RESTful API', description: 'Create a collection, or import Postman, OpenAPI or cURL' },
+  { id: 'api_edit', name: 'api_edit', group: 'RESTful API', description: 'Add, change, move, duplicate and delete requests and folders; auth, scripts and variables' },
+  { id: 'api_env', name: 'api_env', group: 'RESTful API', description: 'Create, read, change and select environments and global variables' },
+  { id: 'api_send', name: 'api_send', group: 'RESTful API', description: 'Send an HTTP request and get the status, headers, body and test results' },
+  { id: 'api_run', name: 'api_run', group: 'RESTful API', description: 'Run a collection or folder and collect the test results' },
+  { id: 'api_export', name: 'api_export', group: 'RESTful API', description: 'Export Postman Collection v2.1 JSON or a request as cURL, fetch or Python code' },
+  { id: 'api_open', name: 'api_open', group: 'RESTful API', description: 'Open a collection or a request in the RESTful API menu' },
   // Video Editor (the Video Editor — CapCut-style projects under .pigry/videos/<agent>/)
   { id: 'video_list', name: 'video_list', group: 'Video Editor', description: 'List the video projects saved in the workspace' },
   { id: 'video_read', name: 'video_read', group: 'Video Editor', description: 'Read a video project: format, media, tracks, clips and review warnings' },
@@ -236,7 +246,7 @@ export function saveEnabledTools(enabled: Set<string>) {
 }
 
 /** Groups in display order. */
-export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Slides', 'Notes', 'Board', 'E2E', 'Agents'];
+export const TOOL_GROUPS: AgentTool['group'][] = ['Files', 'Search', 'Terminal', 'Git', 'GitHub', 'Web', 'Diagram', 'Design', 'Drawing', '3D Model', 'Game Engine', 'Video Editor', 'Audio Editor', 'Sheet', 'Docs', 'Slides', 'Notes', 'RESTful API', 'Board', 'E2E', 'Agents'];
 
 export function selectAgentTools(
   tools: ToolSpec[],

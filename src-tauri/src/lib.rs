@@ -49,6 +49,7 @@ mod config;
 mod memory_vector;
 mod devtools;
 mod web;
+mod http_client;
 // Probe/debug tooling reaches into git_state directly.
 pub mod git_state;
 pub mod gitcli;
@@ -346,6 +347,9 @@ pub fn run() {
             commands::memory_remove,
             commands::memory_search,
             commands::web_search,
+            http_client::http_send,
+            http_client::http_cancel,
+            http_client::api_yaml_to_json,
             commands::browser_devtools,
             commands::browser,
             commands::read_pdf_text,

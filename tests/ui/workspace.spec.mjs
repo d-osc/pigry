@@ -62,6 +62,7 @@ test('every workspace menu has a default agent and a mentionable base agent', as
     docs: 'writer',
     slides: 'presenter',
     notes: 'organizer',
+    api: 'api-tester',
     board: 'board-sa',
     e2e: 'e2e-qa',
     reports: 'report-reviewer',
