@@ -14,7 +14,8 @@ import {
   SlidersHorizontal,
   Tag as TagIcon,
 } from 'lucide-react';
-import { commitAvatars, getCommitOidSet, isTauri } from '../../lib/tauriClient';
+import { getCommitOidSet, isTauri } from '../../lib/tauriClient';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import { useRepository } from '../../hooks/useRepository';
 import { useCommitHistory } from '../../hooks/useCommitHistory';
 import { relativeTime } from '../../lib/relativeTime';
@@ -29,20 +30,6 @@ import { FilterDropdown } from '../commit-preview/FilterDropdown';
 import { CommitFilters } from '../commit-preview/CommitListControls';
 import { useCommitTimeRange } from '../commit-preview/commitList';
 import './CommitGraphScreen.css';
-
-/** Muted author avatar tints from the design (cycled by initials). */
-const AVATAR_TONES = [
-  { bg: '#303c55', fg: '#abbcdf' }, // AL
-  { bg: '#393044', fg: '#c8b1d8' }, // MC
-  { bg: '#233c42', fg: '#9bcbd3' }, // SR
-  { bg: '#40372c', fg: '#d7c2a0' }, // JL
-];
-
-export function avatarTone(initials: string) {
-  let hash = 0;
-  for (let i = 0; i < initials.length; i += 1) hash = (hash * 31 + initials.charCodeAt(i)) >>> 0;
-  return AVATAR_TONES[hash % AVATAR_TONES.length];
-}
 
 /** Columns resizable by dragging their header edge (px width; 0 = default).
  *  The message column flexes by default and absorbs whatever space the
@@ -185,61 +172,8 @@ export function CommitGraphScreen({
   /** How many graph rows are rendered before "Show more" (lanes stay
    * correct because each row carries its lane assignment from the walk). */
   const [visibleCount, setVisibleCount] = useState(200);
-  /** Per-repo author email → GitHub profile image url (fetched via gh api). */
-  const [avatarMaps, setAvatarMaps] = useState<Record<string, Record<string, string>>>({});
-  const repoPath = repository?.localPath ?? '';
-  const avatarMap = avatarMaps[repoPath] ?? {};
-  // Fetch GitHub profile images for commit authors (desktop only, 7-day cache,
-  // keyed per repository so switching repos always gets the right authors).
-  useEffect(() => {
-    if (!isTauri() || !repoPath) return;
-    let cancelled = false;
-    const cacheKey = `pigry:avatars:${repoPath}`;
-    Promise.resolve()
-      .then(() => {
-        try {
-          localStorage.removeItem('pigry:avatars'); // legacy global cache
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            const parsed = JSON.parse(cached) as { at: number; map: Record<string, string> };
-            const nonEmpty = parsed.map && Object.keys(parsed.map).length > 0;
-            if (Date.now() - parsed.at < 7 * 24 * 3600 * 1000 && nonEmpty) return parsed.map;
-          }
-        } catch {
-          // cache parse failure — refetch
-        }
-        return null;
-      })
-      .then((cachedMap) => {
-        if (cancelled) return null;
-        if (cachedMap) {
-          setAvatarMaps((prev) => ({ ...prev, [repoPath]: cachedMap }));
-          return null;
-        }
-        return commitAvatars();
-      })
-      .then((list) => {
-        if (cancelled || !list) return;
-        const map: Record<string, string> = {};
-        for (const item of list) map[item.email] = item.avatarUrl;
-        // Empty result is not cached — the next mount retries (gh may have
-        // been signed out or the remote unavailable the first time).
-        if (Object.keys(map).length > 0) {
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), map }));
-          } catch {
-            // storage full — skip persist
-          }
-        }
-        setAvatarMaps((prev) => ({ ...prev, [repoPath]: map }));
-      })
-      .catch(() => {
-        // gh not signed in / no remote — initials fallback
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [repoPath]);
+  /** Author email → GitHub profile image url (gh api, shared 7-day cache). */
+  const avatarMap = useCommitAvatars();
 
   /** Drag-to-resize column widths (px; 0 = column keeps its CSS default). */
   const [colWidths, setColWidths] = useState<Record<ResizableCol, number>>(loadColWidths);
@@ -569,7 +503,6 @@ export function CommitGraphScreen({
           ) : (
             rows.slice(0, visibleCount).map((row) => {
               const selected = row.oid === selectedCommit;
-              const tone = avatarTone(row.authorInitials);
               const toggleCommit = () => {
                 setSelectedCommit(selected ? null : row.oid);
                 if (!selected) shareCommitWithChat({ oid: row.oid, summary: row.summary });
@@ -612,20 +545,7 @@ export function CommitGraphScreen({
                     </span>
                     {columns.author && (
                       <span className="commit-row__author">
-                        {avatarMap[row.authorEmail ?? ''] ? (
-                          <img
-                            className="commit-row__avatar commit-row__avatar--img"
-                            src={avatarMap[row.authorEmail ?? '']}
-                            alt={row.authorName}
-                          />
-                        ) : (
-                          <span
-                            className="commit-row__avatar"
-                            style={{ background: tone.bg, color: tone.fg }}
-                          >
-                            {row.authorInitials}
-                          </span>
-                        )}
+                        <AuthorAvatar row={row} avatarMap={avatarMap} className="commit-row__avatar" />
                         {row.authorName}
                       </span>
                     )}

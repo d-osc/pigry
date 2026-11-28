@@ -39,7 +39,7 @@ import {
 } from '../../lib/codeSearch';
 import { FileTree } from './FileTree';
 import { EditorPane } from './EditorPane';
-import { AiAgentPanel } from './AiAgentPanel';
+import { AiAgentPanel, type EditorPrompt } from './AiAgentPanel';
 import { TerminalPanel, type TerminalPanelHandle } from '../../app/TerminalPanel';
 import { projectStartupCommand } from '../../lib/projectStartup';
 import type { EditorStatusInfo } from '../../app/StatusBar';
@@ -158,6 +158,15 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
     startLine: number;
     endLine: number;
   } | null>(null);
+  // Prompt from an editor AI action (Explain, Generate tests) on its way to the AI Agent panel.
+  const [editorPrompt, setEditorPrompt] = useState<EditorPrompt | null>(null);
+  const handleAskAgent = useCallback((text: string, selection: EditorPrompt['selection']) => {
+    setAiOpen(true);
+    setEditorPrompt((previous) => ({ id: (previous?.id ?? 0) + 1, text, selection }));
+  }, []);
+  const handleEditorPromptSent = useCallback((id: number) => {
+    setEditorPrompt((current) => (current?.id === id ? null : current));
+  }, []);
   // History commit picked in the file-history panel — chat attaches it too.
   const [historySelection, setHistorySelection] = useState<{
     path: string;
@@ -1516,6 +1525,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
                         onSelectionChange={setEditorSelection}
                         onHistorySelect={setHistorySelection}
                         onStatusChange={focused ? handleEditorStatus : undefined}
+                        ignoredPaths={tree?.ignored}
+                        onAskAgent={handleAskAgent}
                       />
                     ) : (
                       <div className="explorer-screen__placeholder">
@@ -1554,6 +1565,8 @@ export function ExplorerScreen({ openPath, onJumpToCommit, onOpenFilePalette, te
               activePath ? (activePath.split('/').pop() ?? activePath) : (repository?.name ?? 'platform')
             }
             selection={editorSelection}
+            editorPrompt={editorPrompt}
+            onEditorPromptSent={handleEditorPromptSent}
             defaultTeam={teamForScreen('explorer')}
             onStartProject={async () => {
               const manifest = await readWorktreeFile('package.json');

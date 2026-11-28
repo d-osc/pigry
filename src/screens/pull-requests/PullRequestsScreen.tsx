@@ -30,6 +30,8 @@ import {
 } from '../../lib/tauriClient';
 import type { GhPrDetail, GhPullRequest } from '../../types/repository';
 import { colorOf, initialsOf, relativeTime, reviewDisplay } from '../../lib/ghData';
+import { LoginAvatar } from '../../lib/AuthorAvatar';
+import { refreshOpenPrCount } from '../../lib/prCount';
 import { NewPullRequest } from './NewPullRequest';
 import { PrCommits } from './PrCommits';
 import { PrFiles } from './PrFiles';
@@ -150,6 +152,8 @@ export function PullRequestsScreen() {
       if (!isCurrent()) return;
       setPrs(list);
       setLive(true);
+      // The side bar badge follows every (re)load of the list.
+      refreshOpenPrCount(repository?.localPath);
       setSyncedAt(Date.now());
       setSelected((current) =>
         list.some((pr) => pr.number === current) ? current : (list[0]?.number ?? null),
@@ -564,9 +568,7 @@ export function PullRequestsScreen() {
                   #{pr.number} · <span className="pr-row__branch">{pr.branch}</span>
                 </div>
                 <div className="pr-row__meta-line">
-                  <span className="pr-row__avatar" style={{ background: pr.author.color }}>
-                    {pr.author.initials}
-                  </span>
+                  <LoginAvatar login={pr.author.name} initials={pr.author.initials} color={pr.author.color} className="pr-row__avatar" />
                   <span className="pr-row__author">{pr.author.name}</span>
                   <span className="pr-row__time">{pr.time}</span>
                 </div>
@@ -669,9 +671,7 @@ export function PullRequestsScreen() {
               <h2 className="pr-detail__title">{d!.title}</h2>
 
               <div className="pr-detail__author-line">
-                <span className="pr-row__avatar" style={{ background: colorOf(d!.author) }}>
-                  {initialsOf(d!.author)}
-                </span>
+                <LoginAvatar login={d!.author} className="pr-row__avatar" />
                 <strong>{d!.author}</strong>
                 <span className="pr-detail__muted">wants to merge</span>
                 <span className="pr-detail__branch pr-detail__branch--base">{d!.baseRef}</span>
@@ -801,12 +801,7 @@ export function PullRequestsScreen() {
                           {d!.comments.map((comment, index) => (
                             <div key={`${comment.author}-${index}`} className="pr-comment">
                               <div className="pr-comment__head">
-                                <span
-                                  className="pr-row__avatar"
-                                  style={{ background: colorOf(comment.author) }}
-                                >
-                                  {initialsOf(comment.author)}
-                                </span>
+                                <LoginAvatar login={comment.author} className="pr-row__avatar" />
                                 <strong>{comment.author}</strong>
                                 <span className="pr-comment__time">{relativeTime(comment.createdAt)}</span>
                               </div>
@@ -853,9 +848,7 @@ export function PullRequestsScreen() {
                     )}
                     {d!.reviews.map((review) => (
                       <div key={`${review.author}-${review.submittedAt}`} className="pr-reviewer">
-                        <span className="pr-row__avatar" style={{ background: colorOf(review.author) }}>
-                          {initialsOf(review.author)}
-                        </span>
+                        <LoginAvatar login={review.author} className="pr-row__avatar" />
                         <div>
                           <p className="pr-reviewer__name">{review.author}</p>
                           <p

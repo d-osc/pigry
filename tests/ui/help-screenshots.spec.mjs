@@ -68,7 +68,9 @@ const PREPARE = {
   'pull-commits': async (page) => { await click(page, page.getByText('feat: highlight matching commits in graph')); },
   'merge-branch': async (page) => { await quiet(page.getByRole('combobox', { name: 'Source branch' }).selectOption({ index: 1 }, { timeout: 2500 })); },
   'compare-branch': async (page) => {
-    await quiet(page.getByRole('combobox', { name: 'Compare branch' }).selectOption('refs/remotes/origin/feat/graph-search', { timeout: 2500 }));
+    await click(page, page.locator('.compare-branch__controls').getByRole('button', { name: 'Compare branch', exact: true }));
+    await quiet(page.getByRole('combobox', { name: 'Search compare branch' }).fill('origin/feat/graph-search', { timeout: 2500 }));
+    await quiet(page.keyboard.press('Enter'));
     await click(page, page.getByRole('button', { name: /commands\.ts/ }));
   },
   'cherry-pick': async (page) => { await click(page, page.locator('.cherry__row')); },

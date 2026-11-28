@@ -10,6 +10,7 @@ import {
   PinOff,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
+import { useOpenPrCount } from '../lib/prCount';
 import { EXTENSIONS_GROUP_LABEL, extensionsNav, workspaceNav, type NavId, type NavItem } from './navigation';
 import { useDisabledMenus, useExtensions, useQuickAccess } from '../hooks/useExtensions';
 import { movePinnedTo, setPinned } from '../lib/quickAccess';
@@ -40,6 +41,7 @@ interface NavSidebarProps {
 
 export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSettings, onCollapse, onOpenGuide, onOpenExtension }: NavSidebarProps) {
   const { repository } = useRepository();
+  const openPrCount = useOpenPrCount(repository?.localPath);
   const [menu, setMenu] = useState<{ x: number; y: number; label: string; entries: CanvasMenuEntry[] } | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [extensionsOpen, setExtensionsOpen] = useState(true);
@@ -126,6 +128,9 @@ export function NavSidebar({ ref, width, activeScreen, onNavigate, onOpenSetting
       )}
       {id === 'pull-commits' && repository.upstream && repository.upstream.behind > 0 && (
         <span className="nav-item__badge">{repository.upstream.behind}</span>
+      )}
+      {id === 'pull-requests' && openPrCount !== null && openPrCount > 0 && (
+        <span className="nav-item__badge" aria-label={`${openPrCount} open pull request${openPrCount === 1 ? '' : 's'}`}>{openPrCount}</span>
       )}
       {id !== 'working-changes' && badge !== undefined && (
         <span className="nav-item__badge">{badge}</span>

@@ -45,6 +45,8 @@ pub struct WikiPageContent {
     pub title: String,
     pub content: String,
     pub author: String,
+    /// Last editor's email — for the byline's profile picture.
+    pub author_email: String,
     pub updated_at: String,
     pub commit_message: String,
 }
@@ -288,27 +290,29 @@ pub fn read(cache_root: &Path, url: &str, file: &str) -> Result<WikiPageContent>
         &[
             "log",
             "-1",
-            "--format=%an%x09%aI%x09%s",
+            "--format=%an%x09%ae%x09%aI%x09%s",
             "--",
             file,
         ],
     );
-    let (author, updated_at, commit_message) = match log {
+    let (author, author_email, updated_at, commit_message) = match log {
         Ok(line) if !line.is_empty() => {
-            let mut parts = line.splitn(3, '\t');
+            let mut parts = line.splitn(4, '\t');
             (
+                parts.next().unwrap_or("").to_string(),
                 parts.next().unwrap_or("").to_string(),
                 parts.next().unwrap_or("").to_string(),
                 parts.next().unwrap_or("").to_string(),
             )
         }
-        _ => (String::new(), String::new(), String::new()),
+        _ => (String::new(), String::new(), String::new(), String::new()),
     };
     Ok(WikiPageContent {
         file: file.to_string(),
         title,
         content,
         author,
+        author_email,
         updated_at,
         commit_message,
     })

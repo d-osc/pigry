@@ -233,21 +233,57 @@ pub fn auth_status(repo_path: &Path) -> Result<GhAuthStatus, String> {
     Ok(GhAuthStatus { logged_in, account })
 }
 
-pub fn pr_list(repo_path: &Path) -> Result<Vec<GhPullRequest>, String> {
+/// Open PRs first, then the recent ones not already listed (by number).
+fn merge_pr_items(open: Vec<serde_json::Value>, recent: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    let number = |item: &serde_json::Value| item.get("number").and_then(|v| v.as_u64());
+    let mut seen: std::collections::HashSet<u64> = open.iter().filter_map(number).collect();
+    let mut items = open;
+    for item in recent {
+        match number(&item) {
+            Some(n) if !seen.insert(n) => {}
+            _ => items.push(item),
+        }
+    }
+    items
+}
+
+/// Number of open pull requests — the side bar badge. Asks only for the
+/// numbers of open PRs, so it isn't capped by the Pull requests list's
+/// "latest 50 of every state" window.
+pub fn open_pr_count(repo_path: &Path) -> Result<usize, String> {
     let out = run_gh(
         repo_path,
-        &[
-            "pr",
-            "list",
-            "--state",
-            "all",
-            "--limit",
-            "50",
-            "--json",
-            "number,title,state,isDraft,headRefName,baseRefName,author,updatedAt,url,reviewDecision,statusCheckRollup,comments,labels",
-        ],
+        &["pr", "list", "--state", "open", "--limit", "1000", "--json", "number"],
     )?;
-    let items: Vec<serde_json::Value> = serde_json::from_str(&out).map_err(|e| e.to_string())?;
+    count_json_items(&out)
+}
+
+fn count_json_items(out: &str) -> Result<usize, String> {
+    let value: serde_json::Value = serde_json::from_str(out).map_err(|e| e.to_string())?;
+    value
+        .as_array()
+        .map(|items| items.len())
+        .ok_or_else(|| "unexpected gh pr list response".to_string())
+}
+
+const PR_LIST_FIELDS: &str =
+    "number,title,state,isDraft,headRefName,baseRefName,author,updatedAt,url,reviewDecision,statusCheckRollup,comments,labels";
+
+/// Every open pull request plus the 50 most recent of any state. The recent
+/// window alone (gh sorts by creation date) hides older PRs that are still
+/// open, so the Open tab would undercount them.
+pub fn pr_list(repo_path: &Path) -> Result<Vec<GhPullRequest>, String> {
+    let open = run_gh(
+        repo_path,
+        &["pr", "list", "--state", "open", "--limit", "1000", "--json", PR_LIST_FIELDS],
+    )?;
+    let recent = run_gh(
+        repo_path,
+        &["pr", "list", "--state", "all", "--limit", "50", "--json", PR_LIST_FIELDS],
+    )?;
+    let open: Vec<serde_json::Value> = serde_json::from_str(&open).map_err(|e| e.to_string())?;
+    let recent: Vec<serde_json::Value> = serde_json::from_str(&recent).map_err(|e| e.to_string())?;
+    let items = merge_pr_items(open, recent);
     let mut result = Vec::new();
     for item in items {
         let rollup = item.get("statusCheckRollup").and_then(|v| v.as_array());
@@ -2583,3 +2619,27 @@ mod pr_create_tests {
     }
 }
 
+#[cfg(test)]
+mod open_pr_count_tests {
+    use super::{count_json_items, merge_pr_items};
+
+    #[test]
+    fn pr_list_keeps_old_open_prs_outside_the_recent_window() {
+        let open = serde_json::json!([{"number":122,"state":"OPEN"},{"number":10,"state":"OPEN"}]);
+        let recent = serde_json::json!([{"number":122,"state":"OPEN"},{"number":121,"state":"MERGED"}]);
+        let merged = merge_pr_items(
+            open.as_array().unwrap().clone(),
+            recent.as_array().unwrap().clone(),
+        );
+        let numbers: Vec<u64> = merged.iter().map(|item| item["number"].as_u64().unwrap()).collect();
+        assert_eq!(numbers, vec![122, 10, 121]);
+    }
+
+    #[test]
+    fn counts_the_open_pull_requests_gh_returns() {
+        assert_eq!(count_json_items("[]").unwrap(), 0);
+        assert_eq!(count_json_items(r#"[{"number":122},{"number":114}]"#).unwrap(), 2);
+        assert!(count_json_items("{}").is_err());
+        assert!(count_json_items("not json").is_err());
+    }
+}

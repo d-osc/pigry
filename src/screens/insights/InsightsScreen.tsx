@@ -21,6 +21,7 @@ import type {
   InsightsWeek,
 } from '../../types/repository';
 import { initialsOf, colorOf, relativeTime } from '../../lib/ghData';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import './InsightsScreen.css';
 
 const MONTHS = [
@@ -103,6 +104,7 @@ function SkeletonBlock({ rows = 5 }: { rows?: number }) {
 }
 
 export function InsightsScreen() {
+  const avatarMap = useCommitAvatars();
   const [days, setDays] = useState(28);
   const [rangeOpen, setRangeOpen] = useState(false);
   const rangeRef = useRef<HTMLDivElement>(null);
@@ -430,9 +432,12 @@ export function InsightsScreen() {
             return (
               <div key={person.name} className="insights-contributor">
                 <span className="insights-contributor__name">
-                  <span className="insights-contributor__avatar" style={{ background: colorOf(person.name) }}>
-                    {initialsOf(person.name)}
-                  </span>
+                  <AuthorAvatar
+                    author={{ name: person.name, email: person.email, initials: initialsOf(person.name) }}
+                    avatarMap={avatarMap}
+                    className="insights-contributor__avatar"
+                    style={{ background: colorOf(person.name) }}
+                  />
                   {person.name}
                 </span>
                 <span>{fmtInt(person.commits)}</span>
@@ -590,9 +595,12 @@ export function InsightsScreen() {
             return (
               <div key={person.name} className="insights-contributor">
                 <span className="insights-contributor__name">
-                  <span className="insights-contributor__avatar" style={{ background: colorOf(person.name) }}>
-                    {initialsOf(person.name)}
-                  </span>
+                  <AuthorAvatar
+                    author={{ name: person.name, email: person.email, initials: initialsOf(person.name) }}
+                    avatarMap={avatarMap}
+                    className="insights-contributor__avatar"
+                    style={{ background: colorOf(person.name) }}
+                  />
                   {person.name}
                 </span>
                 <span>{fmtInt(person.commits)}</span>

@@ -1586,6 +1586,16 @@ interface AiAgentPanelProps {
   historySelection?: { path: string; oid: string } | null;
   /** Items selected in a canvas editor (Design layers, Diagram shapes) — shown as chips and sent with the next message. */
   canvasSelection?: CanvasSelection | null;
+  /** A prompt from the editor's AI actions (Explain, Generate tests), sent as soon as it arrives with its own
+   * selection; `onEditorPromptSent` lets the owner drop it so a remount doesn't send it twice. */
+  editorPrompt?: EditorPrompt | null;
+  onEditorPromptSent?: (id: number) => void;
+}
+
+export interface EditorPrompt {
+  id: number;
+  text: string;
+  selection: { path: string; text: string; startLine: number; endLine: number } | null;
 }
 
 /** One selected canvas item: identity plus an outline of it for the model. */
@@ -3022,7 +3032,7 @@ async function summarizeAgentMemory(
     }
   }
 
-export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection, onStartProject, canvasSelection }: AiAgentPanelProps) {
+export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTeam, onOpenFile, historySelection, onStartProject, canvasSelection, editorPrompt, onEditorPromptSent }: AiAgentPanelProps) {
   const { repository, state, notify } = useRepository();
   // Chats and memories live under this team's .pigry/teams/<team>/ store.
   const team = defaultTeam ?? 'Copilot';
@@ -3387,6 +3397,8 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const sessionsRef = useRef<HTMLDivElement | null>(null);
   /** Creation time of the current session (preserved across saves). */
   const createdAtRef = useRef(now());
+  /** The saved chat has been restored — an editor prompt waits for it so the restore cannot replace it. */
+  const [restoreDone, setRestoreDone] = useState(false);
 
   // One-shot restore: active session, else the newest, else a fresh id.
   useEffect(() => {
@@ -3412,7 +3424,9 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
         setMessages(restored.messages);
       }
       setSessionList(sessions);
-    })();
+    })().catch(() => undefined).finally(() => {
+      if (!cancelled) setRestoreDone(true);
+    });
     return () => {
       cancelled = true;
     };
@@ -3648,8 +3662,12 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
     setAttachedFiles((current) => current.filter((file) => file.path !== path));
   };
 
-  const send = async () => {
-    const text = input.trim();
+  /** Sends the composer text, or `request` (a prompt from the editor's AI actions with its own selection;
+   * the composer draft is left as it is). */
+  const send = async (editorRequest?: { text: string; selection: AiAgentPanelProps['selection'] }) => {
+    const text = (editorRequest?.text ?? input).trim();
+    const sendSelection = editorRequest ? editorRequest.selection ?? null : activeSelection;
+    const sendRailSelection = editorRequest ? null : activeRailSelection;
     if (!text || sending || startingProject) return;
     if (onStartProject && isProjectStartRequest(text)) {
       const request: ChatMessage = { role: 'user', text, time: now(), owner: ownerName, agent: agentUsername };
@@ -3705,7 +3723,7 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
 
     const context = await buildMessageContext({
       text, team, target, repositoryPath: repository?.localPath ?? '.',
-      activeSelection, activeHistory, activeRailCommit, activeRailSelection, attachedFiles, activeLayers,
+      activeSelection: sendSelection, activeHistory, activeRailCommit, activeRailSelection: sendRailSelection, attachedFiles, activeLayers,
     });
 
     const userMessage: ChatMessage = {
@@ -3715,30 +3733,32 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
       owner: ownerName,
       agent: target?.username ?? agentUsername,
       context,
-      selection: activeSelection
+      selection: sendSelection
         ? {
-            path: activeSelection.path,
-            startLine: activeSelection.startLine,
-            endLine: activeSelection.endLine,
-            text: activeSelection.text.slice(0, 8000),
+            path: sendSelection.path,
+            startLine: sendSelection.startLine,
+            endLine: sendSelection.endLine,
+            text: sendSelection.text.slice(0, 8000),
           }
-        : activeRailSelection
+        : sendRailSelection
           ? {
-              path: activeRailSelection.path ?? activeRailSelection.source,
+              path: sendRailSelection.path ?? sendRailSelection.source,
               startLine: 1,
-              endLine: activeRailSelection.text.split('\n').length,
-              text: activeRailSelection.text.slice(0, 8000),
+              endLine: sendRailSelection.text.split('\n').length,
+              text: sendRailSelection.text.slice(0, 8000),
             }
           : null,
-      images: images.map((image) => image.dataUrl),
+      images: editorRequest ? [] : images.map((image) => image.dataUrl),
       ...(activeLayers ? { layers: activeLayers.items.map(({ id, name, type }) => ({ id, name, type })) } : {}),
     };
     const history = [...messages, userMessage];
     setMessages(history);
-    composerHistory.current = null;
-    setInput('');
-    setImages([]);
-    closeMention();
+    if (!editorRequest) {
+      composerHistory.current = null;
+      setInput('');
+      setImages([]);
+      closeMention();
+    }
     const coder = defensiveHandoff(text, mentioned);
     if (chatMode === 'goal' || coder || (mentioned.length <= 1 && (remediationAgent(target) || target?.username === 'coder' || target?.username === 'copilot-coder'))) {
       await doSend(history, target, 0, coder, chatMode === 'goal');
@@ -3796,6 +3816,22 @@ export function AiAgentPanel({ fileName, width, onCollapse, selection, defaultTe
   const doSendParallel = (...args: Parameters<ReturnType<typeof createAgentTurnRunner>['doSendParallel']>) =>
     runForegroundTurn((runner) => runner.doSendParallel(...args));
   const runIsolatedTurn: ReturnType<typeof createAgentTurnRunner>['runIsolatedTurn'] = (...args) => turnRunner().runIsolatedTurn(...args);
+
+  // Editor AI actions hand their prompt over once; it goes out on the next tick.
+  const sendEditorPrompt = useEffectEvent((prompt: EditorPrompt) => {
+    onEditorPromptSent?.(prompt.id);
+    if (sending || startingProject) {
+      setInput(prompt.text);
+      return;
+    }
+    void send({ text: prompt.text, selection: prompt.selection });
+  });
+  useEffect(() => {
+    // wait for the chat restore: a restore landing after the send would replace the new message
+    if (!editorPrompt || !restoreDone) return;
+    const timer = window.setTimeout(() => sendEditorPrompt(editorPrompt), 0);
+    return () => window.clearTimeout(timer);
+  }, [editorPrompt, restoreDone]);
 
   const handoffStartupFailure = useEffectEvent(() => {
     const failure = startupFailures[0];

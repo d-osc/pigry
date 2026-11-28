@@ -26,6 +26,7 @@ import {
 } from '../../lib/tauriClient';
 import { extractHeadings, renderMarkdown } from '../../lib/markdown';
 import { colorOf, formatDate, initialsOf, relativeTime } from '../../lib/ghData';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import { useRepository } from '../../hooks/useRepository';
 import type { WikiCommit, WikiPage, WikiPageContent, WikiStatus } from '../../types/repository';
 import './WikiScreen.css';
@@ -49,7 +50,21 @@ function toFileName(title: string): string {
   return base.toLowerCase().endsWith('.md') ? base : `${base}.md`;
 }
 
+/** The page's last editor: their picture over the login-colored initials. */
+function WikiAuthorAvatar({ page, avatarMap }: { page: WikiPageContent; avatarMap: Record<string, string> }) {
+  const name = page.author || '?';
+  return (
+    <AuthorAvatar
+      author={{ name, email: page.authorEmail, initials: initialsOf(name) }}
+      avatarMap={avatarMap}
+      className="wiki-article__avatar"
+      style={{ background: colorOf(name) }}
+    />
+  );
+}
+
 export function WikiScreen() {
+  const avatarMap = useCommitAvatars();
   const listGate = useRequestGate();
   const { notify } = useRepository();
   const [pagesWidth, setPagesWidth] = useState(240);
@@ -433,9 +448,7 @@ export function WikiScreen() {
 
               <h1 className="wiki-article__title">{page.title}</h1>
               <p className="wiki-article__byline">
-                <span className="wiki-article__avatar" style={{ background: colorOf(page.author || '?') }}>
-                  {initialsOf(page.author || '?')}
-                </span>
+                <WikiAuthorAvatar page={page} avatarMap={avatarMap} />
                 {page.author ? (
                   <>
                     <strong>{page.author}</strong> edited {relativeTime(page.updatedAt)}
@@ -499,12 +512,7 @@ export function WikiScreen() {
               <div className="wiki-toc__divider" />
               <p className="wiki-toc__label">Maintained by</p>
               <div className="wiki-toc__row">
-                <span
-                  className="wiki-article__avatar"
-                  style={{ background: colorOf(page.author || '?') }}
-                >
-                  {initialsOf(page.author || '?')}
-                </span>
+                <WikiAuthorAvatar page={page} avatarMap={avatarMap} />
                 <span>{page.author || '—'}</span>
               </div>
               <p className="wiki-toc__file">{page.file}</p>

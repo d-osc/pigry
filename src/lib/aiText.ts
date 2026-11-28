@@ -69,6 +69,8 @@ export async function completeText(
   { provider, model, used, effort }: ChatTarget,
   prompt: string,
   minTokens = 400,
+  /** `maxTokens` caps the answer (short answers like editor completions come back sooner). */
+  { maxTokens }: { maxTokens?: number } = {},
 ): Promise<string> {
   if (isCliProvider(provider)) {
     // The provider type IS the CLI binary (claude-code → claude, zcode-cli → zcode).
@@ -89,7 +91,7 @@ export async function completeText(
   const tokenLimit = maxOutputTokenPayload(
     provider.apiFormat,
     endpoint,
-    knownLimit ?? (isAnthropic ? Math.max(minTokens, 4096) : undefined),
+    maxTokens ? Math.min(maxTokens, knownLimit ?? maxTokens) : knownLimit ?? (isAnthropic ? Math.max(minTokens, 4096) : undefined),
   );
   const effortParams = effortPayloadFragment(effort, entry?.reasoningMapping ?? matchModelSpec(model)?.reasoningMapping) ?? {};
   const messages = [{ role: 'user', content: prompt }];

@@ -29,7 +29,8 @@ import {
   ghIssueView,
   ghOpenUrl,
 } from '../../lib/tauriClient';
-import { colorOf, initialsOf, labelTone, relativeTime } from '../../lib/ghData';
+import { labelTone, relativeTime } from '../../lib/ghData';
+import { LoginAvatar } from '../../lib/AuthorAvatar';
 import { useRepository } from '../../hooks/useRepository';
 import type { GhIssue, GhIssueDetail } from '../../types/repository';
 import './IssuesScreen.css';
@@ -546,9 +547,7 @@ export function IssuesScreen() {
                       <MessageSquare size={11} strokeWidth={1.5} />
                       {issue.comments}
                     </span>
-                    <span className="issue-row__avatar" style={{ background: colorOf(assignee) }}>
-                      {initialsOf(assignee)}
-                    </span>
+                    <LoginAvatar login={assignee} className="issue-row__avatar" />
                   </div>
                 </button>
               );
@@ -697,12 +696,7 @@ export function IssuesScreen() {
                         )}
                         {d!.comments.map((comment, index) => (
                           <div key={`${comment.author}-${index}`} className="issue-comment">
-                            <span
-                              className="issue-comment__avatar"
-                              style={{ background: colorOf(comment.author) }}
-                            >
-                              {initialsOf(comment.author)}
-                            </span>
+                            <LoginAvatar login={comment.author} className="issue-comment__avatar" size={64} />
                             <div>
                               <p className="issue-comment__head">
                                 <strong>{comment.author}</strong> commented{' '}
@@ -779,9 +773,7 @@ export function IssuesScreen() {
                     )}
                     {detailAssignees.map((name) => (
                       <div key={name} className="issue-rail-row">
-                        <span className="issue-rail-row__avatar" style={{ background: colorOf(name) }}>
-                          {initialsOf(name)}
-                        </span>
+                        <LoginAvatar login={name} className="issue-rail-row__avatar" />
                         {name}
                       </div>
                     ))}
@@ -808,9 +800,7 @@ export function IssuesScreen() {
                   <section>
                     <h4>Author</h4>
                     <div className="issue-rail-row">
-                      <span className="issue-rail-row__avatar" style={{ background: colorOf(d!.author) }}>
-                        {initialsOf(d!.author)}
-                      </span>
+                      <LoginAvatar login={d!.author} className="issue-rail-row__avatar" />
                       {d!.author || 'Unknown'}
                     </div>
                   </section>

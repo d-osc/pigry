@@ -1,5 +1,5 @@
 import { mayReloadBuffer, savedBufferIsDirty } from '../../lib/editorBuffer';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Monaco } from '@monaco-editor/react';
 import { Editor } from '../../editor/ThemedEditors';
 import type { editor as MonacoEditorNS } from 'monaco-editor';
@@ -23,6 +23,10 @@ import type { EditorStatusInfo } from '../../app/StatusBar';
 import { FileViewer, MarkdownViewer, SvgViewer, fileKindFor, type ViewerKind, type BinaryContent } from './FileViewers';
 import { ComparePanel } from './ComparePanel';
 import '../../editor/monacoSetup';
+import { attachInlineCompletions, hideInlineCompletion } from '../../editor/inlineCompletions';
+import { useInlineEdit } from '../../editor/useInlineEdit';
+import { agentPromptFor, aiSkipReason, CODE_ACTION_INSTRUCTIONS } from '../../lib/inlineAi';
+import { completionSettings, subscribeCompletionSettings } from '../../lib/inlineAiClient';
 import './EditorPane.css';
 import './FileViewers.css';
 
@@ -49,6 +53,10 @@ interface EditorPaneProps {
   /** Reports this pane's live info to the merged status bar (focused group
    * only — undefined while another group is focused). */
   onStatusChange?: (status: EditorStatusInfo | null) => void;
+  /** Git-ignored entries of the workspace tree: AI help never sends these files. */
+  ignoredPaths?: readonly string[];
+  /** Sends a prompt (with the selected code) to the AI Agent panel — the editor's Explain / Generate tests actions. */
+  onAskAgent?: (text: string, selection: { path: string; text: string; startLine: number; endLine: number }) => void;
 }
 
 function editorPrefs(): {
@@ -93,6 +101,8 @@ export function EditorPane({
   onSelectionChange,
   onHistorySelect,
   onStatusChange,
+  ignoredPaths,
+  onAskAgent,
 }: EditorPaneProps) {
   const { refresh, busy, repository, notify } = useRepository();
   const [entry, setEntry] = useState<{
@@ -165,6 +175,7 @@ export function EditorPane({
     return () => window.removeEventListener('pigry:editor-prefs', onPrefs);
   }, [editorInstance]);
   const monacoRef = useRef<Monaco | null>(null);
+  const [monacoApi, setMonacoApi] = useState<Monaco | null>(null);
   const decorationsRef = useRef<MonacoEditorNS.IEditorDecorationsCollection | null>(null);
   const draftRef = useRef(draft);
   const currentPath = useRef(path);
@@ -441,6 +452,88 @@ export function EditorPane({
   const pendingRestore = restoreAsk?.path === path ? restoreAsk.commit : null;
   // Live info for the merged status bar — reported while this pane is the
   // focused group; the callback flips to undefined when focus moves away.
+  // AI help (ghost text, Ctrl+I, editor AI actions): never for secret, ignored, binary or huge files.
+  const aiSkip = entry?.path === path
+    ? aiSkipReason({ path, size: draft.length, binary: entry.content.binary, tooLarge: entry.content.tooLarge, ignored: ignoredPaths })
+    : aiSkipReason({ path, size: 0, ignored: ignoredPaths });
+  const aiSkipRef = useRef(aiSkip);
+  const askAgentRef = useRef(onAskAgent);
+  const aiFile = useMemo(
+    () => ({ path, language: languageLabel, skipReason: () => aiSkipRef.current }),
+    [path, languageLabel],
+  );
+  useLayoutEffect(() => {
+    aiSkipRef.current = aiSkip;
+    askAgentRef.current = onAskAgent;
+  }, [aiSkip, onAskAgent]);
+  const aiSettings = useSyncExternalStore(subscribeCompletionSettings, completionSettings);
+  const inlineEdit = useInlineEdit(editorInstance, monacoApi, aiFile);
+  const openInlineEditRef = useRef(inlineEdit.open);
+  useLayoutEffect(() => {
+    openInlineEditRef.current = inlineEdit.open;
+  });
+  useEffect(() => {
+    if (!editorInstance || !monacoApi) return;
+    const handle = attachInlineCompletions(monacoApi, editorInstance, {
+      path: () => aiFile.path,
+      language: () => aiFile.language,
+      skipReason: aiFile.skipReason,
+    });
+    return () => handle.dispose();
+  }, [editorInstance, monacoApi, aiFile]);
+  useEffect(() => {
+    if (editorInstance && !aiSettings.enabled) hideInlineCompletion(editorInstance);
+  }, [editorInstance, aiSettings.enabled]);
+  // Ctrl+I and the editor context menu's AI actions.
+  useEffect(() => {
+    if (!editorInstance || !monacoApi) return;
+    const selectionInfo = () => {
+      const model = editorInstance.getModel();
+      const sel = editorInstance.getSelection();
+      if (!model || !sel || sel.isEmpty()) return null;
+      return { path, text: model.getValueInRange(sel), startLine: sel.startLineNumber, endLine: sel.endLineNumber };
+    };
+    const blocked = () => {
+      const skip = aiSkipRef.current;
+      if (skip) notify(`AI is off for this file (${skip}).`, 'error');
+      return !!skip;
+    };
+    const ask = (action: 'explain' | 'tests') => {
+      const selection = selectionInfo();
+      if (!selection || blocked()) return;
+      askAgentRef.current?.(agentPromptFor(action, path, selection.startLine, selection.endLine), selection);
+    };
+    const actions = [
+      editorInstance.addAction({
+        id: 'pigry.ai.inlineEdit', label: 'AI: Edit with Instruction…',
+        keybindings: [monacoApi.KeyMod.CtrlCmd | monacoApi.KeyCode.KeyI],
+        contextMenuGroupId: '0_ai', contextMenuOrder: 1,
+        run: () => openInlineEditRef.current(),
+      }),
+      editorInstance.addAction({
+        id: 'pigry.ai.explain', label: 'AI: Explain', precondition: 'editorHasSelection',
+        contextMenuGroupId: '0_ai', contextMenuOrder: 2,
+        run: () => ask('explain'),
+      }),
+      editorInstance.addAction({
+        id: 'pigry.ai.fix', label: 'AI: Fix', precondition: 'editorHasSelection',
+        contextMenuGroupId: '0_ai', contextMenuOrder: 3,
+        run: () => openInlineEditRef.current(CODE_ACTION_INSTRUCTIONS.fix, true),
+      }),
+      editorInstance.addAction({
+        id: 'pigry.ai.document', label: 'AI: Add Comments', precondition: 'editorHasSelection',
+        contextMenuGroupId: '0_ai', contextMenuOrder: 4,
+        run: () => openInlineEditRef.current(CODE_ACTION_INSTRUCTIONS.document, true),
+      }),
+      editorInstance.addAction({
+        id: 'pigry.ai.tests', label: 'AI: Generate Tests', precondition: 'editorHasSelection',
+        contextMenuGroupId: '0_ai', contextMenuOrder: 5,
+        run: () => ask('tests'),
+      }),
+    ];
+    return () => actions.forEach((action) => action.dispose());
+  }, [editorInstance, monacoApi, path, notify]);
+
   useEffect(() => {
     if (!onStatusChange) return;
     onStatusChange({
@@ -449,8 +542,9 @@ export function EditorPane({
       column: cursor.column,
       language: languageLabel,
       dirty,
+      aiSkip,
     });
-  }, [onStatusChange, cursor, path, languageLabel, dirty]);
+  }, [onStatusChange, cursor, path, languageLabel, dirty, aiSkip]);
   const symbolName = useMemo(() => {
     const name = path.split('/').pop() ?? '';
     const base = name.replace(/\.[^.]+$/, '');
@@ -779,6 +873,7 @@ export function EditorPane({
             onMount={(editor, monaco) => {
               setEditorInstance(editor);
               monacoRef.current = monaco;
+              setMonacoApi(monaco);
               editor.onDidChangeCursorPosition((event) =>
                 setCursor({ line: event.position.lineNumber, column: event.position.column }),
               );
@@ -811,9 +906,11 @@ export function EditorPane({
                 useShadows: false,
               },
               stickyScroll: { enabled: false },
+              inlineSuggest: { enabled: true, showToolbar: 'onHover' },
             }}
           />
         )}
+        {inlineEdit.portal}
       </div>
 
       {compareOn && entry && (

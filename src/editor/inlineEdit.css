@@ -1,0 +1,124 @@
+/* Ctrl+I inline edit: region highlight, red old lines, and the panel under them. */
+.inline-edit-region {
+  background: var(--accent-tint-1);
+}
+
+.inline-edit-removed {
+  background: var(--red-tint);
+}
+
+.inline-edit-host {
+  top: 0;
+  left: 0;
+  height: 0;
+  overflow: visible;
+  z-index: 5;
+}
+
+.inline-edit {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 2px 0;
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 18%);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.inline-edit__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 6px 0 8px;
+  color: var(--text-secondary);
+}
+
+.inline-edit__input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--fs-sm);
+}
+
+.inline-edit__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.inline-edit__button {
+  height: 24px;
+  padding: 0 10px;
+  gap: 4px;
+  font-size: var(--fs-xs);
+}
+
+.inline-edit__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.inline-edit__used,
+.inline-edit__status {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.inline-edit__close {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.inline-edit__close:hover {
+  background: var(--button-default-hover);
+  color: var(--text-primary);
+}
+
+.inline-edit__spin {
+  animation: inline-edit-spin 0.9s linear infinite;
+}
+
+@keyframes inline-edit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.inline-edit__error {
+  padding: 0 10px 6px;
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+
+.inline-edit__added {
+  margin: 0 0 4px;
+  padding: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.inline-edit__line {
+  padding: 0 10px;
+  white-space: pre;
+  background: var(--green-tint);
+  color: var(--text-primary);
+}

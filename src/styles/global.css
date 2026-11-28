@@ -529,8 +529,30 @@ textarea {
   flex-shrink: 0;
 }
 
-.commit-avatar--img {
+/* Shared AuthorAvatar: the screen's own avatar class sets size and shape;
+   the picture sits over the initials and only shows once it has loaded. */
+.author-avatar {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.author-avatar__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  border-radius: inherit;
+  opacity: 0;
+}
+
+.author-avatar--loaded .author-avatar__img {
+  opacity: 1;
+}
+
+.author-avatar--loaded .author-avatar__initials {
+  visibility: hidden;
 }
 
 /* Context-window ring indicator (CtxRing) — tone classes color both the

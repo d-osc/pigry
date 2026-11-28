@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, Check, Copy, KeyRound, Loader2, LogIn, LogOut, Search, X } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { PigryMark } from '../../app/PigryMark';
@@ -9,6 +9,9 @@ import { readThemePreference, writeThemePreference, type ThemePreference } from 
 import { ProviderManager } from './ProviderManager';
 import { ImportAgentsPanel } from './ImportAgentsPanel';
 import { IMPORT_AGENTS_ENABLED } from '../../lib/featureFlags';
+import {
+  completionModelChoices, completionSettings, setCompletionSettings, subscribeCompletionSettings,
+} from '../../lib/inlineAiClient';
 import { InstalledExtensionsPanel } from '../extensions/InstalledExtensionsPanel';
 import appPackage from '../../../package.json';
 import type { GhAccount } from '../../types/repository';
@@ -132,6 +135,8 @@ export function AppSettingsScreen({
   });
   const [minimap, setMinimap] = useState(() => readBool('pigry:editor-minimap', false));
   const [lineNumbers, setLineNumbers] = useState(() => readBool('pigry:editor-line-numbers', true));
+  const aiCompletions = useSyncExternalStore(subscribeCompletionSettings, completionSettings);
+  const aiModels = completionModelChoices();
 
   // GitHub access
   const [token, setToken] = useState(() => {
@@ -546,7 +551,9 @@ export function AppSettingsScreen({
     rowMatch('font ligatures', 'arrow =>') ||
     rowMatch('tab size', 'indent spaces') ||
     rowMatch('minimap', 'overview code map') ||
-    rowMatch('line numbers', 'gutter');
+    rowMatch('line numbers', 'gutter') ||
+    rowMatch('ai completions', 'copilot ghost text inline suggestions autocomplete') ||
+    rowMatch('ai completion model', 'copilot model provider');
   const aiMatch = rowMatch('ai provider', 'model base url api key openai anthropic ollama custom');
   const importMatch = rowMatch('import from other agents', 'claude code codex antigravity gemini agy skills instructions mcp servers claude.md agents.md migrate');
   const extensionsMatch = rowMatch('extensions', 'extension pack install plugin agents skills hooks mcp servers marketplace');
@@ -807,6 +814,53 @@ export function AppSettingsScreen({
                     />
                     <i />
                   </label>
+                </div>
+              )}
+
+              {rowMatch('ai completions', 'copilot ghost text inline suggestions autocomplete') && (
+                <div className="app-settings__row">
+                  <strong>Editor: AI Completions</strong>
+                  <span>
+                    Suggest code as you type, like Copilot, from your AI provider. Tab accepts, Esc dismisses, Ctrl+→ accepts
+                    one word, and Ctrl+I edits the selection. .env, key and other secret-looking files, git-ignored, binary and
+                    very large files are never sent.
+                  </span>
+                  <label className="app-settings__switch">
+                    <input
+                      type="checkbox"
+                      aria-label="AI completions"
+                      checked={aiCompletions.enabled}
+                      onChange={(event) => setCompletionSettings({ enabled: event.target.checked })}
+                    />
+                    <i />
+                  </label>
+                </div>
+              )}
+
+              {rowMatch('ai completion model', 'copilot model provider') && (
+                <div className="app-settings__row">
+                  <strong>Editor: AI Completion Model</strong>
+                  <span>
+                    {!aiModels
+                      ? 'Connect a provider in AI Provider first.'
+                      : aiModels.models.length > 1
+                        ? `Model for ghost text from ${aiModels.provider}. A small, fast model works best.`
+                        : `${aiModels.provider} has one model, so completions use it.`}
+                  </span>
+                  <select
+                    className="app-settings__control"
+                    aria-label="AI completion model"
+                    value={aiModels?.models.includes(aiCompletions.model) ? aiCompletions.model : ''}
+                    disabled={!aiModels || aiModels.models.length < 2}
+                    onChange={(event) => setCompletionSettings({ model: event.target.value })}
+                  >
+                    <option value="">Same as chat{aiModels?.current ? ` (${aiModels.current})` : ''}</option>
+                    {(aiModels?.models ?? []).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </section>

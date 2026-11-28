@@ -629,8 +629,9 @@ pub struct BranchComparison {
 pub fn compare_branches(repo_path: &Path, base_ref: &str, compare_ref: &str) -> Result<BranchComparison> {
     let repo = git2::Repository::discover(repo_path).map_err(err)?;
     let resolve = |name: &str| {
-        if !name.starts_with("refs/heads/") && !name.starts_with("refs/remotes/") {
-            return Err(format!("Invalid branch reference: {name}"));
+        // Branches and tags only (annotated tags peel to the commit they point at).
+        if !["refs/heads/", "refs/remotes/", "refs/tags/"].iter().any(|prefix| name.starts_with(prefix)) {
+            return Err(format!("Invalid branch or tag reference: {name}"));
         }
         repo.find_reference(name)
             .and_then(|reference| reference.peel_to_commit())

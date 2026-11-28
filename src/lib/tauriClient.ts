@@ -163,6 +163,12 @@ export async function ghPrList(): Promise<GhPullRequest[]> {
   return invoke('gh_pr_list');
 }
 
+/** How many pull requests are open (gh) — the side bar badge. */
+export async function ghOpenPrCount(): Promise<number> {
+  if (!isTauri()) throw new Error('Pull request count requires the desktop app');
+  return invoke<number>('gh_open_pr_count');
+}
+
 // ---- GitHub Actions (workflow runs via gh) ----
 
 export async function ghWorkflowList(): Promise<GhWorkflow[]> {

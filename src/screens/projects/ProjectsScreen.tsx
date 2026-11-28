@@ -32,7 +32,8 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { ghOpenUrl, ghProjectItemList, ghProjectList } from '../../lib/tauriClient';
-import { colorOf, initialsOf, relativeTime } from '../../lib/ghData';
+import { relativeTime } from '../../lib/ghData';
+import { LoginAvatar } from '../../lib/AuthorAvatar';
 import { useRepository } from '../../hooks/useRepository';
 import type { GhProject, GhProjectItem } from '../../types/repository';
 import './ProjectsScreen.css';
@@ -83,14 +84,7 @@ function parseDay(iso: string): number | null {
 
 function Avatar({ login, size = 20 }: { login: string; size?: number }) {
   return (
-    <span
-      className="projects__avatar"
-      style={{ width: size, height: size, background: colorOf(login) }}
-      title={login}
-      aria-hidden="true"
-    >
-      {initialsOf(login)}
-    </span>
+    <LoginAvatar login={login} className="projects__avatar" style={{ width: size, height: size }} size={size * 2} />
   );
 }
 

@@ -18,7 +18,7 @@ const SECTIONS: Record<CheckoutRefInfo['kind'], string> = { local: 'Branches', r
 const MAX_ROWS = 400;
 
 /** What the app state already knows, shown until (or if) the full list cannot be loaded. */
-function refsFromState(repository: RepositoryState): CheckoutRefInfo[] {
+export function refsFromState(repository: RepositoryState): CheckoutRefInfo[] {
   const base = { shortOid: '', subject: '', timeSeconds: 0, isHead: false, remote: null, branch: null };
   return [
     ...repository.branches.map((b) => ({ ...base, kind: 'local' as const, name: b.name, isHead: b.isHead, shortOid: b.oid?.slice(0, 7) ?? '' })),

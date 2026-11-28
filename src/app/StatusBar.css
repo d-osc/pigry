@@ -302,3 +302,40 @@
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
+
+/* AI completions toggle (Explorer editor): accent when on, dimmed when off or skipped for the file. */
+.status-bar__ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+}
+
+.status-bar__ai--on {
+  color: var(--accent);
+}
+
+.status-bar__ai--skipped {
+  opacity: 0.6;
+}
+
+.status-bar__ai:hover {
+  color: var(--text-primary);
+}
+
+.status-bar__ai-spin {
+  animation: status-bar-ai-spin 0.9s linear infinite;
+}
+
+@keyframes status-bar-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

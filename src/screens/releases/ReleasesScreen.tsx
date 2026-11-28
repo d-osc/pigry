@@ -31,7 +31,11 @@ import type { GhRelease, GhReleaseDetail } from '../../types/repository';
 import { useRepository } from '../../hooks/useRepository';
 import { useCommitHistory } from '../../hooks/useCommitHistory';
 import { formatDate, relativeTime } from '../../lib/ghData';
+import { AuthorAvatar } from '../../lib/AuthorAvatar';
 import './ReleasesScreen.css';
+
+/** Keep the release header's own tint behind the initials. */
+const NO_TINT = {};
 
 interface Release {
   tag: string;
@@ -587,7 +591,11 @@ export function ReleasesScreen() {
               <h3 className="release-detail__subtitle">{d.name || d.tagName}</h3>
 
               <div className="release-detail__meta">
-                <span className="release-detail__avatar">{d.author ? d.author.slice(0, 2).toUpperCase() : '—'}</span>
+                {d.author ? (
+                  <AuthorAvatar author={{ name: d.author, login: d.author, initials: d.author.slice(0, 2).toUpperCase() }} className="release-detail__avatar" style={NO_TINT} size={44} />
+                ) : (
+                  <span className="release-detail__avatar">—</span>
+                )}
                 <span>
                   {d.author ? `${d.author} published ` : ''}
                   {publishedLabel}

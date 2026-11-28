@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -9,9 +9,14 @@ import {
   GitBranch,
   Unplug,
   SquareTerminal,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { useRepository } from '../hooks/useRepository';
 import { RefPicker } from './RefPicker';
+import {
+  completionSettings, isThinking, setCompletionSettings, subscribeCompletionSettings, subscribeThinking,
+} from '../lib/inlineAiClient';
 import './StatusBar.css';
 
 /** Live info of the focused editor, merged into the single status bar. */
@@ -21,6 +26,8 @@ export interface EditorStatusInfo {
   column: number;
   language: string;
   dirty: boolean;
+  /** Why AI help is off for this file (secret, ignored, binary, too large), or null. */
+  aiSkip?: string | null;
 }
 
 export function StatusBar({
@@ -36,6 +43,8 @@ export function StatusBar({
 } = {}) {
   const { repository, state, refresh, busy, fetchRemote, pullRemote, pushRemote, notifications, clearNotifications } =
     useRepository();
+  const aiSettings = useSyncExternalStore(subscribeCompletionSettings, completionSettings);
+  const aiThinking = useSyncExternalStore(subscribeThinking, isThinking);
   const [bellOpen, setBellOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
@@ -155,6 +164,25 @@ export function StatusBar({
               Ln {editorStatus.line}, Col {editorStatus.column} · Spaces: 2 · UTF-8 · LF ·{' '}
               {editorStatus.language}
             </span>
+            <button
+              type="button"
+              className={`status-bar__ai${aiSettings.enabled ? ' status-bar__ai--on' : ''}${editorStatus.aiSkip ? ' status-bar__ai--skipped' : ''}`}
+              aria-label={`AI completions: ${aiSettings.enabled ? 'on' : 'off'}`}
+              aria-pressed={aiSettings.enabled}
+              title={
+                editorStatus.aiSkip
+                  ? `AI help is off for this file (${editorStatus.aiSkip}). Click to turn AI completions ${aiSettings.enabled ? 'off' : 'on'}.`
+                  : `AI completions are ${aiSettings.enabled ? 'on' : 'off'} — click to turn them ${aiSettings.enabled ? 'off' : 'on'}. Ctrl+I edits code with AI.`
+              }
+              onClick={() => setCompletionSettings({ enabled: !aiSettings.enabled })}
+            >
+              {aiThinking ? (
+                <Loader2 size={11} strokeWidth={1.75} className="status-bar__ai-spin" aria-label="AI is thinking" />
+              ) : (
+                <Sparkles size={11} strokeWidth={1.5} />
+              )}
+              AI
+            </button>
             <button
               type="button"
               className={`status-bar__terminal${terminalOpen ? ' status-bar__terminal--open' : ''}`}

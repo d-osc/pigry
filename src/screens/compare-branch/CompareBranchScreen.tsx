@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, GitCompare, RefreshCw } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import {
   compareBranches,
+  listCheckoutRefs,
   readFileAtCommit,
   type BranchComparison,
+  type CheckoutRefInfo,
 } from '../../lib/tauriClient';
+import { refsFromState } from '../../app/RefPicker';
 import type { RepositoryState } from '../../types/repository';
 import { DiffWorkbench, type DiffWorkbenchContent } from '../pull-requests/DiffWorkbench';
 import '../push-commits/PushCommitsScreen.css';
 import './CompareBranchScreen.css';
+import { fullRefName, RefCombobox } from './RefCombobox';
 
 const FILE_PAGE_SIZE = 40;
 
@@ -30,73 +34,66 @@ export function CompareBranchScreen() {
 }
 
 function BranchPicker({ repository }: { repository: RepositoryState }) {
-  const local = repository.branches.map(({ name }) => ({ name, ref: `refs/heads/${name}` }));
-  const remote = repository.remotes.flatMap(group => group.branches
-    .filter(branch => branch !== 'HEAD')
-    .map(branch => {
-      const name = `${group.remote}/${branch}`;
-      return { name, ref: `refs/remotes/${name}` };
-    }));
-  const branches = [...local, ...remote];
+  const [loaded, setLoaded] = useState<CheckoutRefInfo[] | null>(null);
   const [selectedBase, setSelectedBase] = useState('');
   const [selectedCompare, setSelectedCompare] = useState('');
   const [revision, setRevision] = useState(0);
-  const base = branches.find(branch => branch.ref === selectedBase)
-    ?? local.find(branch => branch.name === repository.currentBranch)
-    ?? branches[0];
-  const compare = branches.find(branch => branch.ref === selectedCompare)
-    ?? branches.find(branch => branch.ref !== base?.ref);
+  // Reload the full list (remote-only branches, every tag) when branches or tags change, or on Refresh.
+  const refNames = JSON.stringify([
+    repository.branches.map(({ name }) => name),
+    repository.remotes.map(({ remote, branches }) => [remote, branches]),
+    repository.tags.map(({ name }) => name),
+    revision,
+  ]);
 
-  if (!base || !compare) return <p role="status">At least two branches are required to compare.</p>;
+  useEffect(() => {
+    let live = true;
+    listCheckoutRefs().then(
+      refs => { if (live) setLoaded(refs); },
+      () => { /* keep the refs from the app state */ },
+    );
+    return () => { live = false; };
+  }, [refNames]);
 
-  const sameBranch = base.ref === compare.ref;
-  const options = (
-    <>
-      {local.length > 0 && (
-        <optgroup label="Local branches">
-          {local.map(branch => <option key={branch.ref} value={branch.ref}>{branch.name}</option>)}
-        </optgroup>
-      )}
-      {remote.length > 0 && (
-        <optgroup label="Remote-tracking branches">
-          {remote.map(branch => <option key={branch.ref} value={branch.ref}>{branch.name}</option>)}
-        </optgroup>
-      )}
-    </>
-  );
+  // Defaults come from the app state, so they do not jump when the full list arrives.
+  const known = useMemo(() => refsFromState(repository), [repository]);
+  const refs = loaded ?? known;
+  const values = new Set(refs.map(fullRefName));
+  const fallbackBase = known.find(ref => ref.kind === 'local' && ref.name === repository.currentBranch) ?? known[0];
+  const base = values.has(selectedBase) ? selectedBase : fallbackBase ? fullRefName(fallbackBase) : '';
+  const fallbackCompare = known.map(fullRefName).find(ref => ref !== base);
+  const compare = values.has(selectedCompare) ? selectedCompare : fallbackCompare ?? '';
 
+  if (!base || !compare) return <p role="status">At least two branches or tags are required to compare.</p>;
+
+  const sameRef = base === compare;
+  // Picking one side keeps the other where it is, even while it still shows a default.
+  const pick = (side: 'base' | 'compare') => (value: string): void => {
+    setSelectedBase(side === 'base' ? value : base);
+    setSelectedCompare(side === 'compare' ? value : compare);
+  };
   return (
     <>
       <div className="compare-branch__controls">
-        <label>
-          Base branch
-          <select className="push__search" value={base.ref} onChange={event => setSelectedBase(event.target.value)}>
-            {options}
-          </select>
-        </label>
+        <RefCombobox label="Base branch" refs={refs} value={base} onChange={pick('base')} />
         <ArrowRight size={15} aria-hidden="true" />
-        <label>
-          Compare branch
-          <select className="push__search" value={compare.ref} onChange={event => setSelectedCompare(event.target.value)}>
-            {options}
-          </select>
-        </label>
+        <RefCombobox label="Compare branch" refs={refs} value={compare} onChange={pick('compare')} />
         <button
           type="button"
           className="settings__btn"
-          disabled={sameBranch}
+          disabled={sameRef}
           onClick={() => setRevision(value => value + 1)}
         >
           <RefreshCw size={13} /> Refresh comparison
         </button>
       </div>
-      {sameBranch ? (
-        <p role="status">Choose two different branches to compare.</p>
+      {sameRef ? (
+        <p role="status">Choose two different branches or tags to compare.</p>
       ) : (
         <ComparisonResults
-          key={JSON.stringify([base.ref, compare.ref, repository.headOid, revision])}
-          baseRef={base.ref}
-          compareRef={compare.ref}
+          key={JSON.stringify([base, compare, repository.headOid, revision])}
+          baseRef={base}
+          compareRef={compare}
         />
       )}
     </>
@@ -165,7 +162,7 @@ function ComparisonView({ comparison, compareRef }: { comparison: BranchComparis
       {files.length === 0 ? (
         <>
           <h3 className="push__section-title">Files changed (0)</h3>
-          <p role="status">No file differences between the selected branches.</p>
+          <p role="status">No file differences between the selected branches or tags.</p>
         </>
       ) : (
         <div className="compare-branch__workbench">

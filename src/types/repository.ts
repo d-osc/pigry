@@ -245,6 +245,8 @@ export interface FileCommitEntry {
   shortOid: string;
   summary: string;
   authorName: string;
+  /** Commit author email — used for the profile picture lookup. */
+  authorEmail?: string;
   authorInitials: string;
   timeSeconds: number;
   /** The file's path in this commit (an older name before a rename). */
@@ -354,6 +356,8 @@ export interface CommitDetail {
   /** Full message body. */
   message: string;
   authorName: string;
+  /** Commit author email — used for the profile picture lookup. */
+  authorEmail?: string;
   authorInitials: string;
   timeSeconds: number;
   isMerge: boolean;
@@ -447,6 +451,8 @@ export interface WikiPageContent {
   title: string;
   content: string;
   author: string;
+  /** Last editor's email — for the byline's profile picture. */
+  authorEmail?: string;
   updatedAt: string;
   commitMessage: string;
 }
@@ -726,6 +732,8 @@ export interface InsightsCommitEntry {
 
 export interface InsightsContributor {
   name: string;
+  /** The author's email (first one seen) — for the profile picture. */
+  email?: string;
   commits: number;
   additions: number;
   deletions: number;

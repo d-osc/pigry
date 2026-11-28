@@ -3,12 +3,17 @@ import { Sparkles } from 'lucide-react';
 import { useRepository } from '../../hooks/useRepository';
 import { composeCommitMessage } from '../../lib/tauriClient';
 import { aiCommitMessage } from '../../lib/commitAi';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import './CommitComposer.css';
+
+/** Keep the composer's own avatar tint behind the initials. */
+const NO_TINT = {};
 
 const TITLE_LIMIT = 72;
 
 export function CommitComposer() {
   const { repository, commit, busy, notify } = useRepository();
+  const avatarMap = useCommitAvatars();
   const [message, setMessage] = useState('');
   const [amend, setAmend] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -115,7 +120,12 @@ export function CommitComposer() {
 
       {repository && (
         <div className="commit-composer__author">
-          <div className="avatar avatar--sm">{repository.account.initials}</div>
+          <AuthorAvatar
+            author={{ name: repository.account.name, email: repository.account.email, initials: repository.account.initials }}
+            avatarMap={avatarMap}
+            className="avatar avatar--sm"
+            style={NO_TINT}
+          />
           <div className="commit-composer__author-meta">
             <span className="commit-composer__author-name">
               {repository.account.name}

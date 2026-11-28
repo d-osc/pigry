@@ -627,6 +627,15 @@ pub async fn gh_pr_list(
 }
 
 #[tauri::command]
+pub async fn gh_open_pr_count(state: State<'_, Mutex<AppState>>) -> Result<usize, String> {
+    let repo_path = {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        repo_path_str(&state)?.to_path_buf()
+    };
+    gh::open_pr_count(&repo_path)
+}
+
+#[tauri::command]
 pub async fn gh_issue_list(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Vec<gh::GhIssue>, String> {

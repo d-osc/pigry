@@ -27,6 +27,8 @@ pub struct InsightsCommitEntry {
 #[serde(rename_all = "camelCase")]
 pub struct InsightsContributor {
     pub name: String,
+    /// The author's email (first one seen) — for the profile picture.
+    pub email: String,
     pub commits: u64,
     pub additions: u64,
     pub deletions: u64,
@@ -154,8 +156,8 @@ pub fn build_insights(repo_path: &Path, days: u32) -> Result<InsightsData, Strin
 
     let mut current_commits: u64 = 0;
     let mut prev_commits: u64 = 0;
-    // author key → (display name, commits)
-    let mut current_people: HashMap<String, (String, u64)> = HashMap::new();
+    // author key → (display name, email, commits)
+    let mut current_people: HashMap<String, (String, String, u64)> = HashMap::new();
     let mut prev_people: HashMap<String, u64> = HashMap::new();
     // author key → (display name, additions, deletions)
     let mut churn: HashMap<String, (String, u64, u64)> = HashMap::new();
@@ -183,8 +185,8 @@ pub fn build_insights(repo_path: &Path, days: u32) -> Result<InsightsData, Strin
             current_commits += 1;
             current_people
                 .entry(key.clone())
-                .or_insert_with(|| (name.clone(), 0))
-                .1 += 1;
+                .or_insert_with(|| (name.clone(), author.email().unwrap_or("").trim().to_string(), 0))
+                .2 += 1;
 
             *day_counts.entry(time - time.rem_euclid(DAY)).or_insert(0) += 1;
 
@@ -230,10 +232,11 @@ pub fn build_insights(repo_path: &Path, days: u32) -> Result<InsightsData, Strin
 
     let mut people: Vec<InsightsContributor> = current_people
         .into_iter()
-        .map(|(key, (name, commits))| {
+        .map(|(key, (name, email, commits))| {
             let churn = churn.get(&key).cloned().unwrap_or_default();
             InsightsContributor {
                 name,
+                email,
                 commits,
                 additions: churn.1,
                 deletions: churn.2,

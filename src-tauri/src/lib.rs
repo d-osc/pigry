@@ -222,6 +222,7 @@ pub fn run() {
             commands::wiki_save,
             commands::wiki_create,
             commands::gh_pr_list,
+            commands::gh_open_pr_count,
             commands::gh_release_list,
             commands::gh_project_list,
             commands::gh_project_item_list,

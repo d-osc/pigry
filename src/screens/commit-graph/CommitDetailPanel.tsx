@@ -22,7 +22,7 @@ import { useRepository } from '../../hooks/useRepository';
 import { verifyCommitSig, getCommitDetail, getCommitFileDiff } from '../../lib/tauriClient';
 import { relativeTime } from '../../lib/relativeTime';
 import type { CommitDetail, CommitFileEntry, FileDiffContent } from '../../types/repository';
-import { avatarTone } from './CommitGraphScreen';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import { ResizeHandle } from '../../app/ResizeHandle';
 import { buildHunks } from './diffModel';
 import './CommitDetailPanel.css';
@@ -132,7 +132,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
       )
     : null;
 
-  const tone = detail ? avatarTone(detail.authorInitials) : null;
+  const avatarMap = useCommitAvatars();
 
   const visibleFiles = useMemo(() => {
     if (!detail) return [];
@@ -281,12 +281,7 @@ export function CommitDetailPanel({ oid, onClose, onStartRebase }: CommitDetailP
                 )}
 
                 <div className="commit-detail__author">
-                  <span
-                    className="commit-detail__avatar"
-                    style={tone ? { background: tone.bg, color: tone.fg } : undefined}
-                  >
-                    {detail.authorInitials}
-                  </span>
+                  <AuthorAvatar row={detail} avatarMap={avatarMap} className="commit-detail__avatar" size={48} />
                   <strong>{detail.authorName}</strong>
                   <span className="commit-detail__time">
                     {relativeTime(detail.timeSeconds)} ago

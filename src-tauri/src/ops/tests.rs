@@ -49,6 +49,18 @@ fn compare_branches_reports_divergence_and_tip_to_tip_file_changes() {
         .collect();
     assert_eq!(files, [("base.txt", "D", 0, 1), ("feature.txt", "A", 2, 0)]);
     assert!(super::compare_branches(&dir, "HEAD", "refs/heads/main").is_err());
+
+    // Tags work on either side; an annotated tag resolves to the commit it points at.
+    git_cli(&dir, &["tag", "-a", "v1.0", "-m", "Release 1.0", "main"]);
+    git_cli(&dir, &["tag", "light", "feature/work"]);
+    let tagged = super::compare_branches(&dir, "refs/tags/v1.0", "refs/heads/feature/work").unwrap();
+    assert_eq!(tagged.base_oid, comparison.base_oid);
+    assert_eq!(tagged.compare_oid, comparison.compare_oid);
+    assert_eq!(tagged.files.len(), 2);
+    let reversed = super::compare_branches(&dir, "refs/heads/main", "refs/tags/light").unwrap();
+    assert_eq!((reversed.base_only, reversed.compare_only), (1, 1));
+    assert_eq!(reversed.compare_oid, comparison.compare_oid);
+    assert!(super::compare_branches(&dir, "refs/tags/missing", "refs/heads/main").is_err());
     assert!(dir.join("uncommitted.txt").is_file());
     fs::remove_dir_all(&dir).unwrap();
 }

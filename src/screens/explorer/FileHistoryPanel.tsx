@@ -3,7 +3,11 @@ import { useFileHistory } from '../../hooks/useFileHistory';
 import { relativeTime } from '../../lib/relativeTime';
 import { canRestoreFromCommit, restoreButtonTitle } from '../../lib/fileRestore';
 import type { FileCommitEntry } from '../../types/repository';
+import { AuthorAvatar, useCommitAvatars } from '../../lib/AuthorAvatar';
 import './FileHistoryPanel.css';
+
+/** Keep the panel's own gradient behind the initials. */
+const NO_TINT = {};
 
 interface FileHistoryPanelProps {
   path: string;
@@ -28,6 +32,7 @@ export function FileHistoryPanel({
 }: FileHistoryPanelProps) {
   const { commits, loading, error, retry } = useFileHistory(path, refName ?? null);
   const fileName = path.split('/').pop() ?? path;
+  const avatarMap = useCommitAvatars();
 
   return (
     <aside className="file-history">
@@ -75,7 +80,7 @@ export function FileHistoryPanel({
                 </div>
                 <p className="file-history__summary">{commit.summary}</p>
                 <p className="file-history__author">
-                  <span className="file-history__avatar">{commit.authorInitials}</span>
+                  <AuthorAvatar row={commit} avatarMap={avatarMap} className="file-history__avatar" style={NO_TINT} size={28} />
                   {commit.authorName}
                 </p>
               </button>

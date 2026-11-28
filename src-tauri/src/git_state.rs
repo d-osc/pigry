@@ -1792,6 +1792,8 @@ pub struct FileCommitEntry {
     pub short_oid: String,
     pub summary: String,
     pub author_name: String,
+    /// Author email — for the profile picture in the file history list.
+    pub author_email: String,
     pub author_initials: String,
     pub time_seconds: i64,
     /// The file's path in this commit. It differs from the requested path for
@@ -1883,6 +1885,7 @@ pub fn build_file_history(
             short_oid: oid.to_string()[..7].to_string(),
             summary: commit.summary().unwrap_or_default().to_string(),
             author_name: author.name().unwrap_or("Unknown").to_string(),
+            author_email: author.email().unwrap_or("").to_string(),
             author_initials: initials_for(author.name().unwrap_or("")),
             time_seconds: commit.time().seconds() as i64,
             path: current.clone(),
@@ -2147,6 +2150,8 @@ pub struct CommitDetail {
     /// Full message body (summary + paragraphs).
     pub message: String,
     pub author_name: String,
+    /// Author email — for the profile picture in the commit detail panel.
+    pub author_email: String,
     pub author_initials: String,
     pub time_seconds: i64,
     pub is_merge: bool,
@@ -2232,6 +2237,7 @@ pub fn build_commit_detail(repo_path: &Path, oid: &str) -> Result<CommitDetail> 
         summary,
         message,
         author_name: author.name().unwrap_or("Unknown").to_string(),
+        author_email: author.email().unwrap_or("").to_string(),
         author_initials: initials_for(author.name().unwrap_or("")),
         time_seconds: commit.time().seconds() as i64,
         is_merge: commit.parent_count() > 1,
